@@ -72,6 +72,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .control-label {
@@ -129,6 +130,34 @@ body {
 }
 .control-select:focus {
   border-color: #5B8DEF;
+}
+
+/* Custom input row (below dropdowns) */
+.custom-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.control-input-sm {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+.char-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #556677;
+  white-space: nowrap;
+  min-width: 36px;
+  text-align: right;
+}
+.char-count.warn {
+  color: #CA8A04;
+}
+.char-count.full {
+  color: #DC2626;
 }
 
 /* Photo controls */

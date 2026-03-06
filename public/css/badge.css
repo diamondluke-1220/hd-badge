@@ -19,7 +19,7 @@
   font-weight: 800;
   font-style: italic;
   font-display: swap;
-  src: url('/fonts/barlow-400.woff2') format('woff2');
+  src: url('/fonts/barlow-800.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Inter';
@@ -57,29 +57,29 @@
   background: #FFFFFF;
   position: relative;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 75px;
 }
 
-/* Lanyard slot — CR80 standard: 13×3mm slot, 3/8" from top edge to slot bottom */
+/* Lanyard slot — CR80 standard: 12.7×3.175mm slot, center 6.35mm from top edge */
 .badge .lanyard-slot {
   position: absolute;
-  top: 40px;
+  top: 150px;
   left: 50%;
   transform: translateX(-50%);
-  width: 320px;
-  height: 64px;
+  width: 350px;
+  height: 100px;
   background: #e0e0e0;
-  border-radius: 32px;
+  border-radius: 50px;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .badge .lanyard-hole {
-  width: 280px;
-  height: 28px;
+  width: 300px;
+  height: 75px;
   background: #c0c0c0;
-  border-radius: 14px;
+  border-radius: 38px;
   border: 2px solid #aaa;
 }
 
@@ -89,26 +89,45 @@
   left: 0;
   top: 0;
   width: 100%;
-  height: 220px;
+  height: 270px;
   background: linear-gradient(90deg, #0A1F3F 0%, #0D2B5E 50%, #0A1F3F 100%);
+  overflow: hidden;
+}
+.badge .navy-stripe::before,
+.badge .navy-stripe::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  width: 180px;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+.badge .navy-stripe::before {
+  left: 0;
+  background: linear-gradient(90deg, #0A1F3F 0%, transparent 100%);
+}
+.badge .navy-stripe::after {
+  right: 0;
+  background: linear-gradient(270deg, #0A1F3F 0%, transparent 100%);
 }
 .badge .stripe-text {
   position: absolute;
-  top: 50%;
+  top: 200px;
   transform: translateY(-50%);
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 900;
-  font-size: 130px;
-  letter-spacing: 16px;
-  color: rgba(255,255,255,0.25);
+  font-family: 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: 140px;
+  letter-spacing: 20px;
+  color: rgba(255,255,255,0.40);
   white-space: nowrap;
   text-transform: uppercase;
 }
 .badge .stripe-text-left {
-  right: calc(50% + 160px);
+  right: calc(50% + 200px);
 }
 .badge .stripe-text-right {
-  left: calc(50% + 160px);
+  left: calc(50% + 200px);
 }
 .badge .stripe-accent {
   position: absolute;
@@ -140,14 +159,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 240px 160px 30px 160px;
+  padding: 290px 160px 80px 160px;
 }
 
 /* HD logo — bottom-right corner */
 .badge .logo-icon {
   position: absolute;
-  bottom: 20px;
-  right: 20px;
+  bottom: 36px;
+  right: 36px;
   width: 130px;
   height: 130px;
   background: linear-gradient(180deg, #0A1F3F 0%, #0D2B5E 100%);
@@ -170,7 +189,7 @@
 
 /* Photo area */
 .badge .photo-section {
-  margin: 30px 0 24px;
+  margin: 30px 0 48px;
   position: relative;
 }
 .badge .photo-frame {
@@ -199,18 +218,13 @@
   color: #8899AA;
   text-align: center;
 }
-.badge .photo-ring {
-  position: absolute;
-  width: 720px;
-  height: 650px;
-  border-radius: 30px;
-  border: 2px solid rgba(46,125,255,0.3);
-  top: -10px;
-  left: -10px;
-}
 
-/* Access badge — dept-colored, below photo */
+/* Access badge — overlaps photo bottom edge like a security clearance sticker */
 .badge .access-badge {
+  position: absolute;
+  bottom: -33px;
+  left: 50%;
+  transform: translateX(-50%);
   color: white;
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
@@ -220,8 +234,8 @@
   letter-spacing: 4px;
   text-transform: uppercase;
   white-space: nowrap;
-  margin: 2px 0 24px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 5;
 }
 .badge .access-badge.all-access { background: #1B6B2A; }
 .badge .access-badge.paper-jam { background: #CA8A04; }
@@ -248,28 +262,36 @@
 .badge .department {
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 54px;
+  font-size: 56px;
   color: #0A1F3F;
   text-transform: uppercase;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
   text-align: center;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
   line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .badge .title {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 54px;
+  font-size: 56px;
   color: #556677;
   text-align: center;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
   line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .badge .info-divider {
   width: 60%;
   height: 2px;
   background: #DEE5ED;
-  margin: 12px 0 16px;
+  margin: 18px 0 22px;
 }
 .badge .name {
   font-family: 'Barlow', sans-serif;
@@ -279,7 +301,11 @@
   text-transform: uppercase;
   letter-spacing: 5px;
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .badge .employee-id {
   position: absolute;
@@ -289,10 +315,23 @@
   transform-origin: 0 0;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  font-size: 34px;
+  font-size: 38px;
   color: #667788;
   letter-spacing: 4px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.badge .status-dot {
+  font-size: 22px;
+  letter-spacing: 0;
+  color: #F59E0B;
+}
+.badge .issued-date {
+  font-size: 30px;
+  color: #8899AA;
+  letter-spacing: 2px;
 }
 
 /* Waveform — shared base */
@@ -301,11 +340,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-top: auto;
   margin-bottom: auto;
   width: 100%;
-  padding: 20px 28px 14px;
+  padding: 24px 28px 18px;
 }
 .badge .waveform-sticker::before {
   display: none;
@@ -314,7 +353,7 @@
   display: flex;
   gap: 3px;
   align-items: flex-end;
-  height: 180px;
+  height: 230px;
   width: 100%;
 }
 .badge .waveform .wbar {
@@ -331,7 +370,7 @@
 .badge .waveform-song {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 700;
-  font-size: 42px;
+  font-size: 46px;
   color: #0A1F3F;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -346,7 +385,7 @@
 .badge .waveform-caption {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  font-size: 34px;
+  font-size: 42px;
   color: #AAB8C8;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -387,7 +426,7 @@
 .badge .fine-print {
   position: absolute;
   right: 48px;
-  top: 50%;
+  top: 53%;
   transform: translate(50%, -50%) rotate(90deg);
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
@@ -400,62 +439,6 @@
   z-index: 5;
 }
 
-/* Bottom section */
-.badge .bottom-section {
-  margin-top: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 8px;
-}
-.badge .bottom-divider {
-  width: 100%;
-  height: 2px;
-  background: #DEE5ED;
-  margin-bottom: 12px;
-}
-.badge .bottom-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  gap: 40px;
-}
-.badge .qr-placeholder {
-  width: 340px;
-  height: 340px;
-  border: 3px solid #DEE5ED;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.badge .qr-grid {
-  width: 290px;
-  height: 290px;
-  display: grid;
-}
-.badge .qr-cell {
-  border-radius: 0;
-}
-.badge .qr-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
-  font-size: 18px;
-  color: #AAB8C8;
-  letter-spacing: 2px;
-}
-.badge .band-name-bottom {
-  font-family: 'Barlow', sans-serif;
-  font-weight: 700;
-  font-size: 28px;
-  color: #8899AA;
-  letter-spacing: 8px;
-  text-transform: uppercase;
-}
 
 /* Subtle background texture */
 .badge .texture-overlay {

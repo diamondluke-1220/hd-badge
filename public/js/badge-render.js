@@ -1,5 +1,5 @@
 // Badge rendering engine — extracted from badge-template-corporate.html
-// Handles: waveform rendering, department→access mapping, QR grid, field population
+// Handles: waveform rendering, department→access mapping, field population
 
 const DEPT_ACCESS = {
   'TICKET ESCALATION BUREAU':          { access: 'ALL ACCESS',                css: 'all-access' },
@@ -10,13 +10,13 @@ const DEPT_ACCESS = {
   'PRINTER JAMS':                       { access: 'PAPER JAM CLEARANCE',       css: 'paper-jam' },
   'PASSWORD RESET SERVICES':            { access: 'RESET AUTHORIZED',          css: 'reset' },
   'BLUE SCREEN RESPONSE TEAM':          { access: 'BSOD CERTIFIED',            css: 'bsod' },
-  'WATERCOOLER COLLABORATION':          { access: 'HYDRATION ACCESS',          css: 'hydration' },
+  'WATERCOOLER SERVICES':               { access: 'HYDRATION ACCESS',          css: 'hydration' },
   'TIME BACK IN YOUR DAY':              { access: 'OVERTIME EXEMPT',           css: 'overtime' },
   'MANDATORY FUN COMMITTEE':            { access: 'FUN IS MANDATORY',          css: 'fun' },
   'MORALE SUPPRESSION UNIT':            { access: 'SOUL EXTRACTION AUTHORIZED', css: 'morale' },
   'TEAM BUILDING AVOIDANCE':            { access: 'TRUST FALL EXEMPT',         css: 'trust-fall' },
   'MOSH PIT HR':                        { access: 'PIT APPROVED',              css: 'pit' },
-  'ENTERPRISE GUITAR WORSHIPPING':      { access: 'SHRED CERTIFIED',           css: 'shred' },
+  'ENTERPRISE GUITAR WORSHIP':           { access: 'SHRED CERTIFIED',           css: 'shred' },
   'STAGE DIVE RISK ASSESSMENT':         { access: 'DIVE AUTHORIZED',           css: 'dive' },
 };
 
@@ -54,13 +54,13 @@ const DEPARTMENTS = [
   { name: 'PRINTER JAMS',                  theme: 'IT' },
   { name: 'PASSWORD RESET SERVICES',       theme: 'IT' },
   { name: 'BLUE SCREEN RESPONSE TEAM',     theme: 'IT' },
-  { name: 'WATERCOOLER COLLABORATION',     theme: 'Office' },
+  { name: 'WATERCOOLER SERVICES',           theme: 'Office' },
   { name: 'TIME BACK IN YOUR DAY',         theme: 'Office' },
   { name: 'MANDATORY FUN COMMITTEE',       theme: 'Corporate' },
   { name: 'MORALE SUPPRESSION UNIT',       theme: 'Corporate' },
   { name: 'TEAM BUILDING AVOIDANCE',       theme: 'Corporate' },
   { name: 'MOSH PIT HR',                   theme: 'Punk' },
-  { name: 'ENTERPRISE GUITAR WORSHIPPING', theme: 'Punk' },
+  { name: 'ENTERPRISE GUITAR WORSHIP',     theme: 'Punk' },
   { name: 'STAGE DIVE RISK ASSESSMENT',    theme: 'Punk' },
 ];
 
@@ -76,7 +76,7 @@ const TITLES = [
   'Desk Plant Supervisor',
   'Office Supply Hoarder',
   'Temp, 3rd Year',
-  'Department of Redundancy Department',
+  'Dept. of Redundancy Dept.',
   'Scrum Master of Disaster',
   'Director of First Impressions',
   'Mosh Pit Compliance Officer',
@@ -85,15 +85,38 @@ const TITLES = [
   'HUH?! Coordinator',
 ];
 
-// Generate employee ID: HD-YYMMDD-NN
-let badgeCounter = 1;
+// Generate employee ID: HD-XXXX (4 random digits)
 function generateEmployeeId() {
+  const num = String(Math.floor(1000 + Math.random() * 9000));
+  return `HD-${num}`;
+}
+
+// Random status indicator
+const STATUSES = [
+  { color: '#F59E0B', glow: 'rgba(245,158,11,0.4)' },   // amber — AWAY
+  { color: '#EF4444', glow: 'rgba(239,68,68,0.4)' },     // red — DO NOT DISTURB
+  { color: '#6B7280', glow: 'rgba(107,114,128,0.3)' },   // gray — OFFLINE
+  { color: '#22C55E', glow: 'rgba(34,197,94,0.4)' },     // green — AVAILABLE
+  { color: '#EF4444', glow: 'rgba(239,68,68,0.4)' },     // red — IN A MEETING
+  { color: '#F59E0B', glow: 'rgba(245,158,11,0.4)' },    // amber — ON HOLD
+];
+
+function applyRandomStatus() {
+  const status = STATUSES[Math.floor(Math.random() * STATUSES.length)];
+  const dot = document.getElementById('statusDot');
+  if (dot) {
+    dot.style.color = status.color;
+    dot.style.textShadow = `0 0 8px ${status.glow}`;
+  }
+}
+
+// Generate issued date: ISSUED MM.DD.YY
+function generateIssuedDate() {
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
-  const nn = String(badgeCounter++).padStart(2, '0');
-  return `HD-${yy}${mm}${dd}-${nn}`;
+  const yy = String(now.getFullYear()).slice(2);
+  return `ISSUED ${mm}.${dd}.${yy}`;
 }
 
 function randomCaption() {
@@ -105,7 +128,7 @@ function renderWaveform(songKey, waveStyle) {
   const container = document.getElementById('waveform');
   if (!container) return;
   container.innerHTML = '';
-  const maxH = 170;
+  const maxH = 220;
   const style = waveStyle || 'barcode';
 
   // Apply style class to sticker wrapper
@@ -126,30 +149,6 @@ function renderWaveform(songKey, waveStyle) {
   document.getElementById('waveformDuration').textContent = wf.duration;
 }
 
-function genQR() {
-  const grid = document.getElementById('qrGrid');
-  if (!grid) return;
-  grid.innerHTML = '';
-
-  const qr = qrcode(0, 'M');
-  qr.addData('https://helpdesk1.bandcamp.com');
-  qr.make();
-
-  const count = qr.getModuleCount();
-  grid.style.gridTemplateColumns = `repeat(${count}, 1fr)`;
-  grid.style.gridTemplateRows = `repeat(${count}, 1fr)`;
-  grid.style.gap = '0';
-
-  for (let r = 0; r < count; r++) {
-    for (let c = 0; c < count; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'qr-cell';
-      cell.style.background = qr.isDark(r, c) ? '#0A1F3F' : '#FFFFFF';
-      grid.appendChild(cell);
-    }
-  }
-}
-
 // Update all badge fields
 function updateBadge(data) {
   const { name, department, title, song, photoUrl, waveStyle } = data;
@@ -166,11 +165,16 @@ function updateBadge(data) {
   const titleEl = document.getElementById('titleField');
   if (titleEl) titleEl.textContent = title || 'Select Title';
 
-  // Employee ID
+  // Employee ID + Issued date
   const idEl = document.getElementById('idField');
   if (idEl && !idEl.dataset.set) {
     idEl.textContent = generateEmployeeId();
     idEl.dataset.set = '1';
+  }
+  const issuedEl = document.getElementById('issuedField');
+  if (issuedEl && !issuedEl.dataset.set) {
+    issuedEl.textContent = generateIssuedDate();
+    issuedEl.dataset.set = '1';
   }
 
   // Access badge
@@ -191,9 +195,6 @@ function updateBadge(data) {
       captionEl.dataset.set = '1';
     }
   }
-
-  // QR
-  genQR();
 
   // Photo
   const frame = document.querySelector('.photo-frame');

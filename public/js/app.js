@@ -61,22 +61,57 @@ function initControls() {
 function initEvents() {
   // Name input
   const nameInput = document.getElementById('nameInput');
+  const nameCharCount = document.getElementById('nameCharCount');
   nameInput.addEventListener('input', () => {
-    const clean = nameInput.value.replace(/[^a-zA-Z\s\-']/g, '').slice(0, 20);
+    const clean = nameInput.value.replace(/[^a-zA-Z\s\-']/g, '').slice(0, 16);
     nameInput.value = clean;
+    nameCharCount.textContent = `${clean.length}/16`;
+    nameCharCount.className = 'char-count' + (clean.length >= 16 ? ' full' : clean.length >= 13 ? ' warn' : '');
     state.name = clean.trim() || 'YOUR NAME';
     refreshPreview();
   });
 
-  // Department
+  // Department — dropdown or custom
   document.getElementById('deptSelect').addEventListener('change', (e) => {
+    const custom = document.getElementById('deptCustom');
+    if (custom.value.trim()) return; // custom overrides dropdown
     state.department = e.target.value;
     refreshPreview();
   });
+  const deptCustom = document.getElementById('deptCustom');
+  const deptCharCount = document.getElementById('deptCharCount');
+  deptCustom.addEventListener('input', () => {
+    const val = deptCustom.value.slice(0, 24);
+    deptCustom.value = val;
+    deptCharCount.textContent = `${val.length}/24`;
+    deptCharCount.className = 'char-count' + (val.length >= 24 ? ' full' : val.length >= 20 ? ' warn' : '');
+    if (val.trim()) {
+      state.department = val.trim().toUpperCase();
+    } else {
+      state.department = document.getElementById('deptSelect').value;
+    }
+    refreshPreview();
+  });
 
-  // Title
+  // Title — dropdown or custom
   document.getElementById('titleSelect').addEventListener('change', (e) => {
+    const custom = document.getElementById('titleCustom');
+    if (custom.value.trim()) return; // custom overrides dropdown
     state.title = e.target.value;
+    refreshPreview();
+  });
+  const titleCustom = document.getElementById('titleCustom');
+  const titleCharCount = document.getElementById('titleCharCount');
+  titleCustom.addEventListener('input', () => {
+    const val = titleCustom.value.slice(0, 30);
+    titleCustom.value = val;
+    titleCharCount.textContent = `${val.length}/30`;
+    titleCharCount.className = 'char-count' + (val.length >= 30 ? ' full' : val.length >= 26 ? ' warn' : '');
+    if (val.trim()) {
+      state.title = val.trim();
+    } else {
+      state.title = document.getElementById('titleSelect').value;
+    }
     refreshPreview();
   });
 
@@ -210,9 +245,11 @@ async function downloadBadge() {
 // --- Init on load ---
 document.getElementById('idField').textContent = generateEmployeeId();
 document.getElementById('idField').dataset.set = '1';
+document.getElementById('issuedField').textContent = generateIssuedDate();
+document.getElementById('issuedField').dataset.set = '1';
+applyRandomStatus();
 document.getElementById('waveformCaption').textContent = randomCaption();
 document.getElementById('waveformCaption').dataset.set = '1';
-genQR();
 
 initControls();
 initEvents();

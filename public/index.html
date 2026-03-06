@@ -25,7 +25,10 @@
   <div class="controls">
     <div class="control-row">
       <label class="control-label" for="nameInput">Name</label>
-      <input type="text" class="control-input" id="nameInput" placeholder="First name" maxlength="20" autocomplete="off" autofocus>
+      <div class="custom-input-row">
+        <input type="text" class="control-input" id="nameInput" placeholder="First name" maxlength="16" autocomplete="off" autofocus>
+        <span class="char-count" id="nameCharCount">0/16</span>
+      </div>
     </div>
     <div class="control-row">
       <label class="control-label">Photo</label>
@@ -39,10 +42,18 @@
     <div class="control-row">
       <label class="control-label" for="deptSelect">Department</label>
       <select class="control-select" id="deptSelect"></select>
+      <div class="custom-input-row">
+        <input type="text" class="control-input control-input-sm" id="deptCustom" placeholder="or type your own" maxlength="24" autocomplete="off">
+        <span class="char-count" id="deptCharCount">0/24</span>
+      </div>
     </div>
     <div class="control-row">
       <label class="control-label" for="titleSelect">Title</label>
       <select class="control-select" id="titleSelect"></select>
+      <div class="custom-input-row">
+        <input type="text" class="control-input control-input-sm" id="titleCustom" placeholder="or type your own" maxlength="30" autocomplete="off">
+        <span class="char-count" id="titleCharCount">0/30</span>
+      </div>
     </div>
     <div class="control-row">
       <label class="control-label" for="songSelect">Song</label>
@@ -77,13 +88,12 @@
         <div class="header-divider"></div>
       </div>
       <div class="photo-section">
-        <div class="photo-ring"></div>
         <div class="photo-frame">
           <span class="photo-placeholder-text">PHOTO</span>
         </div>
-        <div class="employee-id" id="idField">HD-000000-00</div>
+        <div class="employee-id"><span class="status-dot" id="statusDot">●</span><span id="idField">HD-0000</span><span class="issued-date" id="issuedField">ISSUED 00.00.00</span></div>
+        <div class="access-badge" id="accessBadge">PENDING REVIEW</div>
       </div>
-      <div class="access-badge" id="accessBadge">PENDING REVIEW</div>
       <div class="info-section">
         <div class="name" id="nameField">YOUR NAME</div>
         <div class="info-divider"></div>
@@ -96,15 +106,6 @@
             <span class="waveform-duration" id="waveformDuration">0:00</span>
           </div>
           <div class="waveform-caption" id="waveformCaption">SCAN TO FILE COMPLAINT</div>
-        </div>
-      </div>
-      <div class="bottom-section">
-        <div class="bottom-divider"></div>
-        <div class="bottom-row">
-          <div class="qr-placeholder">
-            <div class="qr-grid" id="qrGrid"></div>
-            <span class="qr-label">BANDCAMP</span>
-          </div>
         </div>
       </div>
     </div>
@@ -133,7 +134,6 @@
 
 <script src="/lib/cropper.min.js"></script>
 <script src="/lib/html2canvas.min.js"></script>
-<script src="/lib/qrcode.min.js"></script>
 <script src="/js/badge-render.js"></script>
 <script src="/js/app.js"></script>
 </body>
