@@ -122,7 +122,7 @@ function openCropModal(imgSrc) {
 
   img.onload = () => {
     cropper = new Cropper(img, {
-      aspectRatio: 1,
+      aspectRatio: 620 / 560,
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.9,
@@ -144,7 +144,7 @@ function applyCrop() {
   if (!cropper) return;
 
   const canvas = cropper.getCroppedCanvas({
-    width: 560,
+    width: 620,
     height: 560,
     imageSmoothingQuality: 'high',
   });
