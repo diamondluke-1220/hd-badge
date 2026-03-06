@@ -83,33 +83,38 @@
   border: 2px solid #aaa;
 }
 
-/* Navy stripe */
+/* Navy header bar */
 .badge .navy-stripe {
   position: absolute;
   left: 0;
   top: 0;
-  width: 200px;
-  height: 100%;
-  background: linear-gradient(180deg, #0A1F3F 0%, #0D2B5E 50%, #0A1F3F 100%);
+  width: 100%;
+  height: 220px;
+  background: linear-gradient(90deg, #0A1F3F 0%, #0D2B5E 50%, #0A1F3F 100%);
 }
 .badge .stripe-text {
   position: absolute;
-  left: 100px;
   top: 50%;
-  transform: translate(-50%, -50%) rotate(-90deg);
+  transform: translateY(-50%);
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
-  font-size: 158px;
-  letter-spacing: 28px;
-  color: rgba(255,255,255,0.45);
+  font-size: 130px;
+  letter-spacing: 16px;
+  color: rgba(255,255,255,0.25);
   white-space: nowrap;
   text-transform: uppercase;
+}
+.badge .stripe-text-left {
+  right: calc(50% + 160px);
+}
+.badge .stripe-text-right {
+  left: calc(50% + 160px);
 }
 .badge .stripe-accent {
   position: absolute;
   left: 0;
   top: 0;
-  width: 200px;
+  width: 100%;
   height: 8px;
   background: #2E7DFF;
 }
@@ -117,26 +122,15 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 200px;
+  width: 100%;
   height: 8px;
   background: #2E7DFF;
 }
 .badge .stripe-dots {
-  position: absolute;
-  left: 160px;
-  top: 0;
-  width: 40px;
-  height: 100%;
-  background: repeating-linear-gradient(
-    180deg,
-    transparent,
-    transparent 38px,
-    rgba(255,255,255,0.03) 38px,
-    rgba(255,255,255,0.03) 40px
-  );
+  display: none;
 }
 
-/* Main content area — centered on full card width, not just right of stripe */
+/* Main content area — centered on full card */
 .badge .content {
   position: absolute;
   left: 0;
@@ -146,13 +140,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 140px 120px 30px 250px;
+  padding: 240px 160px 30px 160px;
 }
 
-/* HD logo — top-right corner */
+/* HD logo — bottom-right corner */
 .badge .logo-icon {
   position: absolute;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   width: 130px;
   height: 130px;
@@ -171,18 +165,7 @@
 
 /* Header */
 .badge .header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 10px;
-  width: 100%;
-}
-.badge .header-divider {
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, #0A1F3F, #2E7DFF, #0A1F3F);
-  margin-top: 10px;
-  border-radius: 2px;
+  display: none;
 }
 
 /* Photo area */
@@ -191,8 +174,8 @@
   position: relative;
 }
 .badge .photo-frame {
-  width: 620px;
-  height: 560px;
+  width: 700px;
+  height: 630px;
   border-radius: 24px;
   border: 6px solid #0A1F3F;
   background: #F0F4F8;
@@ -218,15 +201,15 @@
 }
 .badge .photo-ring {
   position: absolute;
-  width: 640px;
-  height: 580px;
+  width: 720px;
+  height: 650px;
   border-radius: 30px;
   border: 2px solid rgba(46,125,255,0.3);
   top: -10px;
   left: -10px;
 }
 
-/* Access badge — dept-colored, prominent in header */
+/* Access badge — dept-colored, below photo */
 .badge .access-badge {
   color: white;
   font-family: 'Barlow', sans-serif;
@@ -237,6 +220,8 @@
   letter-spacing: 4px;
   text-transform: uppercase;
   white-space: nowrap;
+  margin: 2px 0 24px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 .badge .access-badge.all-access { background: #1B6B2A; }
 .badge .access-badge.paper-jam { background: #CA8A04; }
@@ -263,7 +248,7 @@
 .badge .department {
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 44px;
+  font-size: 54px;
   color: #0A1F3F;
   text-transform: uppercase;
   letter-spacing: 3px;
@@ -274,7 +259,7 @@
 .badge .title {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 44px;
+  font-size: 54px;
   color: #556677;
   text-align: center;
   margin-bottom: 8px;
@@ -284,7 +269,7 @@
   width: 60%;
   height: 2px;
   background: #DEE5ED;
-  margin: 20px 0 16px;
+  margin: 12px 0 16px;
 }
 .badge .name {
   font-family: 'Barlow', sans-serif;
@@ -297,28 +282,30 @@
   margin-bottom: 10px;
 }
 .badge .employee-id {
+  position: absolute;
+  left: calc(100% + 38px);
+  top: 50%;
+  transform: rotate(90deg) translateX(-50%);
+  transform-origin: 0 0;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  font-size: 42px;
-  color: #8899AA;
+  font-size: 34px;
+  color: #667788;
   letter-spacing: 4px;
-  margin-bottom: 10px;
+  white-space: nowrap;
 }
 
-/* Waveform barcode */
+/* Waveform — shared base */
 .badge .waveform-sticker {
   position: relative;
-  transform: none;
-  background: #FAFAFA;
-  border: 2px solid #CCD5DE;
-  border-radius: 8px;
-  padding: 20px 28px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   margin-top: auto;
+  margin-bottom: auto;
   width: 100%;
+  padding: 20px 28px 14px;
 }
 .badge .waveform-sticker::before {
   display: none;
@@ -359,11 +346,41 @@
 .badge .waveform-caption {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  font-size: 30px;
+  font-size: 34px;
   color: #AAB8C8;
   letter-spacing: 2px;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+/* Barcode style — clean, no box */
+.badge .waveform-sticker.barcode-style {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+}
+.badge .waveform-sticker.barcode-style .waveform {
+  gap: 2px;
+}
+.badge .waveform-sticker.barcode-style .waveform .wbar {
+  border-radius: 0;
+}
+.badge .waveform-sticker.barcode-style .waveform-song {
+  letter-spacing: 14px;
+}
+
+/* Sticker style — mirrored waveform */
+.badge .waveform-sticker.sticker-style {
+  background: #FAFAFA;
+  border: 2px solid #CCD5DE;
+  border-radius: 8px;
+}
+.badge .waveform-sticker.sticker-style .waveform {
+  align-items: center;
+}
+.badge .waveform-sticker.sticker-style .waveform .wbar {
+  border-radius: 999px;
 }
 
 /* Fine print — vertical along right edge */
@@ -374,9 +391,10 @@
   transform: translate(50%, -50%) rotate(90deg);
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 30px;
+  font-size: 33px;
   color: #C0CAD4;
-  letter-spacing: 3px;
+  letter-spacing: 2px;
+  word-spacing: -4px;
   line-height: 2;
   text-transform: uppercase;
   z-index: 5;
@@ -384,7 +402,7 @@
 
 /* Bottom section */
 .badge .bottom-section {
-  margin-top: 10px;
+  margin-top: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -405,8 +423,8 @@
   gap: 40px;
 }
 .badge .qr-placeholder {
-  width: 220px;
-  height: 220px;
+  width: 340px;
+  height: 340px;
   border: 3px solid #DEE5ED;
   border-radius: 8px;
   display: flex;
@@ -416,15 +434,12 @@
   gap: 6px;
 }
 .badge .qr-grid {
-  width: 150px;
-  height: 150px;
+  width: 290px;
+  height: 290px;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  grid-template-rows: repeat(5, 1fr);
-  gap: 4px;
 }
 .badge .qr-cell {
-  border-radius: 2px;
+  border-radius: 0;
 }
 .badge .qr-label {
   font-family: 'JetBrains Mono', monospace;

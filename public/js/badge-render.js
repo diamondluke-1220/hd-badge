@@ -100,12 +100,21 @@ function randomCaption() {
   return WAVEFORM_CAPTIONS[Math.floor(Math.random() * WAVEFORM_CAPTIONS.length)];
 }
 
-function renderWaveform(songKey) {
+function renderWaveform(songKey, waveStyle) {
   const wf = WAVEFORMS[songKey] || WAVEFORMS['PLEASE HOLD'];
   const container = document.getElementById('waveform');
   if (!container) return;
   container.innerHTML = '';
   const maxH = 170;
+  const style = waveStyle || 'barcode';
+
+  // Apply style class to sticker wrapper
+  const sticker = container.closest('.waveform-sticker');
+  if (sticker) {
+    sticker.classList.remove('barcode-style', 'sticker-style');
+    sticker.classList.add(style + '-style');
+  }
+
   wf.data.forEach(amp => {
     const bar = document.createElement('div');
     bar.className = 'wbar';
@@ -121,18 +130,29 @@ function genQR() {
   const grid = document.getElementById('qrGrid');
   if (!grid) return;
   grid.innerHTML = '';
-  const corners = [0, 1, 4, 5, 6, 20, 24, 25];
-  for (let i = 0; i < 25; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'qr-cell';
-    cell.style.background = (corners.includes(i) || Math.random() > 0.45) ? '#0A1F3F' : '#E8EEF4';
-    grid.appendChild(cell);
+
+  const qr = qrcode(0, 'M');
+  qr.addData('https://helpdesk1.bandcamp.com');
+  qr.make();
+
+  const count = qr.getModuleCount();
+  grid.style.gridTemplateColumns = `repeat(${count}, 1fr)`;
+  grid.style.gridTemplateRows = `repeat(${count}, 1fr)`;
+  grid.style.gap = '0';
+
+  for (let r = 0; r < count; r++) {
+    for (let c = 0; c < count; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'qr-cell';
+      cell.style.background = qr.isDark(r, c) ? '#0A1F3F' : '#FFFFFF';
+      grid.appendChild(cell);
+    }
   }
 }
 
 // Update all badge fields
 function updateBadge(data) {
-  const { name, department, title, song, photoUrl } = data;
+  const { name, department, title, song, photoUrl, waveStyle } = data;
 
   // Name
   const nameEl = document.getElementById('nameField');
@@ -164,7 +184,7 @@ function updateBadge(data) {
 
   // Waveform
   if (song) {
-    renderWaveform(song);
+    renderWaveform(song, waveStyle);
     const captionEl = document.getElementById('waveformCaption');
     if (captionEl && !captionEl.dataset.set) {
       captionEl.textContent = randomCaption();

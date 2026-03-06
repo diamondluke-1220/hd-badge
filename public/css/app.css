@@ -3,7 +3,7 @@
 
 body {
   font-family: 'Inter', -apple-system, sans-serif;
-  background: #0A1F3F;
+  background: #1C1C22;
   color: #E0E8F0;
   min-height: 100vh;
 }
@@ -92,17 +92,17 @@ body {
   font-size: 18px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  background: #0D2B5E;
-  border: 2px solid #1A3355;
+  background: #2A2A32;
+  border: 2px solid #3A3A44;
   border-radius: 8px;
   color: white;
   outline: none;
 }
 .control-input:focus {
-  border-color: #2E7DFF;
+  border-color: #5B8DEF;
 }
 .control-input::placeholder {
-  color: #334466;
+  color: #555560;
   text-transform: none;
   font-weight: 500;
   letter-spacing: 1px;
@@ -114,8 +114,8 @@ body {
   font-family: 'Inter', sans-serif;
   font-weight: 600;
   font-size: 14px;
-  background: #0D2B5E;
-  border: 2px solid #1A3355;
+  background: #2A2A32;
+  border: 2px solid #3A3A44;
   border-radius: 8px;
   color: white;
   outline: none;
@@ -128,7 +128,7 @@ body {
   padding-right: 36px;
 }
 .control-select:focus {
-  border-color: #2E7DFF;
+  border-color: #5B8DEF;
 }
 
 /* Photo controls */
@@ -141,9 +141,9 @@ body {
 
 .btn-sm {
   padding: 8px 16px;
-  border: 2px solid #1A3355;
+  border: 2px solid #3A3A44;
   border-radius: 8px;
-  background: #0D2B5E;
+  background: #2A2A32;
   color: white;
   font-family: 'Barlow', sans-serif;
   font-weight: 700;
@@ -152,8 +152,8 @@ body {
   transition: all 0.2s;
 }
 .btn-sm:hover {
-  border-color: #2E7DFF;
-  background: #163566;
+  border-color: #5B8DEF;
+  background: #36363F;
 }
 
 .photo-status {
@@ -183,12 +183,12 @@ body {
   background: #5BA3FF;
 }
 .btn-secondary {
-  background: #0D2B5E;
+  background: #2A2A32;
   color: #8899AA;
-  border: 2px solid #1A3355;
+  border: 2px solid #3A3A44;
 }
 .btn-secondary:hover {
-  border-color: #2E7DFF;
+  border-color: #5B8DEF;
   color: white;
 }
 .btn-download {
@@ -238,7 +238,7 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(10,31,63,0.95);
+  background: rgba(28,28,34,0.95);
   z-index: 2000;
   flex-direction: column;
   align-items: center;
@@ -257,7 +257,7 @@ body {
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #1A3355;
+  border: 3px solid #3A3A44;
   border-top-color: #2E7DFF;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;

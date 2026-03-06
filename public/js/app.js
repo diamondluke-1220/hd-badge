@@ -6,6 +6,7 @@ let state = {
   department: DEPARTMENTS[0].name,
   title: TITLES[0],
   song: SONG_LIST[0],
+  waveStyle: 'barcode',
 };
 let cropper = null;
 
@@ -85,6 +86,12 @@ function initEvents() {
     refreshPreview();
   });
 
+  // Waveform style
+  document.getElementById('waveStyleSelect').addEventListener('change', (e) => {
+    state.waveStyle = e.target.value;
+    refreshPreview();
+  });
+
   // Photo upload
   const fileInput = document.getElementById('fileInput');
 
@@ -122,7 +129,7 @@ function openCropModal(imgSrc) {
 
   img.onload = () => {
     cropper = new Cropper(img, {
-      aspectRatio: 620 / 560,
+      aspectRatio: 700 / 630,
       viewMode: 1,
       dragMode: 'move',
       autoCropArea: 0.9,
@@ -144,8 +151,8 @@ function applyCrop() {
   if (!cropper) return;
 
   const canvas = cropper.getCroppedCanvas({
-    width: 620,
-    height: 560,
+    width: 700,
+    height: 630,
     imageSmoothingQuality: 'high',
   });
 
