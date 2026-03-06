@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Help Desk — Badge Generator</title>
+  <link rel="stylesheet" href="/css/badge.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/lib/cropper.min.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Badge Generator</h1>
+  <div class="tagline">please hold.</div>
+</header>
+
+<main class="editor">
+  <!-- Live badge preview -->
+  <div class="preview-wrapper">
+    <div class="badge-preview-scaled" id="badgePreviewArea"></div>
+  </div>
+
+  <!-- Control panel -->
+  <div class="controls">
+    <div class="control-row">
+      <label class="control-label" for="nameInput">Name</label>
+      <input type="text" class="control-input" id="nameInput" placeholder="First name" maxlength="20" autocomplete="off" autofocus>
+    </div>
+    <div class="control-row">
+      <label class="control-label">Photo</label>
+      <div class="photo-controls">
+        <button class="btn-sm" id="uploadBtn">Upload</button>
+        <button class="btn-sm" id="cameraBtn">Selfie</button>
+        <span class="photo-status" id="photoStatus">No photo</span>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
+    </div>
+    <div class="control-row">
+      <label class="control-label" for="deptSelect">Department</label>
+      <select class="control-select" id="deptSelect"></select>
+    </div>
+    <div class="control-row">
+      <label class="control-label" for="titleSelect">Title</label>
+      <select class="control-select" id="titleSelect"></select>
+    </div>
+    <div class="control-row">
+      <label class="control-label" for="songSelect">Song</label>
+      <select class="control-select" id="songSelect"></select>
+    </div>
+    <button class="btn btn-download" id="downloadBtn">Download Badge</button>
+  </div>
+</main>
+
+<!-- Full-size badge for capture (hidden off-screen) -->
+<div class="badge-capture" id="badgeCapture">
+  <div class="badge" id="badge">
+    <div class="lanyard-slot"><div class="lanyard-hole"></div></div>
+    <div class="navy-stripe">
+      <div class="stripe-text">HELP DESK</div>
+      <div class="stripe-accent"></div>
+      <div class="stripe-accent-bottom"></div>
+      <div class="stripe-dots"></div>
+    </div>
+    <div class="texture-overlay"></div>
+    <div class="content">
+      <div class="header">
+        <div class="logo-area">
+          <div class="logo-icon">HD</div>
+          <span class="company-name">HELP DESK</span>
+        </div>
+        <span class="tagline">please hold.</span>
+        <div class="header-divider"></div>
+      </div>
+      <div class="photo-section">
+        <div class="photo-ring"></div>
+        <div class="photo-frame">
+          <span class="photo-placeholder-text">PHOTO</span>
+        </div>
+        <div class="access-badge" id="accessBadge">PENDING REVIEW</div>
+      </div>
+      <div class="info-section">
+        <div class="department" id="deptField">SELECT DEPARTMENT</div>
+        <div class="title" id="titleField">Select Title</div>
+        <div class="info-divider"></div>
+        <div class="name" id="nameField">YOUR NAME</div>
+        <div class="employee-id" id="idField">HD-000000-00</div>
+        <div class="waveform-sticker">
+          <div class="waveform" id="waveform"></div>
+          <div class="waveform-label">
+            <span class="waveform-song" id="waveformSong">SELECT SONG</span>
+            <span class="waveform-duration" id="waveformDuration">0:00</span>
+          </div>
+          <div class="waveform-caption" id="waveformCaption">SCAN TO FILE COMPLAINT</div>
+        </div>
+      </div>
+      <div class="fine-print">
+        PROPERTY OF HELP DESK INC. &bull; NOT VALID FOR PARKING<br>
+        BADGE DOES NOT GRANT ACTUAL SKILLS &bull; NO REFUNDS ON MORALE
+      </div>
+      <div class="bottom-section">
+        <div class="bottom-divider"></div>
+        <div class="bottom-row">
+          <span class="band-name-bottom">HELP DESK</span>
+          <div class="qr-placeholder">
+            <div class="qr-grid" id="qrGrid"></div>
+            <span class="qr-label">BANDCAMP</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Crop modal -->
+<div class="crop-modal" id="cropModal">
+  <div class="crop-container">
+    <img id="cropImage" alt="Crop your photo">
+  </div>
+  <div class="crop-actions">
+    <button class="btn btn-secondary" onclick="cancelCrop()">Cancel</button>
+    <button class="btn btn-primary" onclick="applyCrop()">Use This Photo</button>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Generating your badge...</div>
+</div>
+
+<script src="/lib/cropper.min.js"></script>
+<script src="/lib/html2canvas.min.js"></script>
+<script src="/js/badge-render.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "helpdesk-badge-app",
+  "version": "1.0.0",
+  "description": "Help Desk Employee Badge Generator",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/server.ts",
+    "start": "bun run src/server.ts"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  }
+}
