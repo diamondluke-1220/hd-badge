@@ -60,36 +60,13 @@
   border-radius: 75px;
 }
 
-/* Lanyard slot — CR80 standard: 12.7×3.175mm slot, center 6.35mm from top edge */
-.badge .lanyard-slot {
-  position: absolute;
-  top: 150px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 350px;
-  height: 100px;
-  background: #e0e0e0;
-  border-radius: 50px;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.badge .lanyard-hole {
-  width: 300px;
-  height: 75px;
-  background: #c0c0c0;
-  border-radius: 38px;
-  border: 2px solid #aaa;
-}
-
 /* Navy header bar */
 .badge .navy-stripe {
   position: absolute;
   left: 0;
   top: 0;
   width: 100%;
-  height: 270px;
+  height: 180px;
   background: linear-gradient(90deg, #0A1F3F 0%, #0D2B5E 50%, #0A1F3F 100%);
   overflow: hidden;
 }
@@ -111,23 +88,34 @@
   right: 0;
   background: linear-gradient(270deg, #0A1F3F 0%, transparent 100%);
 }
-.badge .stripe-text {
+.badge .stripe-keys {
   position: absolute;
-  top: 200px;
-  transform: translateY(-50%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 3;
+}
+.badge .key {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  background: rgba(255,255,255,0.12);
+  border: 3px solid rgba(255,255,255,0.20);
+  border-radius: 16px;
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 140px;
-  letter-spacing: 20px;
-  color: rgba(255,255,255,0.40);
-  white-space: nowrap;
+  font-size: 80px;
+  color: rgba(255,255,255,0.95);
   text-transform: uppercase;
+  box-shadow: 0 5px 0 rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
 }
-.badge .stripe-text-left {
-  right: calc(50% + 200px);
-}
-.badge .stripe-text-right {
-  left: calc(50% + 200px);
+.badge .key-space {
+  width: 28px;
 }
 .badge .stripe-accent {
   position: absolute;
@@ -159,25 +147,25 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 290px 160px 80px 160px;
+  padding: 200px 160px 80px 160px;
 }
 
 /* HD logo — bottom-right corner */
 .badge .logo-icon {
   position: absolute;
   bottom: 36px;
-  right: 36px;
-  width: 130px;
-  height: 130px;
+  left: 36px;
+  width: 160px;
+  height: 160px;
   background: linear-gradient(180deg, #0A1F3F 0%, #0D2B5E 100%);
-  border-radius: 14px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #C0D0E0;
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 52px;
+  font-size: 64px;
   z-index: 10;
   text-shadow: 0 1px 2px rgba(255,255,255,0.15);
 }
@@ -193,8 +181,8 @@
   position: relative;
 }
 .badge .photo-frame {
-  width: 700px;
-  height: 630px;
+  width: 740px;
+  height: 720px;
   border-radius: 24px;
   border: 6px solid #0A1F3F;
   background: #F0F4F8;
@@ -241,7 +229,7 @@
 .badge .access-badge.paper-jam { background: #CA8A04; }
 .badge .access-badge.reset { background: #0891B2; }
 .badge .access-badge.bsod { background: #2563EB; }
-.badge .access-badge.hydration { background: #0D9488; }
+.badge .access-badge.gossip { background: #0D9488; }
 .badge .access-badge.overtime { background: #16A34A; }
 .badge .access-badge.fun { background: #C026D3; }
 .badge .access-badge.morale { background: #991B1B; }
@@ -249,6 +237,12 @@
 .badge .access-badge.pit { background: #DC2626; }
 .badge .access-badge.shred { background: #7C3AED; }
 .badge .access-badge.dive { background: #0EA5E9; }
+.badge .access-badge.on-mute { background: #475569; }
+.badge .access-badge.fast-track { background: #D97706; }
+.badge .access-badge.corner-office { background: #1E40AF; }
+.badge .access-badge.thought-leader { background: #14532D; }
+.badge .access-badge.peter-principle { background: #7E22CE; }
+.badge .access-badge.above-pay { background: #92400E; }
 
 /* Info section */
 .badge .info-section {
@@ -262,7 +256,7 @@
 .badge .department {
   font-family: 'Inter', sans-serif;
   font-weight: 700;
-  font-size: 56px;
+  font-size: 62px;
   color: #0A1F3F;
   text-transform: uppercase;
   letter-spacing: 2px;
@@ -277,7 +271,7 @@
 .badge .title {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
-  font-size: 56px;
+  font-size: 62px;
   color: #556677;
   text-align: center;
   margin-bottom: 16px;
@@ -296,7 +290,7 @@
 .badge .name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 72px;
+  font-size: 82px;
   color: #0A1F3F;
   text-transform: uppercase;
   letter-spacing: 5px;
@@ -309,7 +303,7 @@
 }
 .badge .employee-id {
   position: absolute;
-  left: calc(100% + 38px);
+  left: calc(100% + 50px);
   top: 50%;
   transform: rotate(90deg) translateX(-50%);
   transform-origin: 0 0;
@@ -326,7 +320,7 @@
 .badge .status-dot {
   font-size: 22px;
   letter-spacing: 0;
-  color: #F59E0B;
+  color: #22C55E;
 }
 .badge .issued-date {
   font-size: 30px;
@@ -343,7 +337,9 @@
   gap: 12px;
   margin-top: auto;
   margin-bottom: auto;
-  width: 100%;
+  width: calc(100% + 120px);
+  margin-left: -60px;
+  margin-right: -60px;
   padding: 24px 28px 18px;
 }
 .badge .waveform-sticker::before {
@@ -426,29 +422,98 @@
 .badge .fine-print {
   position: absolute;
   right: 48px;
-  top: 53%;
-  transform: translate(50%, -50%) rotate(90deg);
+  top: 180px;
+  bottom: 36px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 33px;
+  font-size: 36px;
   color: #C0CAD4;
-  letter-spacing: 2px;
+  letter-spacing: 3px;
   word-spacing: -4px;
-  line-height: 2;
   text-transform: uppercase;
   z-index: 5;
 }
 
 
+/* Bottom accent bar — mirrors header stripe accent */
+.badge::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 24px;
+  background: #2E7DFF;
+  z-index: 10;
+}
+
 /* Subtle background texture */
 .badge .texture-overlay {
+  position: absolute;
+  top: 180px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.badge .texture-overlay::before {
+  content:
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 ";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background:
-    radial-gradient(ellipse at 80% 20%, rgba(46,125,255,0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 30% 80%, rgba(10,31,63,0.02) 0%, transparent 50%);
-  pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  line-height: 1.8;
+  letter-spacing: 4px;
+  color: rgba(10, 31, 63, 0.04);
+  word-break: break-all;
+  overflow: hidden;
 }

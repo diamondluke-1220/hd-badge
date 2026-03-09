@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Help Desk Inc. — New Employee Orientation</title>
+  <style>
+    @font-face { font-family: 'Barlow'; font-weight: 800; src: url('/fonts/barlow-800.woff2') format('woff2'); }
+    @font-face { font-family: 'Barlow'; font-weight: 400; src: url('/fonts/barlow-400.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter'; font-weight: 500; src: url('/fonts/inter-500.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter'; font-weight: 700; src: url('/fonts/inter-700.woff2') format('woff2'); }
+    @font-face { font-family: 'JetBrains Mono'; font-weight: 600; src: url('/fonts/jetbrains-mono-600.woff2') format('woff2'); }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #E8E4DF;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+      gap: 60px;
+    }
+
+    .page-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: -40px;
+    }
+
+    /* Each panel is 5x7 inches at 96 DPI */
+    .panel {
+      width: 5in;
+      height: 7in;
+      background: white;
+      border: 1px solid #D0C8C0;
+      padding: 0.4in;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    /* ─── FRONT PANEL ─── */
+
+    .front .memo-header {
+      border-bottom: 3px solid #0A1F3F;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .front .memo-header h1 {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 15px;
+      color: #0A1F3F;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    .front .memo-header .sub {
+      font-size: 10px;
+      color: #888;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+
+    .front .memo-fields {
+      font-size: 11px;
+      line-height: 1.8;
+      color: #333;
+      margin-bottom: 16px;
+    }
+    .front .memo-fields .label {
+      font-weight: 700;
+      color: #0A1F3F;
+      display: inline-block;
+      width: 70px;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+
+    .front .divider {
+      height: 1px;
+      background: #D0C8C0;
+      margin: 12px 0;
+    }
+
+    .front .main-title {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 22px;
+      color: #0A1F3F;
+      text-align: center;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin: 12px 0 6px;
+    }
+    .front .main-subtitle {
+      font-size: 11px;
+      color: #888;
+      text-align: center;
+      letter-spacing: 2px;
+      margin-bottom: 20px;
+    }
+
+    .front .steps {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .front .step {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .front .step-num {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 28px;
+      color: #0A1F3F;
+      line-height: 1;
+      min-width: 30px;
+      opacity: 0.25;
+    }
+    .front .step-content {
+      flex: 1;
+    }
+    .front .step-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #0A1F3F;
+      margin-bottom: 2px;
+    }
+    .front .step-desc {
+      font-size: 10.5px;
+      color: #666;
+      line-height: 1.5;
+    }
+
+    .front .footer-note {
+      font-size: 8px;
+      color: #AAA;
+      text-align: center;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid #E8E4DF;
+    }
+
+    /* ─── BACK PANEL ─── */
+
+    .back {
+      background: #0A1F3F;
+      color: white;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 20px;
+    }
+
+    .back .dual-qr-layout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+    }
+
+    .back .primary-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .back .section-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+
+    .back .primary-title {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .back .qr-container {
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+    }
+    .back .qr-container canvas {
+      display: block;
+    }
+
+    .back .primary-url {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: rgba(255,255,255,0.85);
+      letter-spacing: 0.5px;
+    }
+
+    .back .scan-label {
+      font-size: 10px;
+      color: rgba(255,255,255,0.6);
+      letter-spacing: 0.5px;
+      max-width: 300px;
+      line-height: 1.5;
+    }
+
+    .back .divider-line {
+      width: 80%;
+      height: 1px;
+      background: rgba(255,255,255,0.15);
+      margin: 16px 0;
+    }
+
+    .back .fallback-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .back .fallback-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.35);
+    }
+
+    .back .fallback-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .back .qr-small {
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+    }
+    .back .qr-small canvas {
+      display: block;
+    }
+
+    .back .fallback-info {
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .back .wifi-name {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .back .wifi-password {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,0.5);
+      letter-spacing: 0.5px;
+    }
+
+    .back .wifi-hint {
+      font-size: 9px;
+      color: rgba(255,255,255,0.35);
+      line-height: 1.4;
+      max-width: 180px;
+    }
+
+    .back .tagline {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+      margin-top: 8px;
+    }
+
+    /* Print styles */
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+        gap: 0;
+      }
+      .page-label { display: none; }
+      .panel {
+        box-shadow: none;
+        border: none;
+        page-break-after: always;
+      }
+      .back {
+        /* Print upside-down so when folded, both sides face outward correctly */
+        transform: rotate(180deg);
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- FRONT — Faces outward when tent is standing -->
+<div class="page-label">Front (faces audience)</div>
+<div class="panel front">
+  <div class="memo-header">
+    <h1>Help Desk Inc.</h1>
+    <div class="sub">Interoffice Memorandum</div>
+  </div>
+
+  <div class="memo-fields">
+    <div><span class="label">To:</span> All New Hires</div>
+    <div><span class="label">From:</span> HR Department</div>
+    <div><span class="label">Re:</span> Mandatory Badge Issuance</div>
+    <div><span class="label">Priority:</span> Immediately, If Not Sooner</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="main-title">Employee Onboarding</div>
+  <div class="main-subtitle">Badge Issuance Procedure</div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-content">
+        <div class="step-title">Scan the QR Code</div>
+        <div class="step-desc">Use your phone's camera on the QR code on back of this memo. It opens the Badge Issuance Portal directly.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-content">
+        <div class="step-title">No WiFi? Use the Backup</div>
+        <div class="step-desc">Scan the smaller QR to join our local WiFi, then visit the URL shown on back.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-content">
+        <div class="step-title">Customize Your Badge</div>
+        <div class="step-desc">Tap any element on your badge to edit. Choose your name, department, title, and theme song.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-content">
+        <div class="step-title">Download or Join the Org Chart</div>
+        <div class="step-desc">Save your badge, then optionally join the Employee Directory to be listed alongside the team.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Property of Help Desk Inc. &bull; This memo will self-destruct after the encore &bull; No refunds on morale
+  </div>
+</div>
+
+<!-- BACK — Dual QR: primary URL + fallback WiFi -->
+<div class="page-label">Back (faces audience when flipped)</div>
+<div class="panel back">
+  <div class="dual-qr-layout">
+    <!-- Primary: Direct URL (works when venue has internet) -->
+    <div class="primary-section">
+      <div class="section-label">Scan to Get Your Badge</div>
+      <div class="primary-title">Badge Generator</div>
+      <div class="qr-container" id="qrPrimary"></div>
+      <div class="primary-url">badge.nav.computer</div>
+      <div class="scan-label">Scan with your phone's camera — opens directly in your browser</div>
+    </div>
+
+    <div class="divider-line"></div>
+
+    <!-- Fallback: WiFi QR for offline/local mode -->
+    <div class="fallback-section">
+      <div class="fallback-label">No Internet? Use Local WiFi</div>
+      <div class="fallback-row">
+        <div class="qr-small" id="qrFallback"></div>
+        <div class="fallback-info">
+          <div class="wifi-name">Help Desk Inc</div>
+          <div class="wifi-password">Password: helpdesk2026</div>
+          <div class="wifi-hint">Scan to join WiFi, then visit<br><strong>http://192.168.8.1</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">please hold.</div>
+</div>
+
+<script src="/lib/qrcode.min.js"></script>
+<script>
+  // ── CONFIGURE THESE PER SHOW ──
+  const BADGE_URL = 'https://badge.nav.computer';       // Cloudflare Tunnel URL
+  const WIFI_SSID = 'Help Desk Inc';                     // Local WiFi SSID
+  const WIFI_PASS = 'helpdesk2026';                      // Local WiFi password
+  const LOCAL_URL = 'http://192.168.8.1';                // Local fallback URL
+  // ──────────────────────────────
+
+  function renderQR(data, containerId, cellSize) {
+    const qr = qrcode(0, 'M');
+    qr.addData(data);
+    qr.make();
+
+    const container = document.getElementById(containerId);
+    const moduleCount = qr.getModuleCount();
+    const size = moduleCount * cellSize;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = '#0A1F3F';
+    for (let row = 0; row < moduleCount; row++) {
+      for (let col = 0; col < moduleCount; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    container.appendChild(canvas);
+  }
+
+  // Primary QR: Direct URL (large)
+  renderQR(BADGE_URL, 'qrPrimary', 5);
+
+  // Fallback QR: WiFi join (smaller)
+  const wifiQR = `WIFI:T:WPA;S:${WIFI_SSID};P:${WIFI_PASS};;`;
+  renderQR(wifiQR, 'qrFallback', 3);
+</script>
+</body>
+</html>

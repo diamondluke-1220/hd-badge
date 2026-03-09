@@ -10,8 +10,8 @@ const DEPT_ACCESS = {
   'PRINTER JAMS':                       { access: 'PAPER JAM CLEARANCE',       css: 'paper-jam' },
   'PASSWORD RESET SERVICES':            { access: 'RESET AUTHORIZED',          css: 'reset' },
   'BLUE SCREEN RESPONSE TEAM':          { access: 'BSOD CERTIFIED',            css: 'bsod' },
-  'WATERCOOLER SERVICES':               { access: 'HYDRATION ACCESS',          css: 'hydration' },
-  'TIME BACK IN YOUR DAY':              { access: 'OVERTIME EXEMPT',           css: 'overtime' },
+  'WATERCOOLER SERVICES':               { access: 'GOSSIP CHANNEL OPEN',       css: 'gossip' },
+  'MEETING RECOVERY DEPT.':             { access: 'STILL ON MUTE',             css: 'on-mute' },
   'MANDATORY FUN COMMITTEE':            { access: 'FUN IS MANDATORY',          css: 'fun' },
   'MORALE SUPPRESSION UNIT':            { access: 'SOUL EXTRACTION AUTHORIZED', css: 'morale' },
   'TEAM BUILDING AVOIDANCE':            { access: 'TRUST FALL EXEMPT',         css: 'trust-fall' },
@@ -19,6 +19,33 @@ const DEPT_ACCESS = {
   'ENTERPRISE GUITAR WORSHIP':           { access: 'SHRED CERTIFIED',           css: 'shred' },
   'STAGE DIVE RISK ASSESSMENT':         { access: 'DIVE AUTHORIZED',           css: 'dive' },
 };
+
+// All access level options — label + CSS class
+const ACCESS_LEVELS = [
+  { label: 'ALL ACCESS',                css: 'all-access' },
+  { label: 'PAPER JAM CLEARANCE',       css: 'paper-jam' },
+  { label: 'RESET AUTHORIZED',          css: 'reset' },
+  { label: 'BSOD CERTIFIED',            css: 'bsod' },
+  { label: 'GOSSIP CHANNEL OPEN',       css: 'gossip' },
+  { label: 'OVERTIME EXEMPT',           css: 'overtime' },
+  { label: 'STILL ON MUTE',            css: 'on-mute' },
+  { label: 'FUN IS MANDATORY',          css: 'fun' },
+  { label: 'SOUL EXTRACTION AUTHORIZED', css: 'morale' },
+  { label: 'TRUST FALL EXEMPT',         css: 'trust-fall' },
+  { label: 'PIT APPROVED',              css: 'pit' },
+  { label: 'SHRED CERTIFIED',           css: 'shred' },
+  { label: 'DIVE AUTHORIZED',           css: 'dive' },
+  { label: 'FAST TRACK PROMOTED',       css: 'fast-track' },
+  { label: 'CORNER OFFICE APPROVED',    css: 'corner-office' },
+  { label: 'THOUGHT LEADER CERTIFIED',  css: 'thought-leader' },
+  { label: 'PROMOTED BEYOND CAPABILITY', css: 'peter-principle' },
+  { label: 'ABOVE YOUR PAY GRADE',      css: 'above-pay' },
+  { label: 'PENDING REVIEW',            css: '' },
+];
+
+// Lookup: access label → css class
+const ACCESS_CSS = {};
+ACCESS_LEVELS.forEach(a => { ACCESS_CSS[a.label] = a.css; });
 
 // Real waveform data — extracted from actual Help Desk MP3s (RMS amplitude, 60 bars)
 const WAVEFORMS = {
@@ -43,10 +70,17 @@ const SONG_LIST = Object.keys(WAVEFORMS);
 const WAVEFORM_CAPTIONS = [
   'SCAN TO FILE COMPLAINT',
   'IF FOUND RETURN TO MOSH PIT',
-  'DO NOT DUPLICATE (WE KNOW YOU WILL)',
+  'DO NOT COPY (TORRENTING IS OK)',
   'WARRANTY VOID IF REMOVED',
   'NOT RESPONSIBLE FOR LOST EARDRUMS',
   'THIS BADGE IS YOUR RECEIPT',
+  'BADGE EXPIRES WHEN THE MUSIC STOPS',
+  'UNAUTHORIZED MOSHING VOIDS WARRANTY',
+  'HAVE YOU TRIED TURNING IT OFF AND BACK ON',
+  'STAGE DIVE TO SCAN',
+  'IT\'S NOT THE NETWORK',
+  'WHAT\'S THE WIFI PASSWORD?',
+  'TAKING BACK MONDAYS',
 ];
 
 // Fan departments (11 options)
@@ -55,7 +89,7 @@ const DEPARTMENTS = [
   { name: 'PASSWORD RESET SERVICES',       theme: 'IT' },
   { name: 'BLUE SCREEN RESPONSE TEAM',     theme: 'IT' },
   { name: 'WATERCOOLER SERVICES',           theme: 'Office' },
-  { name: 'TIME BACK IN YOUR DAY',         theme: 'Office' },
+  { name: 'MEETING RECOVERY DEPT.',        theme: 'Office' },
   { name: 'MANDATORY FUN COMMITTEE',       theme: 'Corporate' },
   { name: 'MORALE SUPPRESSION UNIT',       theme: 'Corporate' },
   { name: 'TEAM BUILDING AVOIDANCE',       theme: 'Corporate' },
@@ -70,7 +104,7 @@ const TITLES = [
   'Level 1 Support',
   'Junior Ticket Closer',
   'Bandwidth Hog',
-  'Service Level Utility Technician',
+  'Ctrl+Z Specialist',
   'Full Stack Complainer',
   'Calendar Tetris Champion',
   'Desk Plant Supervisor',
@@ -81,32 +115,22 @@ const TITLES = [
   'Director of First Impressions',
   'Mosh Pit Compliance Officer',
   'On-Call Since Monday',
-  'Air Guitar Maintenance',
+  'Air Guitar Tech',
   'HUH?! Coordinator',
 ];
 
-// Generate employee ID: HD-XXXX (4 random digits)
+// Generate employee ID: HD-XXXXX (5 random digits)
 function generateEmployeeId() {
-  const num = String(Math.floor(1000 + Math.random() * 9000));
+  const num = String(Math.floor(10000 + Math.random() * 90000));
   return `HD-${num}`;
 }
 
-// Random status indicator
-const STATUSES = [
-  { color: '#F59E0B', glow: 'rgba(245,158,11,0.4)' },   // amber — AWAY
-  { color: '#EF4444', glow: 'rgba(239,68,68,0.4)' },     // red — DO NOT DISTURB
-  { color: '#6B7280', glow: 'rgba(107,114,128,0.3)' },   // gray — OFFLINE
-  { color: '#22C55E', glow: 'rgba(34,197,94,0.4)' },     // green — AVAILABLE
-  { color: '#EF4444', glow: 'rgba(239,68,68,0.4)' },     // red — IN A MEETING
-  { color: '#F59E0B', glow: 'rgba(245,158,11,0.4)' },    // amber — ON HOLD
-];
-
-function applyRandomStatus() {
-  const status = STATUSES[Math.floor(Math.random() * STATUSES.length)];
+// Status indicator — always green (ACTIVE)
+function applyStatus() {
   const dot = document.getElementById('statusDot');
   if (dot) {
-    dot.style.color = status.color;
-    dot.style.textShadow = `0 0 8px ${status.glow}`;
+    dot.style.color = '#22C55E';
+    dot.style.textShadow = '0 0 8px rgba(34,197,94,0.4)';
   }
 }
 
@@ -177,20 +201,22 @@ function updateBadge(data) {
     issuedEl.dataset.set = '1';
   }
 
-  // Access badge
-  const deptUpper = (department || '').toUpperCase();
-  const mapping = DEPT_ACCESS[deptUpper] || { access: 'PENDING REVIEW', css: '' };
+  // Access badge — uses explicit accessLevel from state
+  const accessLabel = (data.accessLevel || 'PENDING REVIEW').toUpperCase();
+  const accessCss = ACCESS_CSS[accessLabel] || '';
   const ab = document.getElementById('accessBadge');
   if (ab) {
-    ab.textContent = mapping.access;
-    ab.className = 'access-badge ' + mapping.css;
+    ab.textContent = accessLabel;
+    ab.className = 'access-badge ' + accessCss;
   }
 
   // Waveform
   if (song) {
     renderWaveform(song, waveStyle);
     const captionEl = document.getElementById('waveformCaption');
-    if (captionEl && !captionEl.dataset.set) {
+    if (captionEl && data.caption) {
+      captionEl.textContent = data.caption;
+    } else if (captionEl && !captionEl.dataset.set) {
       captionEl.textContent = randomCaption();
       captionEl.dataset.set = '1';
     }

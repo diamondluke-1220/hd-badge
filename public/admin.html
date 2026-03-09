@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HR Dashboard — Help Desk Inc.</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #1C1C22;
+      color: #E0E8F0;
+      min-height: 100vh;
+    }
+
+    /* Login Screen */
+    .login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      flex-direction: column;
+      gap: 24px;
+    }
+    .login-card {
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 12px;
+      padding: 40px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    .login-card h1 {
+      font-size: 14px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #CC3333;
+      margin-bottom: 8px;
+    }
+    .login-card h2 {
+      font-size: 22px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 24px;
+    }
+    .login-card input {
+      width: 100%;
+      padding: 12px 16px;
+      background: #1C1C22;
+      border: 1px solid #3A3A4A;
+      border-radius: 8px;
+      color: #E0E8F0;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .login-card input:focus {
+      outline: none;
+      border-color: #CC3333;
+    }
+    .login-card button {
+      width: 100%;
+      padding: 12px;
+      background: #CC3333;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .login-card button:hover { background: #AA2222; }
+    .login-error {
+      color: #CC3333;
+      font-size: 13px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    /* Dashboard */
+    .dashboard { display: none; }
+    .dash-header {
+      background: #2A2A35;
+      border-bottom: 2px solid #CC3333;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dash-header h1 {
+      font-size: 13px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #CC3333;
+    }
+    .dash-header .subtitle {
+      font-size: 11px;
+      color: #667788;
+      letter-spacing: 2px;
+      margin-top: 2px;
+    }
+    .dash-header button {
+      background: none;
+      border: 1px solid #3A3A4A;
+      color: #8899AA;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .dash-header button:hover {
+      border-color: #CC3333;
+      color: #CC3333;
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      padding: 20px 24px;
+      overflow-x: auto;
+    }
+    .stat-card {
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 10px;
+      padding: 16px 20px;
+      min-width: 140px;
+      flex: 1;
+    }
+    .stat-card .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: white;
+    }
+    .stat-card .stat-label {
+      font-size: 11px;
+      color: #667788;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+
+    /* Filters */
+    .filters-bar {
+      display: flex;
+      gap: 12px;
+      padding: 0 24px 16px;
+      flex-wrap: wrap;
+    }
+    .filter-input {
+      padding: 8px 14px;
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 8px;
+      color: #E0E8F0;
+      font-size: 13px;
+      flex: 1;
+      min-width: 180px;
+    }
+    .filter-input:focus {
+      outline: none;
+      border-color: #556677;
+    }
+    .filter-select {
+      padding: 8px 14px;
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 8px;
+      color: #E0E8F0;
+      font-size: 13px;
+      min-width: 160px;
+    }
+
+    /* Table */
+    .badge-table-wrap {
+      padding: 0 24px 40px;
+      overflow-x: auto;
+    }
+    .badge-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .badge-table th {
+      text-align: left;
+      padding: 10px 12px;
+      color: #667788;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      border-bottom: 1px solid #3A3A4A;
+      white-space: nowrap;
+    }
+    .badge-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #2A2A35;
+      vertical-align: middle;
+    }
+    .badge-table tr:hover td {
+      background: #2A2A35;
+    }
+    .badge-thumb {
+      width: 40px;
+      height: 64px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #3A3A4A;
+    }
+    .badge-id {
+      font-family: monospace;
+      color: #8899AA;
+      font-size: 12px;
+    }
+    .badge-name { font-weight: 600; color: white; }
+    .badge-dept {
+      font-size: 12px;
+      color: #8899AA;
+    }
+    .status-visible {
+      color: #44BB66;
+      font-size: 12px;
+    }
+    .status-hidden {
+      color: #CC3333;
+      font-size: 12px;
+    }
+    .status-band {
+      background: #3D2F00;
+      color: #FFCC00;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Action buttons */
+    .btn-action {
+      padding: 4px 10px;
+      border: 1px solid #3A3A4A;
+      background: none;
+      color: #8899AA;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      margin-right: 4px;
+    }
+    .btn-action:hover {
+      border-color: #667788;
+      color: white;
+    }
+    .btn-action.btn-danger:hover {
+      border-color: #CC3333;
+      color: #CC3333;
+    }
+    .btn-action.btn-paid {
+      border-color: #22C55E;
+      color: #22C55E;
+    }
+    .btn-action.btn-printed {
+      border-color: #3B82F6;
+      color: #3B82F6;
+    }
+    .status-paid {
+      color: #22C55E;
+      font-size: 12px;
+    }
+    .status-unpaid {
+      color: #667788;
+      font-size: 12px;
+    }
+    .status-printed {
+      color: #3B82F6;
+      font-size: 12px;
+    }
+    .status-flagged {
+      color: #F59E0B;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .btn-action.btn-flagged {
+      border-color: #F59E0B;
+      color: #F59E0B;
+    }
+
+    /* Pagination */
+    .pagination {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      padding: 16px 24px;
+    }
+    .pagination button {
+      padding: 6px 14px;
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 6px;
+      color: #E0E8F0;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .pagination button:hover { border-color: #667788; }
+    .pagination button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    .pagination .page-info {
+      display: flex;
+      align-items: center;
+      color: #667788;
+      font-size: 13px;
+    }
+
+    /* Analytics Section */
+    .analytics-section {
+      padding: 0 24px 20px;
+    }
+    .analytics-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .analytics-header h2 {
+      font-size: 13px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #667788;
+    }
+    .analytics-toggle {
+      background: none;
+      border: 1px solid #3A3A4A;
+      color: #8899AA;
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .analytics-toggle:hover {
+      border-color: #CC3333;
+      color: #CC3333;
+    }
+    .analytics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .analytics-card {
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    .analytics-card h3 {
+      font-size: 11px;
+      color: #667788;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    .analytics-card .rank-list {
+      list-style: none;
+    }
+    .analytics-card .rank-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #2A2A35;
+    }
+    .analytics-card .rank-list li:last-child {
+      border-bottom: none;
+    }
+    .rank-name {
+      color: #E0E8F0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 160px;
+    }
+    .rank-count {
+      color: #667788;
+      font-family: monospace;
+      font-size: 12px;
+      min-width: 30px;
+      text-align: right;
+    }
+    .rank-num {
+      color: #CC3333;
+      font-size: 11px;
+      margin-right: 6px;
+      min-width: 16px;
+    }
+    .analytics-pair {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+    .analytics-pair .pair-label { color: #8899AA; }
+    .analytics-pair .pair-value { color: white; font-weight: 600; }
+    .analytics-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 8px;
+      background: #1C1C22;
+    }
+    .analytics-bar .bar-fill {
+      height: 100%;
+      transition: width 0.3s;
+    }
+
+    /* Date inputs */
+    input[type="date"] {
+      padding: 8px 14px;
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 8px;
+      color: #E0E8F0;
+      font-size: 13px;
+      min-width: 140px;
+    }
+    input[type="date"]:focus {
+      outline: none;
+      border-color: #556677;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+      filter: invert(0.7);
+    }
+
+    /* Confirm dialog */
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .confirm-card {
+      background: #2A2A35;
+      border: 1px solid #3A3A4A;
+      border-radius: 12px;
+      padding: 32px;
+      max-width: 400px;
+      width: 90%;
+      text-align: center;
+    }
+    .confirm-card h3 {
+      color: #CC3333;
+      margin-bottom: 12px;
+      font-size: 16px;
+    }
+    .confirm-card p {
+      color: #8899AA;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .confirm-card .btn-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    .confirm-card button {
+      padding: 8px 20px;
+      border-radius: 6px;
+      border: 1px solid #3A3A4A;
+      background: none;
+      color: #E0E8F0;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .confirm-card .btn-confirm {
+      background: #CC3333;
+      border-color: #CC3333;
+      color: white;
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #667788;
+    }
+
+    @media (max-width: 768px) {
+      .stats-bar { flex-direction: column; }
+      .stat-card { min-width: auto; }
+      .badge-table { font-size: 12px; }
+      .badge-table th, .badge-table td { padding: 8px 6px; }
+      .badge-thumb { width: 30px; height: 48px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Login Screen -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>Restricted Access</h1>
+    <h2>HR Dashboard</h2>
+    <input type="password" id="tokenInput" placeholder="Enter admin token" autocomplete="off">
+    <button onclick="doLogin()">Authenticate</button>
+    <div class="login-error" id="loginError">Access denied. Invalid token.</div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+  <div class="dash-header">
+    <div>
+      <h1>HR Dashboard</h1>
+      <div class="subtitle">Authorized Personnel Only</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="toggleAnalytics()">Analytics</button>
+      <button onclick="exportCSV()">Export CSV</button>
+      <button onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <div class="stats-bar" id="statsBar"></div>
+
+  <div class="filters-bar">
+    <input class="filter-input" id="searchInput" type="text" placeholder="Search by name, ID, or department...">
+    <select class="filter-select" id="divisionFilter">
+      <option value="">All Divisions</option>
+    </select>
+    <select class="filter-select" id="deptFilter">
+      <option value="">All Departments</option>
+    </select>
+    <select class="filter-select" id="photoFilter">
+      <option value="">All Photos</option>
+      <option value="1">With Photo</option>
+      <option value="0">No Photo</option>
+    </select>
+    <select class="filter-select" id="statusFilter">
+      <option value="">All Statuses</option>
+      <option value="unpaid">Unpaid</option>
+      <option value="paid">Paid</option>
+      <option value="unprinted">Not Printed</option>
+      <option value="printed">Printed</option>
+      <option value="flagged">Flagged</option>
+    </select>
+  </div>
+  <div class="filters-bar">
+    <input type="date" id="dateFrom" title="From date">
+    <input type="date" id="dateTo" title="To date">
+    <button class="analytics-toggle" onclick="setDatePreset('today')">Today</button>
+    <button class="analytics-toggle" onclick="setDatePreset('yesterday')">Yesterday</button>
+    <button class="analytics-toggle" onclick="setDatePreset('week')">This Week</button>
+    <button class="analytics-toggle" onclick="setDatePreset('month')">This Month</button>
+    <button class="analytics-toggle" onclick="setDatePreset('quarter')">This Quarter</button>
+    <button class="analytics-toggle" onclick="clearDates()">Clear Dates</button>
+  </div>
+
+  <div class="analytics-section" id="analyticsSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>Badge Analytics</h2>
+    </div>
+    <div class="analytics-grid" id="analyticsGrid"></div>
+  </div>
+
+  <div class="badge-table-wrap">
+    <table class="badge-table">
+      <thead>
+        <tr>
+          <th>Badge</th>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Department</th>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Paid</th>
+          <th>Printed</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="badgeTableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="pagination" id="pagination"></div>
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────
+let token = sessionStorage.getItem('admin-token') || '';
+let currentPage = 1;
+let totalPages = 1;
+let searchTimeout = null;
+let departments = [];
+
+// ─── Auth ───────────────────────────────────────────────
+function doLogin() {
+  const input = document.getElementById('tokenInput');
+  token = input.value.trim();
+  if (!token) return;
+
+  // Test the token
+  apiFetch('/api/admin/stats')
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      sessionStorage.setItem('admin-token', token);
+      showDashboard();
+    })
+    .catch(() => {
+      document.getElementById('loginError').style.display = 'block';
+      token = '';
+    });
+}
+
+function doLogout() {
+  token = '';
+  sessionStorage.removeItem('admin-token');
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('tokenInput').value = '';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+// ─── API Helper ─────────────────────────────────────────
+async function apiFetch(url, opts = {}) {
+  const headers = { 'Authorization': `Bearer ${token}`, ...opts.headers };
+  const res = await fetch(url, { ...opts, headers });
+  return res.json();
+}
+
+// ─── Dashboard Init ─────────────────────────────────────
+function showDashboard() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  loadStats();
+  loadDivisions();
+  loadBadges();
+  loadAnalytics();
+}
+
+// ─── Stats ──────────────────────────────────────────────
+async function loadStats() {
+  const data = await apiFetch('/api/admin/stats');
+  if (data.error) return;
+
+  departments = Object.keys(data.byDepartment || {});
+  const deptFilter = document.getElementById('deptFilter');
+  deptFilter.innerHTML = '<option value="">All Departments</option>';
+  departments.forEach(d => {
+    deptFilter.innerHTML += `<option value="${d}">${d} (${data.byDepartment[d]})</option>`;
+  });
+
+  const statsBar = document.getElementById('statsBar');
+  const hidden = data.hiddenCount || 0;
+  statsBar.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-value">${data.totalBadges || 0}</div>
+      <div class="stat-label">Total Badges</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${data.bandMembers || 0}</div>
+      <div class="stat-label">Band Members</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${hidden}</div>
+      <div class="stat-label">Hidden</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:${(data.flaggedCount || 0) > 0 ? '#F59E0B' : 'white'}">${data.flaggedCount || 0}</div>
+      <div class="stat-label">Flagged</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${departments.length}</div>
+      <div class="stat-label">Departments</div>
+    </div>
+  `;
+}
+
+// ─── Badge List ─────────────────────────────────────────
+async function loadBadges() {
+  const search = document.getElementById('searchInput').value.trim();
+  const dept = document.getElementById('deptFilter').value;
+  const division = document.getElementById('divisionFilter').value;
+  const dateFrom = document.getElementById('dateFrom').value;
+  const dateTo = document.getElementById('dateTo').value;
+  const hasPhoto = document.getElementById('photoFilter').value;
+
+  let url = `/api/admin/badges?page=${currentPage}&limit=50`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (dept) url += `&department=${encodeURIComponent(dept)}`;
+  if (division) url += `&division=${encodeURIComponent(division)}`;
+  if (dateFrom) url += `&dateFrom=${encodeURIComponent(dateFrom)}`;
+  if (dateTo) url += `&dateTo=${encodeURIComponent(dateTo)}`;
+  if (hasPhoto) url += `&hasPhoto=${hasPhoto}`;
+
+  const data = await apiFetch(url);
+  if (data.error) return;
+
+  totalPages = data.pages || 1;
+
+  // Client-side status filter
+  let badges = data.badges || [];
+  const statusFilter = document.getElementById('statusFilter').value;
+  if (statusFilter === 'unpaid') badges = badges.filter(b => !b.isPaid);
+  else if (statusFilter === 'paid') badges = badges.filter(b => b.isPaid);
+  else if (statusFilter === 'unprinted') badges = badges.filter(b => !b.isPrinted);
+  else if (statusFilter === 'printed') badges = badges.filter(b => b.isPrinted);
+  else if (statusFilter === 'flagged') badges = badges.filter(b => b.isFlagged);
+
+  renderTable(badges);
+  renderPagination();
+}
+
+function renderTable(badges) {
+  const tbody = document.getElementById('badgeTableBody');
+
+  if (badges.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No badges found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = badges.map(b => {
+    const imgSrc = `/api/badge/${b.employeeId}/thumb`;
+    const statusClass = b.isVisible ? 'status-visible' : 'status-hidden';
+    const statusText = b.isVisible ? 'Visible' : 'Hidden';
+    const bandTag = b.isBandMember ? ' <span class="status-band">BAND</span>' : '';
+    const date = b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—';
+    const hideLabel = b.isVisible ? 'Hide' : 'Show';
+
+    const paidClass = b.isPaid ? 'status-paid' : 'status-unpaid';
+    const paidText = b.isPaid ? 'Paid' : '—';
+    const paidBtnClass = b.isPaid ? 'btn-action btn-paid' : 'btn-action';
+    const paidBtnLabel = b.isPaid ? 'Unpay' : 'Mark Paid';
+
+    const printedClass = b.isPrinted ? 'status-printed' : 'status-unpaid';
+    const printedText = b.isPrinted ? 'Printed' : '—';
+    const printedBtnClass = b.isPrinted ? 'btn-action btn-printed' : 'btn-action';
+    const printedBtnLabel = b.isPrinted ? 'Unprint' : 'Mark Printed';
+
+    const flagTag = b.isFlagged ? ' <span class="status-flagged">FLAG</span>' : '';
+    const flagBtnClass = b.isFlagged ? 'btn-action btn-flagged' : 'btn-action';
+    const flagBtnLabel = b.isFlagged ? 'Unflag' : 'Flag';
+
+    return `<tr>
+      <td><img class="badge-thumb" src="${imgSrc}" alt="Badge" loading="lazy"></td>
+      <td><span class="badge-id">${b.employeeId}</span></td>
+      <td><span class="badge-name">${esc(b.name)}</span>${flagTag}</td>
+      <td><span class="badge-dept">${esc(b.department)}</span></td>
+      <td>${esc(b.title)}</td>
+      <td><span class="${statusClass}">${statusText}</span>${bandTag}</td>
+      <td><span class="${paidClass}">${paidText}</span></td>
+      <td><span class="${printedClass}">${printedText}</span></td>
+      <td>${date}</td>
+      <td>
+        <button class="${flagBtnClass}" onclick="toggleFlag('${b.employeeId}')">${flagBtnLabel}</button>
+        <button class="${paidBtnClass}" onclick="togglePaid('${b.employeeId}')">${paidBtnLabel}</button>
+        <button class="${printedBtnClass}" onclick="togglePrinted('${b.employeeId}')">${printedBtnLabel}</button>
+        <button class="btn-action" onclick="toggleHide('${b.employeeId}')">${hideLabel}</button>
+        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name)}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPagination() {
+  const el = document.getElementById('pagination');
+  el.innerHTML = `
+    <button ${currentPage <= 1 ? 'disabled' : ''} onclick="goPage(${currentPage - 1})">Prev</button>
+    <span class="page-info">Page ${currentPage} of ${totalPages}</span>
+    <button ${currentPage >= totalPages ? 'disabled' : ''} onclick="goPage(${currentPage + 1})">Next</button>
+  `;
+}
+
+function goPage(p) {
+  currentPage = p;
+  loadBadges();
+}
+
+// ─── Actions ────────────────────────────────────────────
+async function toggleFlag(id) {
+  await apiFetch(`/api/admin/badge/${id}/flag`, { method: 'POST' });
+  loadBadges();
+}
+
+async function togglePaid(id) {
+  await apiFetch(`/api/admin/badge/${id}/paid`, { method: 'POST' });
+  loadBadges();
+}
+
+async function togglePrinted(id) {
+  await apiFetch(`/api/admin/badge/${id}/printed`, { method: 'POST' });
+  loadBadges();
+}
+
+async function toggleHide(id) {
+  await apiFetch(`/api/admin/badge/${id}/hide`, { method: 'POST' });
+  loadStats();
+  loadBadges();
+}
+
+function confirmDelete(id, name) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `
+    <div class="confirm-card">
+      <h3>Permanent Delete</h3>
+      <p>Permanently delete badge <strong>${name}</strong> (${id})? This cannot be undone.</p>
+      <div class="btn-row">
+        <button onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
+        <button class="btn-confirm" onclick="doDelete('${id}', this)">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function doDelete(id, btn) {
+  btn.textContent = 'Deleting...';
+  btn.disabled = true;
+  await apiFetch(`/api/admin/badge/${id}`, { method: 'DELETE' });
+  const overlay = btn.closest('.confirm-overlay');
+  if (overlay) overlay.remove();
+  loadStats();
+  loadBadges();
+}
+
+// ─── Divisions ──────────────────────────────────────────
+async function loadDivisions() {
+  const data = await apiFetch('/api/admin/divisions');
+  if (data.error) return;
+  const sel = document.getElementById('divisionFilter');
+  sel.innerHTML = '<option value="">All Divisions</option>';
+  (data.divisions || []).forEach(d => {
+    sel.innerHTML += `<option value="${d}">${d}</option>`;
+  });
+}
+
+// ─── Date Presets ───────────────────────────────────────
+function setDatePreset(preset) {
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+
+  if (preset === 'today') {
+    document.getElementById('dateFrom').value = fmt(today);
+    document.getElementById('dateTo').value = fmt(today);
+  } else if (preset === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    document.getElementById('dateFrom').value = fmt(y);
+    document.getElementById('dateTo').value = fmt(y);
+  } else if (preset === 'week') {
+    const w = new Date(today); w.setDate(w.getDate() - 7);
+    document.getElementById('dateFrom').value = fmt(w);
+    document.getElementById('dateTo').value = fmt(today);
+  } else if (preset === 'month') {
+    const m = new Date(today.getFullYear(), today.getMonth(), 1);
+    document.getElementById('dateFrom').value = fmt(m);
+    document.getElementById('dateTo').value = fmt(today);
+  } else if (preset === 'quarter') {
+    const qMonth = Math.floor(today.getMonth() / 3) * 3;
+    const q = new Date(today.getFullYear(), qMonth, 1);
+    document.getElementById('dateFrom').value = fmt(q);
+    document.getElementById('dateTo').value = fmt(today);
+  }
+  currentPage = 1;
+  loadBadges();
+}
+
+function clearDates() {
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  currentPage = 1;
+  loadBadges();
+}
+
+// ─── Analytics ──────────────────────────────────────────
+let analyticsVisible = false;
+
+function toggleAnalytics() {
+  analyticsVisible = !analyticsVisible;
+  document.getElementById('analyticsSection').style.display = analyticsVisible ? 'block' : 'none';
+  if (analyticsVisible) loadAnalytics();
+}
+
+async function loadAnalytics() {
+  if (!analyticsVisible) return;
+  const data = await apiFetch('/api/admin/analytics');
+  if (data.error) return;
+
+  const grid = document.getElementById('analyticsGrid');
+  const fanTotal = data.fanBadgeCount || 0;
+
+  function rankList(items, max) {
+    if (!items || items.length === 0) return '<div style="color:#667788;font-size:12px;">No data yet</div>';
+    return '<ul class="rank-list">' + items.slice(0, max).map((item, i) =>
+      `<li><span><span class="rank-num">${i+1}.</span><span class="rank-name">${esc(item.name)}</span></span><span class="rank-count">${item.count}</span></li>`
+    ).join('') + '</ul>';
+  }
+
+  function pctBar(a, b, colorA, colorB) {
+    const total = a + b;
+    if (total === 0) return '';
+    const pctA = Math.round(a / total * 100);
+    return `<div class="analytics-bar"><div class="bar-fill" style="width:${pctA}%;background:${colorA}"></div><div class="bar-fill" style="width:${100-pctA}%;background:${colorB}"></div></div>`;
+  }
+
+  grid.innerHTML = `
+    <div class="analytics-card">
+      <h3>Top Songs</h3>
+      ${rankList(data.topSongs, 10)}
+    </div>
+    <div class="analytics-card">
+      <h3>Top Titles</h3>
+      ${rankList(data.topTitles, 10)}
+      <div class="analytics-pair" style="margin-top:8px;border-top:1px solid #3A3A4A;padding-top:8px;">
+        <span class="pair-label">Custom (unique) titles</span>
+        <span class="pair-value">${data.customTitleCount || 0}</span>
+      </div>
+    </div>
+    <div class="analytics-card">
+      <h3>Top Departments</h3>
+      ${rankList(data.topDepartments, 10)}
+    </div>
+    <div class="analytics-card">
+      <h3>Badge Breakdown</h3>
+      <div class="analytics-pair">
+        <span class="pair-label">Fan badges</span>
+        <span class="pair-value">${fanTotal}</span>
+      </div>
+      <div class="analytics-pair">
+        <span class="pair-label">Paid</span>
+        <span class="pair-value" style="color:#22C55E">${data.paidCount || 0}</span>
+      </div>
+      <div class="analytics-pair">
+        <span class="pair-label">Unpaid</span>
+        <span class="pair-value">${data.unpaidCount || 0}</span>
+      </div>
+      ${pctBar(data.paidCount || 0, data.unpaidCount || 0, '#22C55E', '#3A3A4A')}
+      <div class="analytics-pair" style="margin-top:12px;">
+        <span class="pair-label">With photo</span>
+        <span class="pair-value" style="color:#3B82F6">${data.photoCount || 0}</span>
+      </div>
+      <div class="analytics-pair">
+        <span class="pair-label">No photo</span>
+        <span class="pair-value">${data.noPhotoCount || 0}</span>
+      </div>
+      ${pctBar(data.photoCount || 0, data.noPhotoCount || 0, '#3B82F6', '#3A3A4A')}
+    </div>
+  `;
+}
+
+// ─── Export ─────────────────────────────────────────────
+async function exportCSV() {
+  const res = await fetch('/api/admin/export/csv', {
+    headers: { 'Authorization': `Bearer ${token}` },
+  });
+  if (!res.ok) return alert('Export failed.');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `helpdesk-badges-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── Helpers ────────────────────────────────────────────
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+// ─── Event Listeners ────────────────────────────────────
+document.getElementById('tokenInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+
+document.getElementById('searchInput').addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    currentPage = 1;
+    loadBadges();
+  }, 300);
+});
+
+document.getElementById('deptFilter').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+document.getElementById('divisionFilter').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+document.getElementById('photoFilter').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+document.getElementById('statusFilter').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+document.getElementById('dateFrom').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+document.getElementById('dateTo').addEventListener('change', () => {
+  currentPage = 1;
+  loadBadges();
+});
+
+// ─── Init ───────────────────────────────────────────────
+if (token) {
+  apiFetch('/api/admin/stats')
+    .then(data => {
+      if (data.error) throw new Error();
+      showDashboard();
+    })
+    .catch(() => {
+      sessionStorage.removeItem('admin-token');
+      token = '';
+    });
+}
+</script>
+</body>
+</html>

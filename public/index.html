@@ -11,75 +11,56 @@
 <body>
 
 <header class="app-header">
-  <h1>Badge Generator</h1>
-  <div class="tagline">please hold.</div>
+  <h1><img src="/img/hd-logo.png" alt="Help Desk" class="header-logo"> Badge Generator</h1>
+  <nav class="app-nav" id="appNav">
+    <a href="/" class="app-nav-link" data-page="editor">Create Your Badge</a>
+    <a href="/orgchart" class="app-nav-link" data-page="orgchart">Employee Directory</a>
+  </nav>
 </header>
 
 <main class="editor">
+  <!-- Edit hint (fades after first interaction) -->
+  <div class="edit-hint" id="editHint">click any element on the badge to customize</div>
+
   <!-- Live badge preview -->
   <div class="preview-wrapper">
     <div class="badge-preview-scaled" id="badgePreviewArea"></div>
   </div>
 
-  <!-- Control panel -->
-  <div class="controls">
-    <div class="control-row">
-      <label class="control-label" for="nameInput">Name</label>
-      <div class="custom-input-row">
-        <input type="text" class="control-input" id="nameInput" placeholder="First name" maxlength="16" autocomplete="off" autofocus>
-        <span class="char-count" id="nameCharCount">0/16</span>
-      </div>
-    </div>
-    <div class="control-row">
-      <label class="control-label">Photo</label>
-      <div class="photo-controls">
-        <button class="btn-sm" id="uploadBtn">Upload</button>
-        <button class="btn-sm" id="cameraBtn">Selfie</button>
-        <span class="photo-status" id="photoStatus">No photo</span>
-      </div>
-      <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
-    </div>
-    <div class="control-row">
-      <label class="control-label" for="deptSelect">Department</label>
-      <select class="control-select" id="deptSelect"></select>
-      <div class="custom-input-row">
-        <input type="text" class="control-input control-input-sm" id="deptCustom" placeholder="or type your own" maxlength="24" autocomplete="off">
-        <span class="char-count" id="deptCharCount">0/24</span>
-      </div>
-    </div>
-    <div class="control-row">
-      <label class="control-label" for="titleSelect">Title</label>
-      <select class="control-select" id="titleSelect"></select>
-      <div class="custom-input-row">
-        <input type="text" class="control-input control-input-sm" id="titleCustom" placeholder="or type your own" maxlength="30" autocomplete="off">
-        <span class="char-count" id="titleCharCount">0/30</span>
-      </div>
-    </div>
-    <div class="control-row">
-      <label class="control-label" for="songSelect">Song</label>
-      <select class="control-select" id="songSelect"></select>
-    </div>
-    <div class="control-row">
-      <label class="control-label" for="waveStyleSelect">Waveform</label>
-      <select class="control-select" id="waveStyleSelect">
-        <option value="barcode">Barcode</option>
-        <option value="sticker">Sticker (Mirrored)</option>
-      </select>
-    </div>
-    <button class="btn btn-download" id="downloadBtn">Download Badge</button>
-  </div>
+  <!-- Popover container (click-to-edit popovers appear here) -->
+  <div id="popoverContainer"></div>
+
+  <!-- Hidden file input for photo upload -->
+  <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
 </main>
+
+<!-- Floating action buttons -->
+<div class="fab-group">
+  <button class="fab-reboot" id="rebootBtn">
+    <span class="fab-label">sudo randomize</span>
+  </button>
+  <!-- Print Test button — hidden from UI, uncomment to restore for testing
+  <button class="fab-print" id="printTestBtn">
+    <span class="fab-label">Print Test</span>
+  </button>
+  -->
+  <button class="fab-download" id="downloadBtn">
+    <span class="fab-icon">&darr;</span>
+    <span class="fab-label">Download</span>
+  </button>
+</div>
 
 <!-- Full-size badge for capture (hidden off-screen) -->
 <div class="badge-capture" id="badgeCapture">
   <div class="badge" id="badge">
-    <div class="lanyard-slot"><div class="lanyard-hole"></div></div>
     <div class="navy-stripe">
-      <span class="stripe-text stripe-text-left">HELP</span>
-      <span class="stripe-text stripe-text-right">DESK</span>
+      <div class="stripe-keys">
+        <span class="key">H</span><span class="key">E</span><span class="key">L</span><span class="key">P</span>
+        <span class="key-space"></span>
+        <span class="key">D</span><span class="key">E</span><span class="key">S</span><span class="key">K</span>
+      </div>
       <div class="stripe-accent"></div>
       <div class="stripe-accent-bottom"></div>
-      <div class="stripe-dots"></div>
     </div>
     <div class="texture-overlay"></div>
     <div class="logo-icon">HD</div>
@@ -89,9 +70,9 @@
       </div>
       <div class="photo-section">
         <div class="photo-frame">
-          <span class="photo-placeholder-text">PHOTO</span>
+          <span class="photo-placeholder-text">404<br>Photo Not Found</span>
         </div>
-        <div class="employee-id"><span class="status-dot" id="statusDot">●</span><span id="idField">HD-0000</span><span class="issued-date" id="issuedField">ISSUED 00.00.00</span></div>
+        <div class="employee-id"><span class="status-dot" id="statusDot">●</span><span id="idField">HD-00000</span><span class="issued-date" id="issuedField">ISSUED 00.00.00</span></div>
         <div class="access-badge" id="accessBadge">PENDING REVIEW</div>
       </div>
       <div class="info-section">

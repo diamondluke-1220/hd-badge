@@ -1,1 +1,15 @@
 node_modules/
+data/
+*.pid
+*.log
+
+# OS
+.DS_Store
+
+# One-off dev/rendering scripts
+*.cjs
+*.mjs
+
+# Internal docs (not app documentation)
+docs/security-audit-*.md
+docs/docker-deploy-plan.md
