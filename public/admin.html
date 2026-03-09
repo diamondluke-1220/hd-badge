@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HR Dashboard — Help Desk Inc.</title>
+  <link rel="stylesheet" href="/css/badge.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -23,8 +24,8 @@
       gap: 24px;
     }
     .login-card {
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 12px;
       padding: 40px;
       max-width: 400px;
@@ -32,23 +33,27 @@
       text-align: center;
     }
     .login-card h1 {
-      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: #CC3333;
+      color: #5B8DEF;
       margin-bottom: 8px;
     }
     .login-card h2 {
+      font-family: 'Barlow', sans-serif;
       font-size: 22px;
-      font-weight: 700;
+      font-weight: 800;
       color: white;
+      letter-spacing: 2px;
+      text-transform: uppercase;
       margin-bottom: 24px;
     }
     .login-card input {
       width: 100%;
       padding: 12px 16px;
       background: #1C1C22;
-      border: 1px solid #3A3A4A;
+      border: 1px solid #3A3A44;
       border-radius: 8px;
       color: #E0E8F0;
       font-size: 14px;
@@ -56,24 +61,25 @@
     }
     .login-card input:focus {
       outline: none;
-      border-color: #CC3333;
+      border-color: #5B8DEF;
     }
     .login-card button {
       width: 100%;
       padding: 12px;
-      background: #CC3333;
+      background: #2E7DFF;
       border: none;
       border-radius: 8px;
       color: white;
-      font-weight: 600;
+      font-family: 'Barlow', sans-serif;
+      font-weight: 700;
       font-size: 14px;
       cursor: pointer;
-      letter-spacing: 1px;
+      letter-spacing: 2px;
       text-transform: uppercase;
     }
-    .login-card button:hover { background: #AA2222; }
+    .login-card button:hover { background: #5BA3FF; }
     .login-error {
-      color: #CC3333;
+      color: #DC2626;
       font-size: 13px;
       margin-top: 8px;
       display: none;
@@ -82,28 +88,33 @@
     /* Dashboard */
     .dashboard { display: none; }
     .dash-header {
-      background: #2A2A35;
-      border-bottom: 2px solid #CC3333;
+      background: #2A2A32;
+      border-bottom: 2px solid #5B8DEF;
       padding: 16px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .dash-header h1 {
-      font-size: 13px;
+      font-family: 'Barlow', sans-serif;
+      font-size: 16px;
+      font-weight: 800;
       letter-spacing: 4px;
       text-transform: uppercase;
-      color: #CC3333;
+      color: white;
     }
     .dash-header .subtitle {
-      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
       color: #667788;
       letter-spacing: 2px;
       margin-top: 2px;
     }
     .dash-header button {
       background: none;
-      border: 1px solid #3A3A4A;
+      border: 1px solid #3A3A44;
       color: #8899AA;
       padding: 6px 14px;
       border-radius: 6px;
@@ -111,8 +122,8 @@
       font-size: 12px;
     }
     .dash-header button:hover {
-      border-color: #CC3333;
-      color: #CC3333;
+      border-color: #5B8DEF;
+      color: #5B8DEF;
     }
 
     /* Stats Bar */
@@ -121,22 +132,26 @@
       gap: 16px;
       padding: 20px 24px;
       overflow-x: auto;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .stat-card {
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 10px;
       padding: 16px 20px;
       min-width: 140px;
       flex: 1;
     }
     .stat-card .stat-value {
+      font-family: 'Barlow', sans-serif;
       font-size: 28px;
-      font-weight: 700;
+      font-weight: 800;
       color: white;
     }
     .stat-card .stat-label {
-      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
       color: #667788;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -149,11 +164,13 @@
       gap: 12px;
       padding: 0 24px 16px;
       flex-wrap: wrap;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .filter-input {
       padding: 8px 14px;
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 8px;
       color: #E0E8F0;
       font-size: 13px;
@@ -166,8 +183,8 @@
     }
     .filter-select {
       padding: 8px 14px;
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 8px;
       color: #E0E8F0;
       font-size: 13px;
@@ -178,6 +195,8 @@
     .badge-table-wrap {
       padding: 0 24px 40px;
       overflow-x: auto;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .badge-table {
       width: 100%;
@@ -187,32 +206,33 @@
     .badge-table th {
       text-align: left;
       padding: 10px 12px;
+      font-family: 'JetBrains Mono', monospace;
       color: #667788;
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      border-bottom: 1px solid #3A3A4A;
+      letter-spacing: 2px;
+      border-bottom: 1px solid #3A3A44;
       white-space: nowrap;
     }
     .badge-table td {
       padding: 10px 12px;
-      border-bottom: 1px solid #2A2A35;
+      border-bottom: 1px solid #2A2A32;
       vertical-align: middle;
     }
     .badge-table tr:hover td {
-      background: #2A2A35;
+      background: #2A2A32;
     }
     .badge-thumb {
       width: 40px;
       height: 64px;
       object-fit: cover;
       border-radius: 4px;
-      background: #3A3A4A;
+      background: #3A3A44;
     }
     .badge-id {
-      font-family: monospace;
+      font-family: 'JetBrains Mono', monospace;
       color: #8899AA;
-      font-size: 12px;
+      font-size: 11px;
     }
     .badge-name { font-weight: 600; color: white; }
     .badge-dept {
@@ -224,7 +244,7 @@
       font-size: 12px;
     }
     .status-hidden {
-      color: #CC3333;
+      color: #DC2626;
       font-size: 12px;
     }
     .status-band {
@@ -239,7 +259,7 @@
     /* Action buttons */
     .btn-action {
       padding: 4px 10px;
-      border: 1px solid #3A3A4A;
+      border: 1px solid #3A3A44;
       background: none;
       color: #8899AA;
       border-radius: 4px;
@@ -252,8 +272,8 @@
       color: white;
     }
     .btn-action.btn-danger:hover {
-      border-color: #CC3333;
-      color: #CC3333;
+      border-color: #DC2626;
+      color: #DC2626;
     }
     .btn-action.btn-paid {
       border-color: #22C55E;
@@ -291,11 +311,13 @@
       justify-content: center;
       gap: 8px;
       padding: 16px 24px;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .pagination button {
       padding: 6px 14px;
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 6px;
       color: #E0E8F0;
       cursor: pointer;
@@ -316,6 +338,8 @@
     /* Analytics Section */
     .analytics-section {
       padding: 0 24px 20px;
+      max-width: 1400px;
+      margin: 0 auto;
     }
     .analytics-header {
       display: flex;
@@ -324,14 +348,16 @@
       margin-bottom: 12px;
     }
     .analytics-header h2 {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
       font-size: 13px;
       letter-spacing: 3px;
       text-transform: uppercase;
-      color: #667788;
+      color: #8899AA;
     }
     .analytics-toggle {
       background: none;
-      border: 1px solid #3A3A4A;
+      border: 1px solid #3A3A44;
       color: #8899AA;
       padding: 4px 12px;
       border-radius: 6px;
@@ -339,8 +365,8 @@
       font-size: 11px;
     }
     .analytics-toggle:hover {
-      border-color: #CC3333;
-      color: #CC3333;
+      border-color: #5B8DEF;
+      color: #5B8DEF;
     }
     .analytics-grid {
       display: grid;
@@ -348,16 +374,17 @@
       gap: 16px;
     }
     .analytics-card {
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 10px;
       padding: 16px;
     }
     .analytics-card h3 {
-      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
       color: #667788;
       text-transform: uppercase;
-      letter-spacing: 1px;
+      letter-spacing: 2px;
       margin-bottom: 10px;
     }
     .analytics-card .rank-list {
@@ -368,7 +395,7 @@
       justify-content: space-between;
       padding: 4px 0;
       font-size: 13px;
-      border-bottom: 1px solid #2A2A35;
+      border-bottom: 1px solid #2A2A32;
     }
     .analytics-card .rank-list li:last-child {
       border-bottom: none;
@@ -382,13 +409,13 @@
     }
     .rank-count {
       color: #667788;
-      font-family: monospace;
-      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
       min-width: 30px;
       text-align: right;
     }
     .rank-num {
-      color: #CC3333;
+      color: #5B8DEF;
       font-size: 11px;
       margin-right: 6px;
       min-width: 16px;
@@ -417,8 +444,8 @@
     /* Date inputs */
     input[type="date"] {
       padding: 8px 14px;
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 8px;
       color: #E0E8F0;
       font-size: 13px;
@@ -443,8 +470,8 @@
       z-index: 100;
     }
     .confirm-card {
-      background: #2A2A35;
-      border: 1px solid #3A3A4A;
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
       border-radius: 12px;
       padding: 32px;
       max-width: 400px;
@@ -452,7 +479,7 @@
       text-align: center;
     }
     .confirm-card h3 {
-      color: #CC3333;
+      color: #DC2626;
       margin-bottom: 12px;
       font-size: 16px;
     }
@@ -469,15 +496,15 @@
     .confirm-card button {
       padding: 8px 20px;
       border-radius: 6px;
-      border: 1px solid #3A3A4A;
+      border: 1px solid #3A3A44;
       background: none;
       color: #E0E8F0;
       cursor: pointer;
       font-size: 13px;
     }
     .confirm-card .btn-confirm {
-      background: #CC3333;
-      border-color: #CC3333;
+      background: #DC2626;
+      border-color: #DC2626;
       color: white;
     }
 
@@ -915,7 +942,7 @@ async function loadAnalytics() {
     <div class="analytics-card">
       <h3>Top Titles</h3>
       ${rankList(data.topTitles, 10)}
-      <div class="analytics-pair" style="margin-top:8px;border-top:1px solid #3A3A4A;padding-top:8px;">
+      <div class="analytics-pair" style="margin-top:8px;border-top:1px solid #3A3A44;padding-top:8px;">
         <span class="pair-label">Custom (unique) titles</span>
         <span class="pair-value">${data.customTitleCount || 0}</span>
       </div>
@@ -938,7 +965,7 @@ async function loadAnalytics() {
         <span class="pair-label">Unpaid</span>
         <span class="pair-value">${data.unpaidCount || 0}</span>
       </div>
-      ${pctBar(data.paidCount || 0, data.unpaidCount || 0, '#22C55E', '#3A3A4A')}
+      ${pctBar(data.paidCount || 0, data.unpaidCount || 0, '#22C55E', '#3A3A44')}
       <div class="analytics-pair" style="margin-top:12px;">
         <span class="pair-label">With photo</span>
         <span class="pair-value" style="color:#3B82F6">${data.photoCount || 0}</span>
@@ -947,7 +974,7 @@ async function loadAnalytics() {
         <span class="pair-label">No photo</span>
         <span class="pair-value">${data.noPhotoCount || 0}</span>
       </div>
-      ${pctBar(data.photoCount || 0, data.noPhotoCount || 0, '#3B82F6', '#3A3A4A')}
+      ${pctBar(data.photoCount || 0, data.noPhotoCount || 0, '#3B82F6', '#3A3A44')}
     </div>
   `;
 }

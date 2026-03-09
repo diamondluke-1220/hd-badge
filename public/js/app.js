@@ -622,11 +622,13 @@ async function downloadBadge() {
     link.href = dataUrl;
     link.click();
 
+    showToast('Badge downloaded!', 'success', 3000);
+
     // Show join prompt after successful download
     showJoinPrompt();
   } catch (err) {
     console.error('Badge export failed:', err);
-    alert('Badge generation failed. Try again or take a screenshot of the preview instead!');
+    showToast('Badge generation failed. Try again or take a screenshot instead.', 'error');
   } finally {
     loading.classList.remove('active');
   }
@@ -785,26 +787,24 @@ async function submitBadge(photoPublic) {
       showBadgeStatusBar(data.employeeId);
       showSubmitSuccess(data.employeeId);
     } else {
-      alert(data.error || 'Submission failed. Please try again.');
+      showToast(data.error || 'Submission failed. Please try again.', 'error');
     }
   } catch (err) {
     console.error('Badge submission failed:', err);
-    alert('Submission failed. Please try again.');
+    showToast('Submission failed. Please try again.', 'error');
   } finally {
     loading.querySelector('.loading-text').textContent = 'Generating your badge...';
     loading.classList.remove('active');
   }
 }
 
-function showSubmitSuccess(employeeId) {
+function showToast(message, type = 'success', duration = 4000) {
+  const icon = type === 'error' ? '&#10007;' : '&#10003;';
   const toast = document.createElement('div');
-  toast.className = 'submit-toast';
+  toast.className = `toast toast-${type}`;
   toast.innerHTML = `
-    <div class="submit-toast-icon">&#10003;</div>
-    <div class="submit-toast-text">
-      Welcome aboard, <strong>${employeeId}</strong>!<br>
-      <small>Your badge is now on the org chart.</small>
-    </div>
+    <div class="toast-icon">${icon}</div>
+    <div class="toast-text">${message}</div>
   `;
   document.body.appendChild(toast);
 
@@ -815,7 +815,11 @@ function showSubmitSuccess(employeeId) {
   setTimeout(() => {
     toast.classList.remove('visible');
     setTimeout(() => toast.remove(), 300);
-  }, 5000);
+  }, duration);
+}
+
+function showSubmitSuccess(employeeId) {
+  showToast(`Welcome aboard, <strong>${employeeId}</strong>!<br><small>Your badge is now on the org chart.</small>`, 'success', 5000);
 }
 
 function showBadgeStatusBar(employeeId) {
@@ -851,12 +855,12 @@ async function removeBadge() {
       localStorage.removeItem('hd-badge');
       const bar = document.getElementById('badgeStatusBar');
       if (bar) bar.remove();
-      alert('Your badge has been shredded.');
+      showToast('Your badge has been shredded.', 'success');
     } else {
-      alert(data.error || 'Failed to remove badge.');
+      showToast(data.error || 'Failed to remove badge.', 'error');
     }
   } catch {
-    alert('Failed to remove badge. Please try again.');
+    showToast('Failed to remove badge. Please try again.', 'error');
   }
 }
 
@@ -1036,7 +1040,7 @@ async function printTest() {
     printWin.document.close();
   } catch (err) {
     console.error('Print test failed:', err);
-    alert('Print test generation failed. Try downloading the badge and printing manually.');
+    showToast('Print test failed. Try downloading and printing manually.', 'error');
   } finally {
     loading.querySelector('.loading-text').textContent = 'Generating your badge...';
     loading.classList.remove('active');
@@ -1217,11 +1221,35 @@ function updateDeptHeading(dept, stats) {
   }
 }
 
+function createSkeletonGrid(count) {
+  const grid = document.createElement('div');
+  grid.className = 'badge-grid';
+  for (let i = 0; i < count; i++) {
+    const card = document.createElement('div');
+    card.className = 'skeleton-card';
+    card.innerHTML = `
+      <div class="skeleton-img"></div>
+      <div class="skeleton-info">
+        <div class="skeleton-line skeleton-line-name"></div>
+        <div class="skeleton-line skeleton-line-title"></div>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
+  return grid;
+}
+
 async function loadPublicBadges(replace) {
   const content = document.getElementById('publicBadgeContent');
   const loadMoreArea = document.getElementById('loadMoreArea');
 
-  if (replace) content.innerHTML = '';
+  if (replace) {
+    content.innerHTML = '';
+    // Show skeleton placeholders while loading
+    const skeleton = createSkeletonGrid(10);
+    skeleton.id = 'skeletonGrid';
+    content.appendChild(skeleton);
+  }
   loadMoreArea.innerHTML = '';
 
   let url = `/api/orgchart?page=${publicOrgPage}&limit=48`;
@@ -1232,9 +1260,13 @@ async function loadPublicBadges(replace) {
     const resp = await fetch(url);
     data = await resp.json();
   } catch {
-    content.innerHTML += '<div class="no-badges-msg">Failed to load badges.</div>';
+    content.innerHTML = '<div class="no-badges-msg">Failed to load badges.</div>';
     return;
   }
+
+  // Remove skeleton placeholders
+  const skeleton = document.getElementById('skeletonGrid');
+  if (skeleton) skeleton.remove();
 
   if (data.badges.length === 0 && publicOrgPage === 1) {
     content.innerHTML = '<div class="no-badges-msg">No employees found. The hiring freeze continues.</div>';

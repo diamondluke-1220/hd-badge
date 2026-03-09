@@ -1,4 +1,41 @@
-/* Help Desk Badge Generator — Canva-Style Click-to-Edit Editor */
+/* ============================================================
+   Help Desk Badge Generator — App UI Styles
+   ============================================================
+   NOTE: Badge design styles are in badge.css (DO NOT EDIT —
+   those are print-spec locked for physical badge production).
+
+   TABLE OF CONTENTS
+   -----------------
+    1. Reset & Base .................. ~line 31
+    2. App Header & Nav .............. ~line 43
+    3. Editor Layout ................. ~line 98
+    4. Edit Hint ..................... ~line 133
+    5. Badge Preview Hover States .... ~line 151
+    6. Popover System ................ ~line 196
+    7. Card Grid & Selection ......... ~line 302
+    8. Popover Inputs & Controls ..... ~line 373
+    9. Buttons ....................... ~line 476
+   10. FAB Buttons ................... ~line 524
+   11. Org Chart Header & Divisions .. ~line 605
+   12. Crop Modal .................... ~line 670
+   13. Loading Overlay ............... ~line 702
+   14. Join Org Chart Prompt ......... ~line 737
+   15. Privacy Modal ................. ~line 800
+   16. Badge Status Bar .............. ~line 884
+   17. Submit Toast .................. ~line 913
+   18. Public Org Chart / Directory .. ~line 951
+   19. Responsive Breakpoints ........ ~line 1141
+   20. Staggered Grid Animation ...... ~line 1213
+   21. Accessibility — Reduced Motion  ~line 1249
+   22. Skip Link ...................... ~line 1260
+   23. Skeleton Loading ............... ~line 1290
+   24. View Transitions ............... ~line 1345
+   ============================================================ */
+
+
+/* ==========================================================
+   1. RESET & BASE
+   ========================================================== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
@@ -8,7 +45,9 @@ body {
   min-height: 100vh;
 }
 
-/* Header */
+/* ==========================================================
+   2. APP HEADER & NAV
+   ========================================================== */
 .app-header {
   text-align: center;
   padding: 24px 20px 12px;
@@ -31,7 +70,7 @@ body {
   vertical-align: middle;
 }
 
-/* App nav */
+/* App nav links */
 .app-nav {
   display: flex;
   justify-content: center;
@@ -61,7 +100,9 @@ body {
   background: rgba(91,141,239,0.1);
 }
 
-/* Editor layout */
+/* ==========================================================
+   3. EDITOR LAYOUT
+   ========================================================== */
 .editor {
   max-width: 900px;
   margin: 0 auto;
@@ -94,7 +135,9 @@ body {
   top: 0;
 }
 
-/* Edit hint */
+/* ==========================================================
+   4. EDIT HINT
+   ========================================================== */
 .edit-hint {
   text-align: center;
   font-family: 'JetBrains Mono', monospace;
@@ -110,7 +153,9 @@ body {
   pointer-events: none;
 }
 
-/* === HOVER STATES ON BADGE PREVIEW === */
+/* ==========================================================
+   5. BADGE PREVIEW HOVER STATES
+   ========================================================== */
 #badgePreviewArea .name,
 #badgePreviewArea .photo-frame,
 #badgePreviewArea .department,
@@ -153,7 +198,9 @@ body {
   outline-offset: 8px;
 }
 
-/* === POPOVER === */
+/* ==========================================================
+   6. POPOVER SYSTEM
+   ========================================================== */
 .popover {
   position: fixed;
   width: 380px;
@@ -257,7 +304,9 @@ body {
   border-radius: 3px;
 }
 
-/* === CARD GRID === */
+/* ==========================================================
+   7. CARD GRID & SELECTION
+   ========================================================== */
 .card-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -326,7 +375,9 @@ body {
 .card.card-access-peter-principle { border-left: 4px solid #7E22CE; }
 .card.card-access-above-pay      { border-left: 4px solid #92400E; }
 
-/* === POPOVER INPUTS === */
+/* ==========================================================
+   8. POPOVER INPUTS & CONTROLS
+   ========================================================== */
 .popover-input-row {
   display: flex;
   align-items: center;
@@ -415,7 +466,7 @@ body {
   color: #93B4F5;
 }
 
-/* Photo controls in popover */
+/* Photo controls */
 .popover-photo-controls {
   display: flex;
   gap: 8px;
@@ -427,7 +478,9 @@ body {
   font-style: italic;
 }
 
-/* === BUTTONS === */
+/* ==========================================================
+   9. BUTTONS
+   ========================================================== */
 .btn-sm {
   padding: 8px 16px;
   border: 2px solid #3A3A44;
@@ -472,8 +525,32 @@ body {
   border-color: #5B8DEF;
   color: white;
 }
+.btn-danger {
+  background: #DC2626;
+  color: white;
+}
+.btn-danger:hover {
+  background: #EF4444;
+}
+.btn-ghost {
+  background: transparent;
+  color: #8899AA;
+  border: 2px solid transparent;
+}
+.btn-ghost:hover {
+  background: rgba(255,255,255,0.05);
+  color: white;
+}
+/* Focus states — all button variants */
+.btn:focus-visible,
+.btn-sm:focus-visible {
+  outline: 2px solid #93B4F5;
+  outline-offset: 2px;
+}
 
-/* === FAB BUTTONS === */
+/* ==========================================================
+   10. FAB BUTTONS
+   ========================================================== */
 .fab-group {
   position: fixed;
   bottom: 24px;
@@ -552,7 +629,9 @@ body {
   box-shadow: 0 6px 16px rgba(0,0,0,0.4);
 }
 
-/* === ORG CHART HEADER (shared by public /orgchart) === */
+/* ==========================================================
+   11. ORG CHART HEADER & DIVISIONS
+   ========================================================== */
 .org-header {
   text-align: center;
   margin-bottom: 32px;
@@ -574,7 +653,7 @@ body {
   text-transform: uppercase;
 }
 
-/* === DIVISION SECTIONS (public org chart) === */
+/* Division sections */
 .division-section {
   margin-bottom: 32px;
 }
@@ -615,7 +694,9 @@ body {
   margin: 0 auto;
 }
 
-/* === CROP MODAL === */
+/* ==========================================================
+   12. CROP MODAL
+   ========================================================== */
 .crop-modal {
   display: none;
   position: fixed;
@@ -645,7 +726,9 @@ body {
   margin-top: 20px;
 }
 
-/* === LOADING OVERLAY === */
+/* ==========================================================
+   13. LOADING OVERLAY
+   ========================================================== */
 .loading {
   display: none;
   position: fixed;
@@ -678,7 +761,9 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* === JOIN ORG CHART PROMPT === */
+/* ==========================================================
+   14. JOIN ORG CHART PROMPT
+   ========================================================== */
 .join-prompt {
   position: fixed;
   bottom: 90px;
@@ -739,7 +824,9 @@ body {
 }
 .join-prompt-dismiss:hover { border-color: #556677; color: #8899AA; }
 
-/* === PRIVACY MODAL === */
+/* ==========================================================
+   15. PRIVACY MODAL
+   ========================================================== */
 .privacy-modal {
   display: none;
   position: fixed;
@@ -821,7 +908,9 @@ body {
   border-top: 1px solid #3A3A44;
 }
 
-/* === BADGE STATUS BAR === */
+/* ==========================================================
+   16. BADGE STATUS BAR
+   ========================================================== */
 .badge-status-bar {
   display: flex;
   align-items: center;
@@ -848,13 +937,14 @@ body {
 }
 .badge-status-remove:hover { color: #DC2626; }
 
-/* === SUBMIT TOAST === */
-.submit-toast {
+/* ==========================================================
+   17. TOAST NOTIFICATIONS
+   ========================================================== */
+.toast {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%) translateY(-20px);
-  background: #1B6B2A;
   color: white;
   padding: 14px 24px;
   border-radius: 12px;
@@ -864,27 +954,43 @@ body {
   z-index: 3000;
   opacity: 0;
   transition: opacity 0.3s, transform 0.3s;
-  box-shadow: 0 4px 16px rgba(27,107,42,0.4);
+  max-width: 420px;
+  width: calc(100% - 40px);
 }
-.submit-toast.visible {
+.toast.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
-.submit-toast-icon {
+.toast-success {
+  background: #1B6B2A;
+  box-shadow: 0 4px 16px rgba(27,107,42,0.4);
+}
+.toast-error {
+  background: #991B1B;
+  box-shadow: 0 4px 16px rgba(153,27,27,0.4);
+}
+.toast-icon {
   font-size: 20px;
   font-weight: 800;
+  flex-shrink: 0;
 }
-.submit-toast-text {
+.toast-text {
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   line-height: 1.4;
 }
-.submit-toast-text small {
+.toast-text small {
   font-size: 12px;
   opacity: 0.8;
 }
+/* Legacy alias for existing submit-toast usage */
+.submit-toast { }
+.submit-toast-icon { }
+.submit-toast-text { }
 
-/* === PUBLIC ORG CHART === */
+/* ==========================================================
+   18. PUBLIC ORG CHART / EMPLOYEE DIRECTORY
+   ========================================================== */
 .public-orgchart {
   max-width: 1100px;
   margin: 0 auto;
@@ -1072,7 +1178,10 @@ body {
   gap: 12px;
 }
 
-/* === MOBILE === */
+/* ==========================================================
+   19. RESPONSIVE BREAKPOINTS
+   ========================================================== */
+/* Mobile — max 640px */
 @media (max-width: 640px) {
   .preview-wrapper {
     height: 700px;
@@ -1138,4 +1247,117 @@ body {
   .badge-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* ==========================================================
+   20. STAGGERED GRID ENTRY ANIMATION
+   ========================================================== */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.badge-grid-card {
+  opacity: 0;
+  animation: fadeUp 0.3s ease-out forwards;
+}
+.badge-grid-card:nth-child(1)  { animation-delay: 0ms; }
+.badge-grid-card:nth-child(2)  { animation-delay: 40ms; }
+.badge-grid-card:nth-child(3)  { animation-delay: 80ms; }
+.badge-grid-card:nth-child(4)  { animation-delay: 120ms; }
+.badge-grid-card:nth-child(5)  { animation-delay: 160ms; }
+.badge-grid-card:nth-child(6)  { animation-delay: 200ms; }
+.badge-grid-card:nth-child(7)  { animation-delay: 240ms; }
+.badge-grid-card:nth-child(8)  { animation-delay: 280ms; }
+.badge-grid-card:nth-child(9)  { animation-delay: 320ms; }
+.badge-grid-card:nth-child(10) { animation-delay: 360ms; }
+.badge-grid-card:nth-child(11) { animation-delay: 400ms; }
+.badge-grid-card:nth-child(12) { animation-delay: 440ms; }
+.badge-grid-card:nth-child(13) { animation-delay: 480ms; }
+.badge-grid-card:nth-child(14) { animation-delay: 520ms; }
+.badge-grid-card:nth-child(15) { animation-delay: 560ms; }
+.badge-grid-card:nth-child(16) { animation-delay: 600ms; }
+.badge-grid-card:nth-child(17) { animation-delay: 640ms; }
+.badge-grid-card:nth-child(18) { animation-delay: 680ms; }
+.badge-grid-card:nth-child(19) { animation-delay: 720ms; }
+.badge-grid-card:nth-child(n+20) { animation-delay: 760ms; }
+
+/* ==========================================================
+   21. ACCESSIBILITY — REDUCED MOTION
+   ========================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================================
+   22. SKIP LINK
+   ========================================================== */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 16px;
+  z-index: 9999;
+  padding: 12px 24px;
+  background: #2E7DFF;
+  color: white;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  border-radius: 0 0 8px 8px;
+  transition: top 0.15s;
+}
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid #93B4F5;
+  outline-offset: 2px;
+}
+
+/* ==========================================================
+   23. SKELETON LOADING
+   ========================================================== */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-card {
+  background: #2A2A32;
+  border: 1px solid #3A3A44;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.skeleton-img {
+  width: 100%;
+  aspect-ratio: 1276 / 2026;
+  background: linear-gradient(90deg, #2A2A32 25%, #3A3A44 50%, #2A2A32 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+.skeleton-info {
+  padding: 5px 6px;
+}
+.skeleton-line {
+  height: 11px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #2A2A32 25%, #3A3A44 50%, #2A2A32 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+.skeleton-line-name {
+  width: 70%;
+  margin-bottom: 4px;
+}
+.skeleton-line-title {
+  width: 50%;
+  height: 9px;
+}
+
+/* ==========================================================
+   24. VIEW TRANSITIONS
+   ========================================================== */
+@view-transition {
+  navigation: auto;
 }
