@@ -1781,7 +1781,11 @@ if (window.location.pathname === '/orgchart') {
 
     // Defer SSE until all images finish loading — Firefox's HTTP/1.1 limit
     // (6 connections per origin) blocks EventSource while thumbnails load
-    window.addEventListener('load', () => connectSSE());
+    if (document.readyState === 'complete') {
+      connectSSE();
+    } else {
+      window.addEventListener('load', () => connectSSE());
+    }
   });
 } else {
   document.getElementById('idField').textContent = generateEmployeeId();
