@@ -1157,7 +1157,7 @@ async function switchView(mode) {
   const renderers = {
     grid: window.GridRenderer,
     win98: window.Win98Renderer,
-    network: window.NetworkRenderer,
+    dendro: window.DendroRenderer,
   };
 
   const renderer = renderers[mode];
@@ -1205,11 +1205,11 @@ async function initOrgChart() {
   const available = {
     grid: !!window.GridRenderer,
     win98: !!window.Win98Renderer,
-    network: !!window.NetworkRenderer,
+    dendro: !!window.DendroRenderer,
   };
   const mode = available[savedMode] ? savedMode : 'grid';
 
-  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, network: window.NetworkRenderer }[mode];
+  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, dendro: window.DendroRenderer }[mode];
   if (!currentRenderer) {
     orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
     return;
@@ -1236,8 +1236,8 @@ function buildViewSwitcher() {
     <button class="view-switch-btn" data-mode="win98">
       <span class="view-switch-icon">&#128187;</span> Desktop <kbd>2</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="network">
-      <span class="view-switch-icon">&#9832;</span> Network <kbd>3</kbd>
+    <button class="view-switch-btn" data-mode="dendro">
+      <span class="view-switch-icon">&#9776;</span> Tree <kbd>3</kbd>
     </button>
   `;
 
@@ -1255,7 +1255,7 @@ function buildViewSwitcher() {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === '1') switchView('grid');
     else if (e.key === '2') switchView('win98');
-    else if (e.key === '3') switchView('network');
+    else if (e.key === '3') switchView('dendro');
   });
 }
 
