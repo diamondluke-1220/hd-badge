@@ -119,12 +119,15 @@ export function initDb(dbPath: string) {
   if (!colNames.has('is_flagged')) {
     db.exec('ALTER TABLE badges ADD COLUMN is_flagged INTEGER DEFAULT 0');
   }
+  if (!colNames.has('is_demo')) {
+    db.exec('ALTER TABLE badges ADD COLUMN is_demo INTEGER DEFAULT 0');
+  }
 
   // Prepare all statements
   stmts = {
     insertBadge: db.prepare(`
-      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged)
-      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged)
+      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged, is_demo)
+      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged, $is_demo)
     `),
     getBadge: db.prepare('SELECT * FROM badges WHERE employee_id = $id'),
     getBadgeByToken: db.prepare('SELECT * FROM badges WHERE delete_token = $token'),
@@ -176,6 +179,7 @@ function seedBandMembers() {
       $is_band_member: 1,
       $photo_public: 1,
       $is_flagged: 0,
+      $is_demo: 0,
     });
   }
 }
@@ -204,6 +208,7 @@ export interface BadgeInput {
   photoPublic: boolean;
   source?: string;
   flagged?: boolean;
+  isDemo?: boolean;
 }
 
 export interface BadgeRow {
@@ -227,6 +232,7 @@ export interface BadgeRow {
   is_printed: number;
   printed_at: string | null;
   is_flagged: number;
+  is_demo: number;
 }
 
 export function createBadge(input: BadgeInput): { employeeId: string; deleteToken: string } {
@@ -247,6 +253,7 @@ export function createBadge(input: BadgeInput): { employeeId: string; deleteToke
     $is_band_member: 0,
     $photo_public: input.photoPublic ? 1 : 0,
     $is_flagged: input.flagged ? 1 : 0,
+    $is_demo: input.isDemo ? 1 : 0,
   });
 
   return { employeeId, deleteToken };
@@ -470,6 +477,18 @@ export function getAnalytics(): {
 /** Export all badges as an array (for CSV backup) */
 export function exportAllBadges(): BadgeRow[] {
   return db.prepare('SELECT * FROM badges ORDER BY id ASC').all() as BadgeRow[];
+}
+
+/** Get all demo badge employee IDs (for file cleanup) */
+export function listDemoBadgeIds(): string[] {
+  const rows = db.prepare('SELECT employee_id FROM badges WHERE is_demo = 1').all() as { employee_id: string }[];
+  return rows.map(r => r.employee_id);
+}
+
+/** Delete all demo badges from DB, return count deleted */
+export function deleteDemoBadges(): number {
+  const result = db.prepare('DELETE FROM badges WHERE is_demo = 1').run();
+  return result.changes;
 }
 
 export function closeDb() {

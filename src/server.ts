@@ -11,6 +11,8 @@ import sharp from 'sharp';
 import { initDb, createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, getStats, getAnalytics, getDivisionNames, exportAllBadges, closeDb } from './db';
 import { checkRateLimit } from './rate-limit';
 import { isNameClean, shouldFlag } from './profanity';
+import { log, getLog } from './logger';
+import { initDemo, startDemo, stopDemo, getDemoStatus, cleanupDemo } from './demo';
 
 // ─── Config ──────────────────────────────────────────────
 
@@ -28,6 +30,9 @@ mkdirSync(THUMBS_DIR, { recursive: true });
 
 // Initialize database
 initDb(join(DATA_DIR, 'badges.db'));
+
+// Initialize demo engine (broadcast function set after SSE setup below)
+let _broadcastFn: typeof broadcastNewBadge;
 
 const app = new Hono();
 
@@ -147,6 +152,7 @@ app.use('/api/admin/*', async (c, next) => {
     record.count++;
     record.lastAttempt = Date.now();
     adminFailures.set(ip, record);
+    log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
     throw e;
   }
 });
@@ -268,6 +274,13 @@ function broadcastNewBadge(badge: { employeeId: string; name: string; department
   }
 }
 
+// Wire up demo engine now that broadcastNewBadge is defined
+initDemo({
+  broadcast: broadcastNewBadge,
+  writeFile: writeFileSync,
+  badgesDir: BADGES_DIR,
+});
+
 /** Handle SSE directly at the Bun.serve level — bypasses Hono entirely */
 function handleSSEDirect(): Response {
   const encoder = new TextEncoder();
@@ -287,12 +300,14 @@ function handleSSEDirect(): Response {
 
       clientRef = { controller, encoder, keepalive };
       sseClients.add(clientRef);
+      log('info', 'sse', `Client connected (${sseClients.size} total)`);
     },
     cancel() {
       if (clientRef) {
         clearInterval(clientRef.keepalive);
         sseClients.delete(clientRef);
         clientRef = null;
+        log('info', 'sse', `Client disconnected (${sseClients.size} total)`);
       }
     },
   });
@@ -419,6 +434,8 @@ app.post('/api/badge', async (c) => {
       isBandMember: false,
     });
 
+    log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${clampField(department.trim().toUpperCase())}`);
+
     return c.json({
       success: true,
       employeeId: result.employeeId,
@@ -426,7 +443,7 @@ app.post('/api/badge', async (c) => {
       message: 'Welcome to Help Desk Inc.',
     });
   } catch (err: any) {
-    console.error('Badge creation failed:', err);
+    log('error', 'badge', `Creation failed: ${err.message}`);
     return c.json({ success: false, error: 'Badge creation failed. Please try again.' }, 500);
   }
 });
@@ -758,6 +775,47 @@ app.get('/api/admin/export/csv', (c) => {
   });
 });
 
+// ─── Admin: System Logs ──────────────────────────────────
+
+app.get('/api/admin/logs', (c) => {
+  return c.json({ logs: getLog() });
+});
+
+// ─── Admin: Demo Mode ────────────────────────────────────
+
+app.post('/api/admin/demo/start', async (c) => {
+  let body: any;
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  const count = body.count || 30;
+  const duration = body.duration || 300;
+  const result = startDemo(count, duration);
+  if ('error' in result) {
+    return c.json({ success: false, error: result.error }, 400);
+  }
+  return c.json({ success: true, ...result });
+});
+
+app.post('/api/admin/demo/stop', (c) => {
+  const result = stopDemo();
+  if ('error' in result) {
+    return c.json({ success: false, error: result.error }, 400);
+  }
+  return c.json({ success: true, ...result });
+});
+
+app.get('/api/admin/demo/status', (c) => {
+  return c.json(getDemoStatus());
+});
+
+app.post('/api/admin/demo/cleanup', (c) => {
+  const result = cleanupDemo(BADGES_DIR, THUMBS_DIR);
+  return c.json({ success: true, ...result });
+});
+
 // ─── HTML Page Routes ────────────────────────────────────
 
 // Org chart page (serves same SPA, client detects pathname)
@@ -775,6 +833,7 @@ app.get('/', serveStatic({ path: './public/index.html' }));
 
 const port = Number(process.env.PORT) || 3000;
 
+log('info', 'server', `Started on port ${port} (admin=${ADMIN_TOKEN ? 'enabled' : 'disabled'}, local_only=${process.env.ADMIN_LOCAL_ONLY || '0'}, show_mode=${process.env.SHOW_MODE || '0'})`);
 console.log(`🎫 Help Desk Badge Generator running at http://localhost:${port}`);
 if (ADMIN_TOKEN) {
   console.log(`🔐 Admin panel: http://localhost:${port}/admin`);

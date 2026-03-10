@@ -546,6 +546,8 @@
     </div>
     <div style="display:flex;gap:8px;">
       <button onclick="toggleAnalytics()">Analytics</button>
+      <button onclick="toggleDemo()">Demo Mode</button>
+      <button onclick="toggleLogs()">System Log</button>
       <button onclick="exportCSV()">Export CSV</button>
       <button onclick="doLogout()">Sign Out</button>
     </div>
@@ -591,6 +593,43 @@
       <h2>Badge Analytics</h2>
     </div>
     <div class="analytics-grid" id="analyticsGrid"></div>
+  </div>
+
+  <!-- Demo Mode Section -->
+  <div class="analytics-section" id="demoSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>Demo Mode</h2>
+    </div>
+    <div class="analytics-card" style="max-width:600px;">
+      <div style="display:flex;gap:16px;align-items:end;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:11px;color:#667788;margin-bottom:4px;">Badges</label>
+          <input type="number" id="demoCount" value="30" min="5" max="100" class="filter-input" style="width:80px;min-width:auto;">
+        </div>
+        <div>
+          <label style="display:block;font-size:11px;color:#667788;margin-bottom:4px;">Duration (sec)</label>
+          <input type="number" id="demoDuration" value="300" min="30" max="900" class="filter-input" style="width:100px;min-width:auto;">
+        </div>
+        <button class="btn-action" style="padding:8px 16px;font-size:13px;" id="demoStartBtn" onclick="demoStart()">Start Demo</button>
+        <button class="btn-action" style="padding:8px 16px;font-size:13px;display:none;" id="demoStopBtn" onclick="demoStop()">Stop</button>
+        <button class="btn-action btn-danger" style="padding:8px 16px;font-size:13px;" id="demoCleanupBtn" onclick="demoCleanup()">Cleanup</button>
+      </div>
+      <div id="demoProgress" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#667788;">
+        Status: idle
+      </div>
+      <div style="margin-top:8px;height:6px;background:#1C1C22;border-radius:3px;overflow:hidden;">
+        <div id="demoProgressBar" style="height:100%;width:0%;background:#5B8DEF;transition:width 0.5s;border-radius:3px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Log Section -->
+  <div class="analytics-section" id="logSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>System Log</h2>
+      <span style="font-size:11px;color:#667788;" id="logRefreshStatus">Auto-refresh: ON</span>
+    </div>
+    <div id="logOutput" style="background:#1C1C22;border:1px solid #3A3A44;border-radius:8px;padding:12px;max-height:400px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;"></div>
   </div>
 
   <div class="badge-table-wrap">
@@ -1043,6 +1082,115 @@ document.getElementById('dateTo').addEventListener('change', () => {
   currentPage = 1;
   loadBadges();
 });
+
+// ─── Demo Mode ──────────────────────────────────────────
+let demoVisible = false;
+let demoPolling = null;
+
+function toggleDemo() {
+  demoVisible = !demoVisible;
+  document.getElementById('demoSection').style.display = demoVisible ? 'block' : 'none';
+  if (demoVisible) pollDemoStatus();
+  else if (demoPolling) { clearInterval(demoPolling); demoPolling = null; }
+}
+
+async function demoStart() {
+  const count = parseInt(document.getElementById('demoCount').value) || 30;
+  const duration = parseInt(document.getElementById('demoDuration').value) || 300;
+  const res = await apiFetch('/api/admin/demo/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ count, duration }),
+  });
+  if (res.error) {
+    document.getElementById('demoProgress').textContent = 'Error: ' + res.error;
+    return;
+  }
+  document.getElementById('demoStartBtn').style.display = 'none';
+  document.getElementById('demoStopBtn').style.display = 'inline-block';
+  pollDemoStatus();
+}
+
+async function demoStop() {
+  await apiFetch('/api/admin/demo/stop', { method: 'POST' });
+  document.getElementById('demoStartBtn').style.display = 'inline-block';
+  document.getElementById('demoStopBtn').style.display = 'none';
+  pollDemoStatus();
+}
+
+async function demoCleanup() {
+  const res = await apiFetch('/api/admin/demo/cleanup', { method: 'POST' });
+  document.getElementById('demoProgress').textContent = res.deleted
+    ? `Cleaned up ${res.deleted} demo badges.`
+    : 'No demo badges to clean up.';
+  document.getElementById('demoProgressBar').style.width = '0%';
+  loadStats();
+  loadBadges();
+}
+
+function pollDemoStatus() {
+  if (demoPolling) clearInterval(demoPolling);
+  const poll = async () => {
+    const data = await apiFetch('/api/admin/demo/status');
+    const pct = data.total > 0 ? Math.round((data.created / data.total) * 100) : 0;
+    document.getElementById('demoProgress').textContent = data.running
+      ? `Running: ${data.created}/${data.total} badges (${pct}%)`
+      : data.created > 0
+        ? `Complete: ${data.created}/${data.total} badges`
+        : 'Status: idle';
+    document.getElementById('demoProgressBar').style.width = `${pct}%`;
+    if (data.running) {
+      document.getElementById('demoStartBtn').style.display = 'none';
+      document.getElementById('demoStopBtn').style.display = 'inline-block';
+    } else {
+      document.getElementById('demoStartBtn').style.display = 'inline-block';
+      document.getElementById('demoStopBtn').style.display = 'none';
+      if (demoPolling) { clearInterval(demoPolling); demoPolling = null; }
+      // Refresh badge list when demo completes
+      loadStats();
+      loadBadges();
+    }
+  };
+  poll();
+  demoPolling = setInterval(poll, 2000);
+}
+
+// ─── System Log ─────────────────────────────────────────
+let logVisible = false;
+let logPolling = null;
+
+function toggleLogs() {
+  logVisible = !logVisible;
+  document.getElementById('logSection').style.display = logVisible ? 'block' : 'none';
+  if (logVisible) {
+    loadLogs();
+    logPolling = setInterval(loadLogs, 5000);
+  } else if (logPolling) {
+    clearInterval(logPolling);
+    logPolling = null;
+  }
+}
+
+async function loadLogs() {
+  const data = await apiFetch('/api/admin/logs');
+  if (data.error || !data.logs) return;
+
+  const el = document.getElementById('logOutput');
+  const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+
+  el.innerHTML = data.logs.map(entry => {
+    const color = entry.level === 'error' ? '#DC2626'
+      : entry.level === 'warn' ? '#F59E0B'
+      : '#667788';
+    const time = entry.timestamp.slice(11, 19);
+    const lvl = entry.level.toUpperCase().padEnd(5);
+    return `<div style="color:${color}"><span style="color:#556677">${time}</span> <span style="color:${color}">${lvl}</span> <span style="color:#5B8DEF">[${esc(entry.category)}]</span> ${esc(entry.message)}</div>`;
+  }).join('');
+
+  if (wasAtBottom || el.scrollTop === 0) {
+    el.scrollTop = 0; // newest first, so scroll to top
+  }
+}
 
 // ─── Init ───────────────────────────────────────────────
 if (token) {
