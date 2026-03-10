@@ -283,7 +283,7 @@ function handleSSEDirect(): Response {
         } catch {
           clearInterval(keepalive);
         }
-      }, 15_000);
+      }, 5_000); // Must be under Bun's 10s idle timeout
 
       clientRef = { controller, encoder, keepalive };
       sseClients.add(clientRef);
