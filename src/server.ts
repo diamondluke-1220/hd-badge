@@ -5,7 +5,6 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { getConnInfo } from 'hono/bun';
-import { streamSSE } from 'hono/streaming';
 import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import sharp from 'sharp';
@@ -244,49 +243,68 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
 // ─── SSE (Server-Sent Events) for Live Org Chart ─────────
 
 interface SSEClient {
-  stream: any; // SSEStreamingApi
-  connectedAt: number;
+  controller: ReadableStreamDefaultController;
+  encoder: TextEncoder;
+  keepalive: ReturnType<typeof setInterval>;
 }
 
 const sseClients = new Set<SSEClient>();
+
+/** Format and enqueue an SSE event */
+function sseWrite(client: SSEClient, event: string, data: string) {
+  client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+}
 
 /** Broadcast a new badge event to all connected org chart viewers */
 function broadcastNewBadge(badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) {
   const data = JSON.stringify(badge);
   for (const client of sseClients) {
     try {
-      client.stream.writeSSE({ data, event: 'new-badge' });
+      sseWrite(client, 'new-badge', data);
     } catch {
+      clearInterval(client.keepalive);
       sseClients.delete(client);
     }
   }
 }
 
 // SSE endpoint — org chart viewers connect here for live updates
+// Uses Bun.serve direct response to bypass Hono middleware response wrapping
 app.get('/api/badges/stream', (c) => {
-  return streamSSE(c, async (stream) => {
-    const client: SSEClient = { stream, connectedAt: Date.now() };
-    sseClients.add(client);
+  const encoder = new TextEncoder();
+  let clientRef: SSEClient | null = null;
 
-    // Keepalive every 30 seconds to prevent connection timeout
-    const keepalive = setInterval(() => {
-      try {
-        stream.writeSSE({ data: '', event: 'keepalive' });
-      } catch {
-        clearInterval(keepalive);
-        sseClients.delete(client);
+  const stream = new ReadableStream({
+    start(controller) {
+      // Send initial event immediately
+      controller.enqueue(encoder.encode(': ok\n\nevent: connected\ndata: connected\n\n'));
+
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(': keepalive\n\n'));
+        } catch {
+          clearInterval(keepalive);
+        }
+      }, 15_000);
+
+      clientRef = { controller, encoder, keepalive };
+      sseClients.add(clientRef);
+    },
+    cancel() {
+      if (clientRef) {
+        clearInterval(clientRef.keepalive);
+        sseClients.delete(clientRef);
+        clientRef = null;
       }
-    }, 30_000);
-
-    // Keep connection open until client disconnects
-    stream.onAbort(() => {
-      clearInterval(keepalive);
-      sseClients.delete(client);
-    });
-
-    // Hold the stream open indefinitely
-    await new Promise(() => {});
+    },
   });
+
+  // Set headers via Hono context so middleware doesn't re-wrap the response
+  c.header('Content-Type', 'text/event-stream');
+  c.header('Cache-Control', 'no-cache');
+  c.header('Connection', 'keep-alive');
+  c.header('X-Accel-Buffering', 'no');
+  return c.body(stream as any);
 });
 
 // ─── Captive Portal Clearance ────────────────────────────

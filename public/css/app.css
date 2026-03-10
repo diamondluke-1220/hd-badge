@@ -1372,12 +1372,12 @@ body {
   right: 0;
   height: 36px;
   background: #12121a;
-  border-top: 1px solid #2E7DFF33;
+  border-top: 1px solid #2E7DFF44;
   overflow: hidden;
   z-index: 100;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
-  color: #b0b8c4;
+  color: #e5e7eb;
 }
 .ticker-track {
   display: flex;
@@ -1405,14 +1405,14 @@ body {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #3A3A44;
+  background: #4b5563;
   margin: 0 4px;
 }
 .ticker-up {
   color: #4ADE80;
 }
 .ticker-label {
-  color: #6b7280;
+  color: #93B4F5;
 }
 .ticker-value {
   color: #e5e7eb;

@@ -1403,16 +1403,22 @@ function connectSSE() {
   if (sseSource) { sseSource.close(); }
   sseSource = new EventSource('/api/badges/stream');
 
+  sseSource.onopen = () => {
+    console.log('[SSE] Connected to /api/badges/stream');
+  };
+
   sseSource.addEventListener('new-badge', (e) => {
+    console.log('[SSE] Received new-badge event:', e.data);
     try {
       const badge = JSON.parse(e.data);
       queueLiveAnimation(badge);
-    } catch { /* ignore malformed events */ }
+    } catch (err) {
+      console.error('[SSE] Failed to process badge event:', err);
+    }
   });
 
-  sseSource.onerror = () => {
-    // EventSource auto-reconnects by default — just log
-    console.log('[SSE] Connection lost, auto-reconnecting...');
+  sseSource.onerror = (e) => {
+    console.log('[SSE] Connection error, state:', sseSource.readyState);
   };
 }
 
