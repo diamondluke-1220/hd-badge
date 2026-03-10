@@ -268,15 +268,13 @@ function broadcastNewBadge(badge: { employeeId: string; name: string; department
   }
 }
 
-// SSE endpoint — org chart viewers connect here for live updates
-// Uses Bun.serve direct response to bypass Hono middleware response wrapping
-app.get('/api/badges/stream', (c) => {
+/** Handle SSE directly at the Bun.serve level — bypasses Hono entirely */
+function handleSSEDirect(): Response {
   const encoder = new TextEncoder();
   let clientRef: SSEClient | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send initial event immediately
       controller.enqueue(encoder.encode(': ok\n\nevent: connected\ndata: connected\n\n'));
 
       const keepalive = setInterval(() => {
@@ -299,13 +297,18 @@ app.get('/api/badges/stream', (c) => {
     },
   });
 
-  // Set headers via Hono context so middleware doesn't re-wrap the response
-  c.header('Content-Type', 'text/event-stream');
-  c.header('Cache-Control', 'no-cache');
-  c.header('Connection', 'keep-alive');
-  c.header('X-Accel-Buffering', 'no');
-  return c.body(stream as any);
-});
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+    },
+  });
+}
 
 // ─── Captive Portal Clearance ────────────────────────────
 
@@ -788,5 +791,13 @@ process.on('SIGINT', () => { closeDb(); process.exit(0); });
 
 export default {
   port,
-  fetch: app.fetch,
+  fetch(req: Request, server: any): Response | Promise<Response> {
+    const url = new URL(req.url);
+
+    // Handle SSE at the Bun level — bypass Hono entirely to avoid response wrapping
+    if (url.pathname === '/api/badges/stream') {
+      return handleSSEDirect();
+    }
+    return app.fetch(req, server);
+  },
 };

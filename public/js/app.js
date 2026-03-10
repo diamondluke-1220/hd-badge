@@ -1404,7 +1404,7 @@ function connectSSE() {
   sseSource = new EventSource('/api/badges/stream');
 
   sseSource.onopen = () => {
-    console.log('[SSE] Connected to /api/badges/stream');
+    console.log('[SSE] Connected, readyState:', sseSource.readyState);
   };
 
   sseSource.addEventListener('new-badge', (e) => {
@@ -1776,9 +1776,12 @@ if (window.location.pathname === '/orgchart') {
   document.querySelector('.fab-group').style.display = 'none';
   renderPublicOrgChart().then(() => {
     // Initialize live viz features after org chart renders
-    connectSSE();
     initTicker();
     // Donut is initialized inside renderPublicOrgChart after stats are fetched
+
+    // Defer SSE until all images finish loading — Firefox's HTTP/1.1 limit
+    // (6 connections per origin) blocks EventSource while thumbnails load
+    window.addEventListener('load', () => connectSSE());
   });
 } else {
   document.getElementById('idField').textContent = generateEmployeeId();
