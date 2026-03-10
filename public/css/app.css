@@ -1565,3 +1565,77 @@ body {
 .public-orgchart {
   padding-bottom: 48px;
 }
+
+/* ==========================================================
+   30. VIEW SWITCHER
+   ========================================================== */
+.view-switcher-bar {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--card-bg, #1a1a2e);
+  border-bottom: 1px solid rgba(46, 125, 255, 0.15);
+}
+
+.view-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border: 1px solid rgba(147, 180, 245, 0.2);
+  border-radius: 6px;
+  background: transparent;
+  color: #9CA3AF;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-switch-btn:hover {
+  color: #e5e7eb;
+  border-color: rgba(147, 180, 245, 0.4);
+  background: rgba(46, 125, 255, 0.08);
+}
+
+.view-switch-btn.active {
+  color: #e5e7eb;
+  border-color: #2E7DFF;
+  background: rgba(46, 125, 255, 0.15);
+}
+
+.view-switch-btn:focus-visible {
+  outline: 2px solid #2E7DFF;
+  outline-offset: 2px;
+}
+
+.view-switch-btn kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: inherit;
+  color: #6B7280;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  line-height: 1.4;
+}
+
+.view-switch-icon {
+  font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .view-switcher-bar {
+    gap: 4px;
+    padding: 8px 8px;
+  }
+  .view-switch-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .view-switch-btn kbd {
+    display: none;
+  }
+}

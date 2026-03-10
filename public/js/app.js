@@ -1136,234 +1136,127 @@ function getDivisionForDept(deptName, isBandMember) {
   return theme || '_custom';
 }
 
-let publicOrgPage = 1;
-let publicOrgDept = '';
+// Shared orgchart state (accessed by renderers via window._)
+window._publicOrgPage = 1;
+window._publicOrgDept = '';
+window._tickerStats = {};
+window._tickerTotalHires = 0;
 
-async function renderPublicOrgChart() {
-  const container = document.createElement('div');
-  container.className = 'public-orgchart';
-  document.body.appendChild(container);
+// ─── Renderer System ──────────────────────────────────────
+let currentRenderer = null;
+let orgChartContainer = null;
+let orgChartStats = null;
+
+async function switchView(mode) {
+  // Destroy current renderer
+  if (currentRenderer && currentRenderer.destroy) {
+    currentRenderer.destroy();
+  }
+
+  // Select new renderer
+  const renderers = {
+    grid: window.GridRenderer,
+    win98: window.Win98Renderer,
+    network: window.NetworkRenderer,
+  };
+
+  const renderer = renderers[mode];
+  if (!renderer) {
+    showToast(`View "${mode}" not available yet`, 'info');
+    return;
+  }
+
+  currentRenderer = renderer;
+
+  // Save preference
+  localStorage.setItem('hd-view-mode', mode);
+
+  // Update switcher button states
+  document.querySelectorAll('.view-switch-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+
+  // Initialize new renderer
+  if (orgChartContainer && orgChartStats) {
+    orgChartContainer.innerHTML = '';
+    await currentRenderer.init(orgChartContainer, orgChartStats);
+  }
+}
+
+async function initOrgChart() {
+  orgChartContainer = document.createElement('div');
+  orgChartContainer.className = 'public-orgchart';
+  document.body.appendChild(orgChartContainer);
 
   // Fetch stats
-  let stats;
   try {
     const resp = await fetch('/api/orgchart/stats');
-    stats = await resp.json();
+    orgChartStats = await resp.json();
   } catch {
-    container.innerHTML = '<div class="no-badges-msg">Failed to load directory.</div>';
+    orgChartContainer.innerHTML = '<div class="no-badges-msg">Failed to load directory.</div>';
     return;
   }
 
-  // Org chart header
-  container.innerHTML = `
-    <div class="org-header">
-      <div class="org-header-title">Help Desk Inc.</div>
-      <div class="org-header-sub">Employee Directory &bull; ${stats.visible} on payroll</div>
-    </div>
-    <div class="dept-filter-bar" id="deptFilterBar"></div>
-    <div class="active-dept-heading" id="activeDeptHeading"></div>
-    <div id="publicBadgeContent"></div>
-    <div id="loadMoreArea"></div>
-  `;
+  // Build view switcher
+  buildViewSwitcher();
 
-  // Initialize donut chart with current stats
-  tickerTotalHires = stats.visible || 0;
-  if (stats.byDepartment) {
-    tickerStats = Object.assign({}, stats.byDepartment);
+  // Determine initial mode
+  const savedMode = localStorage.getItem('hd-view-mode') || 'grid';
+  const available = {
+    grid: !!window.GridRenderer,
+    win98: !!window.Win98Renderer,
+    network: !!window.NetworkRenderer,
+  };
+  const mode = available[savedMode] ? savedMode : 'grid';
+
+  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, network: window.NetworkRenderer }[mode];
+  if (!currentRenderer) {
+    orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
+    return;
   }
-  initDonut(stats);
 
-  // Department filter tabs — exclude band-exclusive depts
-  const filterBar = document.getElementById('deptFilterBar');
-  const allBtn = document.createElement('button');
-  allBtn.className = 'dept-filter-btn active';
-  allBtn.textContent = 'All';
-  allBtn.addEventListener('click', () => {
-    publicOrgDept = '';
-    publicOrgPage = 1;
-    filterBar.querySelectorAll('.dept-filter-btn').forEach(b => b.classList.remove('active'));
-    allBtn.classList.add('active');
-    updateDeptHeading('', stats);
-    loadPublicBadges(true);
-  });
-  filterBar.appendChild(allBtn);
-
-  Object.keys(stats.byDepartment).forEach(dept => {
-    // Skip band member exclusive departments from filter
-    if (BAND_DEPTS.has(dept)) return;
-
-    const count = stats.byDepartment[dept];
-    const btn = document.createElement('button');
-    btn.className = 'dept-filter-btn';
-    btn.innerHTML = `${esc(dept)} <span class="dept-count">${count}</span>`;
-    btn.addEventListener('click', () => {
-      publicOrgDept = dept;
-      publicOrgPage = 1;
-      filterBar.querySelectorAll('.dept-filter-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      updateDeptHeading(dept, stats);
-      loadPublicBadges(true);
-    });
-    filterBar.appendChild(btn);
+  // Mark active button
+  document.querySelectorAll('.view-switch-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
   });
 
-  // Load first page
-  publicOrgPage = 1;
-  updateDeptHeading('', stats);
-  await loadPublicBadges(true);
+  await currentRenderer.init(orgChartContainer, orgChartStats);
 }
 
-function updateDeptHeading(dept, stats) {
-  const heading = document.getElementById('activeDeptHeading');
-  if (!dept) {
-    heading.innerHTML = '';
-    heading.style.display = 'none';
-  } else {
-    const count = stats.byDepartment[dept] || 0;
-    heading.innerHTML = `
-      <div class="dept-heading-name">${esc(dept)}</div>
-      <div class="dept-heading-count">${count} employee${count !== 1 ? 's' : ''}</div>
-    `;
-    heading.style.display = '';
-  }
-}
+function buildViewSwitcher() {
+  const nav = document.querySelector('.app-nav');
+  if (!nav) return;
 
-function createSkeletonGrid(count) {
-  const grid = document.createElement('div');
-  grid.className = 'badge-grid';
-  for (let i = 0; i < count; i++) {
-    const card = document.createElement('div');
-    card.className = 'skeleton-card';
-    card.innerHTML = `
-      <div class="skeleton-img"></div>
-      <div class="skeleton-info">
-        <div class="skeleton-line skeleton-line-name"></div>
-        <div class="skeleton-line skeleton-line-title"></div>
-      </div>
-    `;
-    grid.appendChild(card);
-  }
-  return grid;
-}
-
-async function loadPublicBadges(replace) {
-  const content = document.getElementById('publicBadgeContent');
-  const loadMoreArea = document.getElementById('loadMoreArea');
-
-  if (replace) {
-    content.innerHTML = '';
-    // Show skeleton placeholders while loading
-    const skeleton = createSkeletonGrid(10);
-    skeleton.id = 'skeletonGrid';
-    content.appendChild(skeleton);
-  }
-  loadMoreArea.innerHTML = '';
-
-  let url = `/api/orgchart?page=${publicOrgPage}&limit=48`;
-  if (publicOrgDept) url += `&department=${encodeURIComponent(publicOrgDept)}`;
-
-  let data;
-  try {
-    const resp = await fetch(url);
-    data = await resp.json();
-  } catch {
-    content.innerHTML = '<div class="no-badges-msg">Failed to load badges.</div>';
-    return;
-  }
-
-  // Remove skeleton placeholders
-  const skeleton = document.getElementById('skeletonGrid');
-  if (skeleton) skeleton.remove();
-
-  if (data.badges.length === 0 && publicOrgPage === 1) {
-    content.innerHTML = '<div class="no-badges-msg">No employees found. The hiring freeze continues.</div>';
-    return;
-  }
-
-  // When showing all departments, group by division
-  if (!publicOrgDept) {
-    // Sort badges into divisions
-    const byDivision = {};
-    PUBLIC_DIVISIONS.forEach(d => { byDivision[d.theme] = []; });
-
-    data.badges.forEach(badge => {
-      const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-      if (!byDivision[divTheme]) byDivision[divTheme] = [];
-      byDivision[divTheme].push(badge);
-    });
-
-    // Render each division that has badges
-    PUBLIC_DIVISIONS.forEach(div => {
-      const badges = byDivision[div.theme];
-      if (!badges || badges.length === 0) return;
-
-      const section = createDivisionSection(div, badges);
-      content.appendChild(section);
-    });
-  } else {
-    // Single department — flat grid
-    let grid = content.querySelector('.badge-grid');
-    if (!grid || replace) {
-      grid = document.createElement('div');
-      grid.className = 'badge-grid';
-      content.appendChild(grid);
-    }
-    data.badges.forEach(badge => grid.appendChild(createBadgeCard(badge)));
-  }
-
-  // Load more button
-  if (publicOrgPage < data.pages) {
-    const btn = document.createElement('button');
-    btn.className = 'load-more-btn';
-    btn.textContent = 'Load More Employees';
-    btn.addEventListener('click', () => {
-      publicOrgPage++;
-      loadPublicBadges(false);
-    });
-    loadMoreArea.appendChild(btn);
-  }
-}
-
-function createDivisionSection(div, badges) {
-  const section = document.createElement('div');
-  section.className = 'division-section';
-
-  // Division header card
-  const header = document.createElement('div');
-  header.className = `division-header ${div.css}`;
-  header.innerHTML = `
-    <div class="division-header-name">${esc(div.name)}</div>
-    <div class="division-header-count">${badges.length} member${badges.length !== 1 ? 's' : ''}</div>
+  const switcher = document.createElement('div');
+  switcher.className = 'view-switcher-bar';
+  switcher.innerHTML = `
+    <button class="view-switch-btn active" data-mode="grid">
+      <span class="view-switch-icon">&#9638;</span> Grid <kbd>1</kbd>
+    </button>
+    <button class="view-switch-btn" data-mode="win98">
+      <span class="view-switch-icon">&#128187;</span> Desktop <kbd>2</kbd>
+    </button>
+    <button class="view-switch-btn" data-mode="network">
+      <span class="view-switch-icon">&#9832;</span> Network <kbd>3</kbd>
+    </button>
   `;
-  section.appendChild(header);
 
-  // Connector line
-  const connector = document.createElement('div');
-  connector.className = 'division-connector';
-  section.appendChild(connector);
+  // Insert after nav
+  nav.after(switcher);
 
-  // Single grid for all badges in this division
-  const grid = document.createElement('div');
-  grid.className = 'badge-grid';
-  badges.forEach(badge => grid.appendChild(createBadgeCard(badge)));
-  section.appendChild(grid);
+  // Click handlers
+  switcher.querySelectorAll('.view-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchView(btn.dataset.mode));
+  });
 
-  return section;
-}
-
-function createBadgeCard(badge) {
-  const card = document.createElement('div');
-  card.className = 'badge-grid-card' + (badge.isBandMember ? ' band-member' : '');
-  card.setAttribute('data-employee-id', badge.employeeId);
-  card.innerHTML = `
-    <img class="badge-grid-img" src="/api/badge/${esc(badge.employeeId)}/thumb" alt="${esc(badge.name)}" loading="lazy">
-    <div class="badge-grid-info">
-      <div class="badge-grid-name">${esc(badge.name)}</div>
-      <div class="badge-grid-title">${esc(badge.title)}</div>
-    </div>
-  `;
-  card.addEventListener('click', () => showBadgeDetail(badge.employeeId, badge.name));
-  return card;
+  // Keyboard shortcuts (only on orgchart page)
+  document.addEventListener('keydown', (e) => {
+    // Don't trigger in inputs/textareas
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === '1') switchView('grid');
+    else if (e.key === '2') switchView('win98');
+    else if (e.key === '3') switchView('network');
+  });
 }
 
 function showBadgeDetail(employeeId, name) {
@@ -1434,7 +1327,7 @@ async function processLiveQueue() {
     updateTicker(badge);
     updateDonut(badge);
     await playTerminalAnimation(badge);
-    const card = insertLiveBadgeCard(badge);
+    const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
     if (card) await playSpotlight(card);
   }
   liveIsAnimating = false;
@@ -1449,8 +1342,10 @@ const TICKER_QUIPS = [
   'MEMO STATUS: UNREAD', 'PRINTER: JAMMED', 'REPLY-ALL: DETECTED',
 ];
 
-let tickerStats = {}; // { department: count }
-let tickerTotalHires = 0;
+// tickerStats and tickerTotalHires now live on window._ (shared with renderers)
+// Alias for readability in this file
+function _getTickerStats() { return window._tickerStats; }
+function _getTickerTotal() { return window._tickerTotalHires; }
 
 function initTicker() {
   const bar = document.createElement('div');
@@ -1474,13 +1369,13 @@ function buildTickerContent() {
   });
 
   // Department stats
-  Object.entries(tickerStats).forEach(([dept, count]) => {
+  Object.entries(window._tickerStats).forEach(([dept, count]) => {
     items.push(`<span class="ticker-item"><span class="ticker-value">${esc(dept)}</span> <span class="ticker-label">×</span> <span class="ticker-highlight">${count}</span></span>`);
     items.push('<span class="ticker-sep"></span>');
   });
 
-  if (tickerTotalHires > 0) {
-    items.push(`<span class="ticker-item"><span class="ticker-new">$HELP</span> <span class="ticker-up">▲ ${tickerTotalHires}</span> <span class="ticker-label">TOTAL HIRES</span></span>`);
+  if (window._tickerTotalHires > 0) {
+    items.push(`<span class="ticker-item"><span class="ticker-new">$HELP</span> <span class="ticker-up">▲ ${window._tickerTotalHires}</span> <span class="ticker-label">TOTAL HIRES</span></span>`);
     items.push('<span class="ticker-sep"></span>');
   }
 
@@ -1490,8 +1385,8 @@ function buildTickerContent() {
 }
 
 function updateTicker(badge) {
-  tickerTotalHires++;
-  tickerStats[badge.department] = (tickerStats[badge.department] || 0) + 1;
+  window._tickerTotalHires++;
+  window._tickerStats[badge.department] = (window._tickerStats[badge.department] || 0) + 1;
 
   // Inject a live hire notice into the ticker track
   const track = document.getElementById('tickerTrack');
@@ -1574,66 +1469,6 @@ function playTerminalAnimation(badge) {
 
     typeLine();
   });
-}
-
-// --- Live Badge Card Insertion ---
-
-function insertLiveBadgeCard(badge) {
-  const content = document.getElementById('publicBadgeContent');
-  if (!content) return null;
-
-  // Dedup: don't add if already in DOM
-  if (content.querySelector(`[data-employee-id="${badge.employeeId}"]`)) return null;
-
-  const card = createBadgeCard(badge);
-  card.setAttribute('data-employee-id', badge.employeeId);
-
-  if (!publicOrgDept) {
-    // Division-grouped view: find the right division grid
-    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
-    if (!divInfo) return null;
-
-    // Find existing division section or create one
-    let section = content.querySelector(`.division-header.${divInfo.css}`)?.closest('.division-section');
-    if (!section) {
-      section = createDivisionSection(divInfo, []);
-      content.appendChild(section);
-    }
-
-    const grid = section.querySelector('.badge-grid');
-    if (grid) {
-      grid.insertBefore(card, grid.firstChild);
-    }
-
-    // Update division header count
-    const countEl = section.querySelector('.division-header-count');
-    if (countEl) {
-      const current = parseInt(countEl.textContent) || 0;
-      countEl.textContent = `${current + 1} member${current + 1 !== 1 ? 's' : ''}`;
-    }
-  } else {
-    // Single department view: prepend to flat grid
-    let grid = content.querySelector('.badge-grid');
-    if (!grid) {
-      grid = document.createElement('div');
-      grid.className = 'badge-grid';
-      content.appendChild(grid);
-    }
-    grid.insertBefore(card, grid.firstChild);
-  }
-
-  // Update org header total count
-  const subEl = document.querySelector('.org-header-sub');
-  if (subEl) {
-    const match = subEl.textContent.match(/(\d+)/);
-    if (match) {
-      const newTotal = parseInt(match[1]) + 1;
-      subEl.innerHTML = `Employee Directory &bull; ${newTotal} on payroll`;
-    }
-  }
-
-  return card;
 }
 
 // --- Spotlight Mode ---
@@ -1774,10 +1609,10 @@ document.querySelectorAll('.app-nav-link').forEach(link => {
 if (window.location.pathname === '/orgchart') {
   document.querySelector('.editor').style.display = 'none';
   document.querySelector('.fab-group').style.display = 'none';
-  renderPublicOrgChart().then(() => {
-    // Initialize live viz features after org chart renders
+  initOrgChart().then(() => {
+    // Initialize shared live viz features after renderer renders
     initTicker();
-    // Donut is initialized inside renderPublicOrgChart after stats are fetched
+    // Donut is initialized inside renderer after stats are fetched
 
     // Defer SSE until all images finish loading — Firefox's HTTP/1.1 limit
     // (6 connections per origin) blocks EventSource while thumbnails load
