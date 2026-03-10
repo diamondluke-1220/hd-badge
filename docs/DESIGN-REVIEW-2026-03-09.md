@@ -129,6 +129,24 @@ Every color, spacing, and size value is hardcoded throughout 1,142+ lines of CSS
 
 ---
 
+## Remaining Backlog (Post-Review Polish)
+
+Items identified during review but not part of the 12 prioritized fixes. Mostly accessibility and design hygiene.
+
+| # | Item | Category | Effort | Notes |
+|---|------|----------|--------|-------|
+| R1 | Empty state for org chart (zero badges) | UX | Low | Show illustration + "Be the first employee" CTA |
+| R2 | ARIA landmarks beyond basic HTML semantics | A11y | Low | Add `role="banner"`, `role="navigation"`, `role="main"` where missing |
+| R3 | Popover focus trap | A11y | Medium | Trap Tab key inside popover while open, return focus on close |
+| R4 | Admin mobile font size (12px → 16px min) | A11y | Low | Below recommended mobile body text minimum |
+| R5 | `aria-sort` on sortable admin table headers | A11y | Low | Screen reader improvement for sortable columns |
+| R6 | Inline styles in admin.html → shared CSS | Code quality | Medium | Move inline styles to app.css or admin.css |
+| R7 | Design system documentation | Documentation | Low | Record color, type, spacing decisions for future reference |
+| R8 | Fluid typography (`clamp()`) for app chrome | Typography | Medium | Fixed px → responsive clamp() for popovers, org chart, admin |
+| R9 | Consistent UI text sizing | Typography | Low | Normalize 11/13/14px jumps to a deliberate type scale |
+
+---
+
 ## Summary
 
-The badge app has two distinct quality levels. **The badge itself** is beautifully designed — the keycap header, binary overlay, waveform viz, and corporate parody aesthetic are genuinely creative and distinctive. **The app chrome around it** (popovers, org chart grid, admin dashboard) is catching up. As of 2026-03-09: admin dashboard aligned to main design language (blue accent, shared fonts, max-width), CSS organized with 23-section TOC, staggered grid animations added, `prefers-reduced-motion` accessibility support, skip links for keyboard nav, unified button system with focus states, and skeleton loading for org chart. All 12 items addressed (10 DONE, 2 SKIPPED). Design review complete.
+The badge app has two distinct quality levels. **The badge itself** is beautifully designed — the keycap header, binary overlay, waveform viz, and corporate parody aesthetic are genuinely creative and distinctive. **The app chrome around it** (popovers, org chart grid, admin dashboard) is catching up. As of 2026-03-09: admin dashboard aligned to main design language (blue accent, shared fonts, max-width), CSS organized with 23-section TOC, staggered grid animations added, `prefers-reduced-motion` accessibility support, skip links for keyboard nav, unified button system with focus states, and skeleton loading for org chart. 12 prioritized items addressed (10 DONE, 2 SKIPPED). 9 remaining polish items tracked in backlog above.

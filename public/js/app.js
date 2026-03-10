@@ -1166,6 +1166,13 @@ async function renderPublicOrgChart() {
     <div id="loadMoreArea"></div>
   `;
 
+  // Initialize donut chart with current stats
+  tickerTotalHires = stats.visible || 0;
+  if (stats.byDepartment) {
+    tickerStats = Object.assign({}, stats.byDepartment);
+  }
+  initDonut(stats);
+
   // Department filter tabs — exclude band-exclusive depts
   const filterBar = document.getElementById('deptFilterBar');
   const allBtn = document.createElement('button');
@@ -1347,6 +1354,7 @@ function createDivisionSection(div, badges) {
 function createBadgeCard(badge) {
   const card = document.createElement('div');
   card.className = 'badge-grid-card' + (badge.isBandMember ? ' band-member' : '');
+  card.setAttribute('data-employee-id', badge.employeeId);
   card.innerHTML = `
     <img class="badge-grid-img" src="/api/badge/${esc(badge.employeeId)}/thumb" alt="${esc(badge.name)}" loading="lazy">
     <div class="badge-grid-info">
@@ -1384,6 +1392,366 @@ function showBadgeDetail(employeeId, name) {
   });
 }
 
+// ─── Live Org Chart Visualizations ─────────────────────────
+
+// --- SSE Connection ---
+let sseSource = null;
+const liveAnimationQueue = [];
+let liveIsAnimating = false;
+
+function connectSSE() {
+  if (sseSource) { sseSource.close(); }
+  sseSource = new EventSource('/api/badges/stream');
+
+  sseSource.addEventListener('new-badge', (e) => {
+    try {
+      const badge = JSON.parse(e.data);
+      queueLiveAnimation(badge);
+    } catch { /* ignore malformed events */ }
+  });
+
+  sseSource.onerror = () => {
+    // EventSource auto-reconnects by default — just log
+    console.log('[SSE] Connection lost, auto-reconnecting...');
+  };
+}
+
+function queueLiveAnimation(badge) {
+  liveAnimationQueue.push(badge);
+  if (!liveIsAnimating) processLiveQueue();
+}
+
+async function processLiveQueue() {
+  liveIsAnimating = true;
+  while (liveAnimationQueue.length > 0) {
+    const badge = liveAnimationQueue.shift();
+    updateTicker(badge);
+    updateDonut(badge);
+    await playTerminalAnimation(badge);
+    const card = insertLiveBadgeCard(badge);
+    if (card) await playSpotlight(card);
+  }
+  liveIsAnimating = false;
+}
+
+// --- Stock Ticker Banner ---
+
+const TICKER_QUIPS = [
+  'MARKET: OPEN', 'SYNERGY LEVELS: CRITICAL', 'MORALE: MANDATORY',
+  'COFFEE SUPPLY: LOW', 'TICKETS: OVERFLOWING', 'BANDWIDTH: ZERO',
+  'MEETINGS: EXCESSIVE', 'UPTIME: QUESTIONABLE', 'PRODUCTIVITY: TBD',
+  'MEMO STATUS: UNREAD', 'PRINTER: JAMMED', 'REPLY-ALL: DETECTED',
+];
+
+let tickerStats = {}; // { department: count }
+let tickerTotalHires = 0;
+
+function initTicker() {
+  const bar = document.createElement('div');
+  bar.className = 'ticker-bar';
+  bar.id = 'tickerBar';
+  bar.innerHTML = '<div class="ticker-track" id="tickerTrack"></div>';
+  document.body.appendChild(bar);
+  buildTickerContent();
+}
+
+function buildTickerContent() {
+  const track = document.getElementById('tickerTrack');
+  if (!track) return;
+
+  const items = [];
+
+  // Corporate quips
+  TICKER_QUIPS.forEach(q => {
+    items.push(`<span class="ticker-item"><span class="ticker-label">${q}</span></span>`);
+    items.push('<span class="ticker-sep"></span>');
+  });
+
+  // Department stats
+  Object.entries(tickerStats).forEach(([dept, count]) => {
+    items.push(`<span class="ticker-item"><span class="ticker-value">${esc(dept)}</span> <span class="ticker-label">×</span> <span class="ticker-highlight">${count}</span></span>`);
+    items.push('<span class="ticker-sep"></span>');
+  });
+
+  if (tickerTotalHires > 0) {
+    items.push(`<span class="ticker-item"><span class="ticker-new">$HELP</span> <span class="ticker-up">▲ ${tickerTotalHires}</span> <span class="ticker-label">TOTAL HIRES</span></span>`);
+    items.push('<span class="ticker-sep"></span>');
+  }
+
+  // Duplicate for seamless loop
+  const content = items.join('');
+  track.innerHTML = content + content;
+}
+
+function updateTicker(badge) {
+  tickerTotalHires++;
+  tickerStats[badge.department] = (tickerStats[badge.department] || 0) + 1;
+
+  // Inject a live hire notice into the ticker track
+  const track = document.getElementById('tickerTrack');
+  if (!track) return;
+
+  // Rebuild with updated stats
+  buildTickerContent();
+}
+
+// --- Terminal Onboarding Animation ---
+
+const TERMINAL_LINES = [
+  { type: 'prompt', text: '> INITIATING EMPLOYEE ONBOARDING PROTOCOL...' },
+  { type: 'prompt', text: '> SCANNING BADGE... [████████████████] 100%' },
+  { type: 'data',   key: 'EMPLOYEE IDENTIFIED', field: 'name' },
+  { type: 'data',   key: 'TITLE',               field: 'title' },
+  { type: 'data',   key: 'DEPARTMENT',           field: 'department' },
+  { type: 'data',   key: 'CLEARANCE LEVEL',      field: 'accessLevel' },
+  { type: 'data',   key: 'EMPLOYEE ID',          field: 'employeeId' },
+  { type: 'warn',   text: '> WARNING: Employee has opinions. Proceed with caution.' },
+  { type: 'success', text: '> ONBOARDING COMPLETE. Welcome to the nightmare.' },
+];
+
+function playTerminalAnimation(badge) {
+  return new Promise((resolve) => {
+    // Check reduced motion preference
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      resolve();
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'terminal-overlay';
+    const box = document.createElement('div');
+    box.className = 'terminal-box';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    requestAnimationFrame(() => overlay.classList.add('active'));
+
+    let lineIndex = 0;
+    const lineDelay = 700; // ms per line — 9 lines × 700ms ≈ 6.3s total
+
+    function typeLine() {
+      if (lineIndex >= TERMINAL_LINES.length) {
+        // Done — auto-dismiss after brief pause
+        setTimeout(() => {
+          overlay.classList.remove('active');
+          setTimeout(() => { overlay.remove(); resolve(); }, 300);
+        }, 800);
+        return;
+      }
+
+      const def = TERMINAL_LINES[lineIndex];
+      const line = document.createElement('div');
+
+      if (def.type === 'prompt') {
+        line.innerHTML = `<span class="term-prompt">${def.text}</span>`;
+      } else if (def.type === 'data') {
+        const val = badge[def.field] || 'CLASSIFIED';
+        line.innerHTML = `<span class="term-prompt">&gt; </span><span class="term-label">${def.key}:</span> <span class="term-value">${esc(val)}</span>`;
+      } else if (def.type === 'warn') {
+        line.innerHTML = `<span class="term-warn">${def.text}</span>`;
+      } else if (def.type === 'success') {
+        line.innerHTML = `<span class="term-success">${def.text}</span>`;
+      }
+
+      box.appendChild(line);
+
+      // Remove old cursor, add new one
+      const oldCursor = box.querySelector('.terminal-cursor');
+      if (oldCursor) oldCursor.remove();
+      const cursor = document.createElement('span');
+      cursor.className = 'terminal-cursor';
+      line.appendChild(cursor);
+
+      lineIndex++;
+      setTimeout(typeLine, lineDelay);
+    }
+
+    typeLine();
+  });
+}
+
+// --- Live Badge Card Insertion ---
+
+function insertLiveBadgeCard(badge) {
+  const content = document.getElementById('publicBadgeContent');
+  if (!content) return null;
+
+  // Dedup: don't add if already in DOM
+  if (content.querySelector(`[data-employee-id="${badge.employeeId}"]`)) return null;
+
+  const card = createBadgeCard(badge);
+  card.setAttribute('data-employee-id', badge.employeeId);
+
+  if (!publicOrgDept) {
+    // Division-grouped view: find the right division grid
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
+    if (!divInfo) return null;
+
+    // Find existing division section or create one
+    let section = content.querySelector(`.division-header.${divInfo.css}`)?.closest('.division-section');
+    if (!section) {
+      section = createDivisionSection(divInfo, []);
+      content.appendChild(section);
+    }
+
+    const grid = section.querySelector('.badge-grid');
+    if (grid) {
+      grid.insertBefore(card, grid.firstChild);
+    }
+
+    // Update division header count
+    const countEl = section.querySelector('.division-header-count');
+    if (countEl) {
+      const current = parseInt(countEl.textContent) || 0;
+      countEl.textContent = `${current + 1} member${current + 1 !== 1 ? 's' : ''}`;
+    }
+  } else {
+    // Single department view: prepend to flat grid
+    let grid = content.querySelector('.badge-grid');
+    if (!grid) {
+      grid = document.createElement('div');
+      grid.className = 'badge-grid';
+      content.appendChild(grid);
+    }
+    grid.insertBefore(card, grid.firstChild);
+  }
+
+  // Update org header total count
+  const subEl = document.querySelector('.org-header-sub');
+  if (subEl) {
+    const match = subEl.textContent.match(/(\d+)/);
+    if (match) {
+      const newTotal = parseInt(match[1]) + 1;
+      subEl.innerHTML = `Employee Directory &bull; ${newTotal} on payroll`;
+    }
+  }
+
+  return card;
+}
+
+// --- Spotlight Mode ---
+
+function playSpotlight(card) {
+  return new Promise((resolve) => {
+    // Check reduced motion preference
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      resolve();
+      return;
+    }
+
+    const container = document.querySelector('.public-orgchart');
+    if (!container) { resolve(); return; }
+
+    // Scroll to card if off-screen
+    const rect = card.getBoundingClientRect();
+    const viewH = window.innerHeight;
+    if (rect.top < 0 || rect.bottom > viewH - 48) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Dim grid, highlight card
+    container.classList.add('orgchart-dimmed');
+    card.classList.add('spotlight-active');
+
+    // Revert after 5 seconds
+    setTimeout(() => {
+      container.classList.remove('orgchart-dimmed');
+      card.classList.remove('spotlight-active');
+      resolve();
+    }, 5000);
+  });
+}
+
+// --- Donut Chart ---
+
+const DIVISION_COLORS = {
+  '_exec':    '#4ADE80',
+  'IT':       '#2E7DFF',
+  'Office':   '#14B8A6',
+  'Corporate':'#A855F7',
+  'Punk':     '#EF4444',
+  '_custom':  '#6B7280',
+};
+
+let donutCounts = {}; // { divisionTheme: count }
+let donutTotal = 0;
+
+function initDonut(stats) {
+  // Build initial counts from stats
+  donutTotal = stats.visible || 0;
+  donutCounts = {};
+
+  // We need to map department counts to division counts
+  if (stats.byDepartment) {
+    Object.entries(stats.byDepartment).forEach(([dept, count]) => {
+      // Band depts → exec, known depts → theme, unknown → custom
+      let theme;
+      if (BAND_DEPTS.has(dept)) {
+        theme = '_exec';
+      } else {
+        theme = KNOWN_DEPT_THEMES[dept] || '_custom';
+      }
+      donutCounts[theme] = (donutCounts[theme] || 0) + count;
+    });
+  }
+
+  renderDonut();
+}
+
+function renderDonut() {
+  // Remove existing donut
+  const existing = document.querySelector('.orgchart-donut-wrap');
+  if (existing) existing.remove();
+
+  const header = document.querySelector('.org-header');
+  if (!header) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'orgchart-donut-wrap';
+
+  // Build conic-gradient stops
+  const segments = [];
+  let offset = 0;
+  const legend = [];
+
+  PUBLIC_DIVISIONS.forEach(div => {
+    const count = donutCounts[div.theme] || 0;
+    if (count === 0) return;
+    const pct = donutTotal > 0 ? (count / donutTotal) * 100 : 0;
+    const color = DIVISION_COLORS[div.theme] || '#6B7280';
+    segments.push(`${color} ${offset}% ${offset + pct}%`);
+    legend.push({ name: div.name, color, count });
+    offset += pct;
+  });
+
+  // Fill remainder if rounding leaves a gap
+  if (offset < 100 && segments.length > 0) {
+    const lastSeg = segments[segments.length - 1];
+    segments[segments.length - 1] = lastSeg.replace(/[\d.]+%$/, '100%');
+  }
+
+  const gradient = segments.length > 0
+    ? `conic-gradient(${segments.join(', ')})`
+    : 'conic-gradient(#3A3A44 0% 100%)';
+
+  wrap.innerHTML = `
+    <div class="orgchart-donut" style="background: ${gradient}" data-total="${donutTotal}"></div>
+    <div class="donut-legend">
+      ${legend.map(l => `<div class="donut-legend-item"><span class="donut-legend-dot" style="background:${l.color}"></span>${l.count}</div>`).join('')}
+    </div>
+  `;
+
+  header.after(wrap);
+}
+
+function updateDonut(badge) {
+  const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+  donutCounts[divTheme] = (donutCounts[divTheme] || 0) + 1;
+  donutTotal++;
+  renderDonut();
+}
+
 // ─── Init ─────────────────────────────────────────────────
 
 // Clear captive portal — tells server this device has loaded the page,
@@ -1400,7 +1768,12 @@ document.querySelectorAll('.app-nav-link').forEach(link => {
 if (window.location.pathname === '/orgchart') {
   document.querySelector('.editor').style.display = 'none';
   document.querySelector('.fab-group').style.display = 'none';
-  renderPublicOrgChart();
+  renderPublicOrgChart().then(() => {
+    // Initialize live viz features after org chart renders
+    connectSSE();
+    initTicker();
+    // Donut is initialized inside renderPublicOrgChart after stats are fetched
+  });
 } else {
   document.getElementById('idField').textContent = generateEmployeeId();
   document.getElementById('idField').dataset.set = '1';

@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { getConnInfo } from 'hono/bun';
+import { streamSSE } from 'hono/streaming';
 import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import sharp from 'sharp';
@@ -240,6 +241,54 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
   return Buffer.from(match[1], 'base64');
 }
 
+// ─── SSE (Server-Sent Events) for Live Org Chart ─────────
+
+interface SSEClient {
+  stream: any; // SSEStreamingApi
+  connectedAt: number;
+}
+
+const sseClients = new Set<SSEClient>();
+
+/** Broadcast a new badge event to all connected org chart viewers */
+function broadcastNewBadge(badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) {
+  const data = JSON.stringify(badge);
+  for (const client of sseClients) {
+    try {
+      client.stream.writeSSE({ data, event: 'new-badge' });
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// SSE endpoint — org chart viewers connect here for live updates
+app.get('/api/badges/stream', (c) => {
+  return streamSSE(c, async (stream) => {
+    const client: SSEClient = { stream, connectedAt: Date.now() };
+    sseClients.add(client);
+
+    // Keepalive every 30 seconds to prevent connection timeout
+    const keepalive = setInterval(() => {
+      try {
+        stream.writeSSE({ data: '', event: 'keepalive' });
+      } catch {
+        clearInterval(keepalive);
+        sseClients.delete(client);
+      }
+    }, 30_000);
+
+    // Keep connection open until client disconnects
+    stream.onAbort(() => {
+      clearInterval(keepalive);
+      sseClients.delete(client);
+    });
+
+    // Hold the stream open indefinitely
+    await new Promise(() => {});
+  });
+});
+
 // ─── Captive Portal Clearance ────────────────────────────
 
 // Client-side JS calls this on page load to clear the portal for this device.
@@ -337,6 +386,17 @@ app.post('/api/badge', async (c) => {
 
     // Clear captive portal for this IP — OS will stop nagging about "no internet"
     markPortalCleared(ip);
+
+    // Broadcast to all connected org chart viewers via SSE
+    broadcastNewBadge({
+      employeeId: result.employeeId,
+      name: cleanName,
+      department: clampField(department.trim().toUpperCase()),
+      title: cleanTitle,
+      accessLevel: clampField(accessLevel.trim().toUpperCase()),
+      accessCss: clampField(accessCss.trim()),
+      isBandMember: false,
+    });
 
     return c.json({
       success: true,

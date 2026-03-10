@@ -1361,3 +1361,207 @@ body {
 @view-transition {
   navigation: auto;
 }
+
+/* ==========================================================
+   25. STOCK TICKER BANNER
+   ========================================================== */
+.ticker-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: #12121a;
+  border-top: 1px solid #2E7DFF33;
+  overflow: hidden;
+  z-index: 100;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: #b0b8c4;
+}
+.ticker-track {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  white-space: nowrap;
+  animation: tickerScroll 60s linear infinite;
+  will-change: transform;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+@keyframes tickerScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 6px;
+}
+.ticker-sep {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #3A3A44;
+  margin: 0 4px;
+}
+.ticker-up {
+  color: #4ADE80;
+}
+.ticker-label {
+  color: #6b7280;
+}
+.ticker-value {
+  color: #e5e7eb;
+}
+.ticker-highlight {
+  color: #2E7DFF;
+  font-weight: 600;
+}
+.ticker-new {
+  color: #FFC134;
+  font-weight: 600;
+}
+
+/* ==========================================================
+   26. TERMINAL ONBOARDING ANIMATION
+   ========================================================== */
+.terminal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.terminal-overlay.active {
+  opacity: 1;
+}
+.terminal-box {
+  background: #0a0a0a;
+  border: 1px solid #2E7DFF44;
+  border-radius: 8px;
+  padding: 24px 32px;
+  max-width: 560px;
+  width: 90%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #4ADE80;
+  box-shadow: 0 0 40px rgba(46, 125, 255, 0.15);
+}
+.terminal-box .term-prompt {
+  color: #6b7280;
+}
+.terminal-box .term-label {
+  color: #2E7DFF;
+}
+.terminal-box .term-value {
+  color: #e5e7eb;
+}
+.terminal-box .term-warn {
+  color: #FFC134;
+}
+.terminal-box .term-success {
+  color: #4ADE80;
+  font-weight: 600;
+}
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: #4ADE80;
+  animation: blink 0.8s step-end infinite;
+  vertical-align: middle;
+  margin-left: 2px;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+.terminal-progress {
+  display: inline-block;
+  color: #2E7DFF;
+}
+
+/* ==========================================================
+   27. SPOTLIGHT MODE
+   ========================================================== */
+.orgchart-dimmed .badge-grid-card {
+  filter: brightness(0.3);
+  transition: filter 0.5s ease;
+}
+.orgchart-dimmed .badge-grid-card.spotlight-active {
+  filter: brightness(1);
+  box-shadow: 0 0 20px rgba(46, 125, 255, 0.5), 0 0 40px rgba(46, 125, 255, 0.2);
+  transform: scale(1.05);
+  transition: filter 0.5s ease, box-shadow 0.5s ease, transform 0.5s ease;
+  z-index: 10;
+  position: relative;
+}
+
+/* ==========================================================
+   28. DONUT CHART
+   ========================================================== */
+.orgchart-donut-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 12px auto 0;
+  max-width: 320px;
+}
+.orgchart-donut {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+}
+.orgchart-donut::after {
+  content: attr(data-total);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e5e7eb;
+  background: #1C1C22;
+  border-radius: 50%;
+  margin: 16px;
+}
+.donut-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: #9ca3af;
+}
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.donut-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ==========================================================
+   29. LIVE VIZ SPACING
+   ========================================================== */
+/* Prevent ticker from overlapping bottom badge cards */
+.public-orgchart {
+  padding-bottom: 48px;
+}
