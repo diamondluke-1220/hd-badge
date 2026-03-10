@@ -1,0 +1,25 @@
+# Data (mounted as volume)
+data/
+
+# Dependencies (rebuilt in container)
+node_modules/
+
+# Git
+.git
+.github
+
+# Development files
+docs/
+scripts/
+*.md
+*.log
+*.pid
+*.cjs
+
+# Shell scripts (not needed in container)
+start.sh
+stop.sh
+status.sh
+
+# OS
+.DS_Store

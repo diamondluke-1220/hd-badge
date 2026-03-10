@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>HelpDeskBadge</Name>
+  <Repository>ghcr.io/diamondluke-1220/hd-badge:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/diamondluke-1220/hd-badge</Support>
+  <Overview>
+    Help Desk Badge Generator — Employee badge creator for punk rock shows.
+    Fans create custom ID badges, join the org chart, and download their badges.
+  </Overview>
+  <Category>Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:3000]</WebUI>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+
+  <!-- Port mapping -->
+  <Config Name="Web UI Port" Target="3000" Default="3000" Mode="tcp" Description="Badge app web interface port" Type="Port" Display="always" Required="true">3000</Config>
+
+  <!-- Data volume -->
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/hd-badge" Mode="rw" Description="Persistent data (SQLite database, photos, badges, thumbnails)" Type="Path" Display="always" Required="true">/mnt/user/appdata/hd-badge</Config>
+
+  <!-- Environment Variables -->
+  <Config Name="Admin Token" Target="ADMIN_TOKEN" Default="" Description="Bearer token for admin panel access. Leave empty to disable admin." Type="Variable" Display="always" Required="false"></Config>
+  <Config Name="Admin Local Only" Target="ADMIN_LOCAL_ONLY" Default="0" Description="Set to 1 to restrict admin to localhost only (disable when using Cloudflare Tunnel)" Type="Variable" Display="advanced" Required="false">0</Config>
+  <Config Name="Trust Proxy" Target="TRUST_PROXY" Default="1" Description="Trust X-Forwarded-For headers (enable when behind Cloudflare/nginx)" Type="Variable" Display="advanced" Required="false">1</Config>
+  <Config Name="Show Mode" Target="SHOW_MODE" Default="0" Description="Set to 1 for relaxed rate limits during live shows" Type="Variable" Display="always" Required="false">0</Config>
+  <Config Name="Port" Target="PORT" Default="3000" Description="Internal server port" Type="Variable" Display="advanced" Required="false">3000</Config>
+</Container>
