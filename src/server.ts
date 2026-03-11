@@ -850,6 +850,7 @@ process.on('SIGINT', () => { closeDb(); process.exit(0); });
 
 export default {
   port,
+  idleTimeout: 120, // seconds — prevent Bun from killing SSE connections (default 10s)
   fetch(req: Request, server: any): Response | Promise<Response> {
     const url = new URL(req.url);
 

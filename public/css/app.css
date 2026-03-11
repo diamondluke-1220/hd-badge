@@ -1490,6 +1490,24 @@ body {
 }
 
 /* ==========================================================
+   26b. SSE CARD ENTRANCE (new badge via live event)
+   ========================================================== */
+@keyframes sseEntrance {
+  0%   { opacity: 0; transform: scale(0.85) translateY(16px); }
+  60%  { opacity: 1; transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.badge-grid-card.sse-new {
+  animation: sseEntrance 3s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge-grid-card.sse-new {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* ==========================================================
    27. SPOTLIGHT MODE
    ========================================================== */
 .orgchart-dimmed .badge-grid-card {

@@ -69,7 +69,8 @@ window.Win98Renderer = {
     // After 3s, remove dialog and add file to active folder (or desktop)
     return new Promise((resolve) => {
       const bar = dialog.querySelector('.win98-progress-fill');
-      if (bar) bar.style.width = '100%';
+      // RAF ensures browser paints width:0% first, then transitions to 100% over 3s
+      if (bar) requestAnimationFrame(() => requestAnimationFrame(() => { bar.style.width = '100%'; }));
 
       setTimeout(() => {
         // Change dialog text to "Complete!"

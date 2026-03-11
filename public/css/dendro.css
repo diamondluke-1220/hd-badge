@@ -93,10 +93,33 @@
   transform-box: fill-box;
 }
 
+/* ─── Ping Trace Animation ────────────────────────────── */
+
+.ping-dot {
+  pointer-events: none;
+  filter: url(#dendro-glow);
+}
+
+@keyframes ping-ring-expand {
+  0% { r: 12; opacity: 0.9; stroke-width: 3; }
+  100% { r: 28; opacity: 0; stroke-width: 0.5; }
+}
+
+.ping-ring {
+  animation: ping-ring-expand 1.5s ease-out forwards;
+  pointer-events: none;
+}
+
 /* ─── Reduced Motion ───────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .dendro-node-flash {
     animation: none;
+  }
+  .ping-ring {
+    animation: none;
+  }
+  .ping-dot {
+    display: none;
   }
 }

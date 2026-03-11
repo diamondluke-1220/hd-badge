@@ -76,6 +76,7 @@ window.GridRenderer = {
 
     const card = this._createBadgeCard(badge);
     card.setAttribute('data-employee-id', badge.employeeId);
+    card.classList.add('sse-new');
 
     if (!window._publicOrgDept) {
       // Division-grouped view: find the right division grid

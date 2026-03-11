@@ -68,17 +68,34 @@ window.DendroRenderer = {
   },
 
   addBadge(badge) {
-    if (!this._svg || !this._treeData || typeof d3 === 'undefined') return null;
+    if (!this._svg || !this._treeData || typeof d3 === 'undefined') {
+      console.log('[Dendro] addBadge bail: svg/tree/d3 missing');
+      return null;
+    }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
     const empKey = badge.employeeId;
 
     // Dedup
-    if (this._nodeIndex[empKey]) return null;
+    if (this._nodeIndex[empKey]) {
+      console.log('[Dendro] addBadge bail: dedup', empKey);
+      return null;
+    }
 
-    // Find the division node in tree
-    const divNode = this._treeData.children.find(c => c._divTheme === divTheme);
-    if (!divNode) return null;
+    // Find the division node in tree — create if it doesn't exist yet
+    let divNode = this._treeData.children.find(c => c._divTheme === divTheme);
+    if (!divNode) {
+      const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
+      divNode = {
+        name: divInfo ? divInfo.name : divTheme,
+        _type: 'division',
+        _divTheme: divTheme,
+        _color: this._COLORS[divTheme] || '#ffd700',
+        children: [],
+      };
+      this._treeData.children.push(divNode);
+      console.log('[Dendro] Created new division node:', divTheme);
+    }
 
     // Add employee as leaf
     const empNode = {
@@ -95,16 +112,9 @@ window.DendroRenderer = {
     // Re-render tree
     this._renderTree();
 
-    // Find the new node element and animate
+    // Find the new node element — animation handled by playPingTrace() in app.js
     const nodeEl = this._g.select(`[data-emp-id="${empKey}"]`).node();
-    if (nodeEl) {
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!reduced) {
-        nodeEl.classList.add('dendro-node-flash');
-        setTimeout(() => nodeEl.classList.remove('dendro-node-flash'), 1500);
-      }
-    }
-
+    console.log('[Dendro] addBadge result:', empKey, divTheme, nodeEl ? 'found' : 'NOT FOUND');
     return nodeEl;
   },
 
@@ -255,16 +265,15 @@ window.DendroRenderer = {
 
     treeLayout(root);
 
-    // Links — curved paths
+    // Links — curved paths (tagged with source/target for animation lookup)
     this._g.selectAll('path.dendro-link')
       .data(root.links())
       .join('path')
       .attr('class', 'dendro-link')
+      .attr('data-target-id', d => d.target.data._badge ? d.target.data._badge.employeeId : (d.target.data._divTheme || ''))
+      .attr('data-source-id', d => d.source.data._badge ? d.source.data._badge.employeeId : (d.source.data._divTheme || 'root'))
       .attr('d', d => {
-        return `M${d.source.y},${d.source.x}
-                C${(d.source.y + d.target.y) / 2},${d.source.x}
-                 ${(d.source.y + d.target.y) / 2},${d.target.x}
-                 ${d.target.y},${d.target.x}`;
+        return `M${d.source.y},${d.source.x} C${(d.source.y + d.target.y) / 2},${d.source.x} ${(d.source.y + d.target.y) / 2},${d.target.x} ${d.target.y},${d.target.x}`;
       })
       .attr('stroke', d => d.target.data._color || '#4b5563')
       .attr('stroke-opacity', d => d.target.data._type === 'employee' ? 0.3 : 0.5);

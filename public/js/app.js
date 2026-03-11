@@ -1320,15 +1320,41 @@ function queueLiveAnimation(badge) {
   if (!liveIsAnimating) processLiveQueue();
 }
 
+function getCurrentViewMode() {
+  if (currentRenderer === window.Win98Renderer) return 'win98';
+  if (currentRenderer === window.DendroRenderer) return 'dendro';
+  return 'grid';
+}
+
 async function processLiveQueue() {
   liveIsAnimating = true;
   while (liveAnimationQueue.length > 0) {
     const badge = liveAnimationQueue.shift();
     updateTicker(badge);
     updateDonut(badge);
-    await playTerminalAnimation(badge);
-    const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
-    if (card) await playSpotlight(card);
+
+    const mode = getCurrentViewMode();
+    console.log(`[SSE] Processing badge ${badge.employeeId} (${badge.name}) in ${mode} mode`);
+
+    if (mode === 'grid') {
+      // Grid: terminal CLI animation → add card → spotlight
+      await playTerminalAnimation(badge);
+      const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
+      console.log('[SSE] Grid addBadge returned:', card ? 'card' : 'null');
+      if (card) await playSpotlight(card);
+    } else if (mode === 'win98') {
+      // Win98: renderer handles its own download dialog animation
+      console.log('[SSE] Win98 addBadge...');
+      if (currentRenderer) await currentRenderer.addBadge(badge);
+    } else if (mode === 'dendro') {
+      // Dendro: network ping trace along tree branches → flash node
+      const nodeEl = currentRenderer ? currentRenderer.addBadge(badge) : null;
+      console.log('[SSE] Dendro addBadge returned:', nodeEl ? 'nodeEl' : 'null');
+      if (nodeEl) await playPingTrace(nodeEl);
+    } else {
+      // Fallback
+      const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
+    }
   }
   liveIsAnimating = false;
 }
@@ -1501,6 +1527,108 @@ function playSpotlight(card) {
       card.classList.remove('spotlight-active');
       resolve();
     }, 5000);
+  });
+}
+
+// --- Dendro Ping Trace Animation ---
+
+function playPingTrace(nodeEl) {
+  return new Promise((resolve) => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      resolve();
+      return;
+    }
+
+    const svg = nodeEl.closest('svg');
+    if (!svg) { resolve(); return; }
+    const g = svg.querySelector('g');
+    if (!g) { resolve(); return; }
+
+    const empId = nodeEl.getAttribute('data-emp-id');
+    if (!empId) { resolve(); return; }
+
+    // Find links using data attributes (tagged during _renderTree)
+    // Chain: root→division link, then division→employee link
+    const empLink = g.querySelector(`path.dendro-link[data-target-id="${empId}"]`);
+    const chain = [];
+
+    if (empLink) {
+      // Find the parent link (root → division)
+      const divTheme = empLink.getAttribute('data-source-id');
+      if (divTheme) {
+        const divLink = g.querySelector(`path.dendro-link[data-target-id="${divTheme}"]`);
+        if (divLink) chain.push(divLink);
+      }
+      chain.push(empLink);
+    }
+
+    if (chain.length === 0) {
+      // No path found — just flash the node directly
+      nodeEl.classList.add('dendro-node-flash');
+      setTimeout(() => { nodeEl.classList.remove('dendro-node-flash'); resolve(); }, 1500);
+      return;
+    }
+
+    // Animate a dot traveling along each link in sequence
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('r', '4');
+    dot.setAttribute('fill', '#00ff41');
+    dot.setAttribute('filter', 'url(#dendro-glow)');
+    dot.classList.add('ping-dot');
+    g.appendChild(dot);
+
+    let linkIdx = 0;
+
+    function animateLink() {
+      if (linkIdx >= chain.length) {
+        dot.remove();
+        nodeEl.classList.add('dendro-node-flash');
+        // Expanding glow ring
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('r', '18');
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', '#00ff41');
+        ring.setAttribute('stroke-width', '2');
+        ring.setAttribute('opacity', '0.8');
+        ring.classList.add('ping-ring');
+        nodeEl.appendChild(ring);
+        setTimeout(() => {
+          nodeEl.classList.remove('dendro-node-flash');
+          ring.remove();
+        }, 2000);
+        setTimeout(resolve, 2000);
+        return;
+      }
+
+      const path = chain[linkIdx];
+      const len = path.getTotalLength();
+      const duration = 3000;
+      const startTime = performance.now();
+
+      const origOpacity = path.getAttribute('stroke-opacity') || '0.3';
+      path.setAttribute('stroke-opacity', '0.9');
+
+      function step(now) {
+        const elapsed = now - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 2);
+        const pt = path.getPointAtLength(eased * len);
+        dot.setAttribute('cx', pt.x);
+        dot.setAttribute('cy', pt.y);
+
+        if (t < 1) {
+          requestAnimationFrame(step);
+        } else {
+          setTimeout(() => path.setAttribute('stroke-opacity', origOpacity), 300);
+          linkIdx++;
+          animateLink();
+        }
+      }
+
+      requestAnimationFrame(step);
+    }
+
+    animateLink();
   });
 }
 
