@@ -1765,7 +1765,7 @@ function playPingTrace(nodeEl) {
     // Animate a dot traveling along each link in sequence
     const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     dot.setAttribute('r', '4');
-    dot.setAttribute('fill', '#00ff41');
+    dot.setAttribute('fill', '#D4A843');
     dot.setAttribute('filter', 'url(#dendro-glow)');
     dot.classList.add('ping-dot');
     g.appendChild(dot);
@@ -1780,7 +1780,7 @@ function playPingTrace(nodeEl) {
         const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         ring.setAttribute('r', '18');
         ring.setAttribute('fill', 'none');
-        ring.setAttribute('stroke', '#00ff41');
+        ring.setAttribute('stroke', '#D4A843');
         ring.setAttribute('stroke-width', '2');
         ring.setAttribute('opacity', '0.8');
         ring.classList.add('ping-ring');

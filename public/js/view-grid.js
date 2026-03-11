@@ -13,7 +13,7 @@ window.GridRenderer = {
     // Org chart header
     container.innerHTML = `
       <div class="org-header">
-        <div class="org-header-title">Help Desk Inc.</div>
+        <div class="org-header-title">Help Desk <span class="org-header-accent">Inc.</span></div>
         <div class="org-header-sub">Employee Directory &bull; ${stats.visible} on payroll</div>
       </div>
       <div class="dept-filter-bar" id="deptFilterBar"></div>

@@ -142,11 +142,58 @@ Items identified during review but not part of the 12 prioritized fixes. Mostly 
 | R5 | `aria-sort` on sortable admin table headers | A11y | Low | Screen reader improvement for sortable columns |
 | R6 | Inline styles in admin.html → shared CSS | Code quality | Medium | Move inline styles to app.css or admin.css |
 | R7 | Design system documentation | Documentation | Low | Record color, type, spacing decisions for future reference |
-| R8 | Fluid typography (`clamp()`) for app chrome | Typography | Medium | Fixed px → responsive clamp() for popovers, org chart, admin |
-| R9 | Consistent UI text sizing | Typography | Low | Normalize 11/13/14px jumps to a deliberate type scale |
+| R8 | Fluid typography (`clamp()`) for app chrome | Typography | Medium | **PARTIAL (2026-03-11):** h1 uses `clamp(22px, 5vw, 28px)`. Popovers/admin still fixed px. |
+| R9 | Consistent UI text sizing | Typography | Low | **DONE (2026-03-11):** 9px eliminated entirely. Type scale normalized — grid title 11px, grid name 13px, division name 15px, nav 13px. See polish pass below. |
+
+---
+
+## Visual Polish Pass (2026-03-11)
+
+First-principles CSS analysis identified 7 categories of "AI-generated" aesthetic markers. 28 changes executed (all in app.css + minor HTML tweaks). **Not yet committed.**
+
+### Typography Scale
+- 9px text eliminated entirely (minimum now 10px, practical minimum 11px)
+- Badge grid: title 9→11px, name 11→13px
+- Division headers: name 13→15px, count 9→11px
+- Header h1: 24→28px (fluid via `clamp(22px, 5vw, 28px)`)
+- Nav links: 11→13px
+
+### Letter Spacing
+- Org header: 6→3px (was over-spaced — classic AI slop marker)
+- Division headers: 3→2px
+
+### Interactive States
+- `:active` press state on `.btn`/`.btn-sm` (scale 0.97), FABs (scale 0.96), badge grid cards (scale 0.98)
+- `:focus-visible` on FAB buttons
+- Asymmetric hover timing on badge grid cards (125ms ease-out in, 300ms ease-out out — premium design pattern)
+
+### Proportions
+- Nav link gap: 4→8px, padding increased
+- Header bottom border separator added (1px #2A2A32)
+- Badge grid card info padding: 5px/6px → 8px/10px
+- Badge grid gap: 10→12px
+
+### Color & Depth
+- Body: radial gradient (`ellipse at 50% 0%`, #1F2030→#1C1C22) replacing flat navy
+- Amber/gold accent (#D4A843) on header "Generator" and org chart "Inc."
+- Band member cards: green hover glow (#22C55E) instead of generic blue
+- Header h1 subtitle gets warm amber accent
+
+### Mobile (640px)
+- View switcher button padding meets 44px WCAG touch target
+- Department filter pill padding meets 44px touch target
+- Header h1 uses fluid sizing (clamp)
+- Logo height reduced on mobile (48→32px)
+- Ticker bar height/font reduced on mobile
+- Popover max-height increased to 60vh
+
+### Files Changed
+- `public/css/app.css` — all 28 CSS changes
+- `public/index.html` — amber accent span on header title
+- `public/js/view-grid.js` — amber accent span on org header
 
 ---
 
 ## Summary
 
-The badge app has two distinct quality levels. **The badge itself** is beautifully designed — the keycap header, binary overlay, waveform viz, and corporate parody aesthetic are genuinely creative and distinctive. **The app chrome around it** (popovers, org chart grid, admin dashboard) is catching up. As of 2026-03-09: admin dashboard aligned to main design language (blue accent, shared fonts, max-width), CSS organized with 23-section TOC, staggered grid animations added, `prefers-reduced-motion` accessibility support, skip links for keyboard nav, unified button system with focus states, and skeleton loading for org chart. 12 prioritized items addressed (10 DONE, 2 SKIPPED). 9 remaining polish items tracked in backlog above.
+The badge app has two distinct quality levels. **The badge itself** is beautifully designed — the keycap header, binary overlay, waveform viz, and corporate parody aesthetic are genuinely creative and distinctive. **The app chrome around it** (popovers, org chart grid, admin dashboard) is catching up. As of 2026-03-09: admin dashboard aligned to main design language (blue accent, shared fonts, max-width), CSS organized with 23-section TOC, staggered grid animations added, `prefers-reduced-motion` accessibility support, skip links for keyboard nav, unified button system with focus states, and skeleton loading for org chart. 12 prioritized items addressed (10 DONE, 2 SKIPPED). 9 remaining polish items tracked in backlog above (R8 partial, R9 done as of 2026-03-11 visual polish pass).

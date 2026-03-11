@@ -159,7 +159,7 @@ window.DendroRenderer = {
     const root = {
       name: 'HELP DESK INC.',
       _type: 'root',
-      _color: '#93B4F5',
+      _color: '#D4A843',
       children: [],
     };
 
@@ -260,7 +260,7 @@ window.DendroRenderer = {
 
     // Use tree layout (horizontal: root on left, leaves on right)
     const treeLayout = d3.tree()
-      .nodeSize([36, 180])
+      .nodeSize([42, 200])
       .separation((a, b) => a.parent === b.parent ? 1 : 1.4);
 
     treeLayout(root);
@@ -276,7 +276,9 @@ window.DendroRenderer = {
         return `M${d.source.y},${d.source.x} C${(d.source.y + d.target.y) / 2},${d.source.x} ${(d.source.y + d.target.y) / 2},${d.target.x} ${d.target.y},${d.target.x}`;
       })
       .attr('stroke', d => d.target.data._color || '#4b5563')
-      .attr('stroke-opacity', d => d.target.data._type === 'employee' ? 0.3 : 0.5);
+      .attr('stroke-opacity', d => d.target.data._type === 'employee' ? 0.25 : 0.6)
+      .attr('stroke-dasharray', d => d.target.data._type === 'employee' ? 'none' : 'none')
+      .attr('stroke-width', d => d.target.data._type === 'employee' ? 1.5 : 2);
 
     // Node groups
     const nodes = this._g.selectAll('g.dendro-node')
@@ -286,12 +288,12 @@ window.DendroRenderer = {
       .attr('data-emp-id', d => d.data._badge ? d.data._badge.employeeId : null)
       .attr('transform', d => `translate(${d.y},${d.x})`);
 
-    // Root node — large circle
+    // Root node — large circle with amber accent
     nodes.filter(d => d.data._type === 'root')
       .append('circle')
-      .attr('r', 20)
-      .attr('fill', '#0a0a0a')
-      .attr('stroke', '#93B4F5')
+      .attr('r', 24)
+      .attr('fill', '#0a0a0f')
+      .attr('stroke', '#D4A843')
       .attr('stroke-width', 3)
       .attr('filter', 'url(#dendro-glow)');
 
@@ -301,20 +303,26 @@ window.DendroRenderer = {
       .attr('dy', -28)
       .text(d => d.data.name);
 
-    // Division nodes — medium circles with glow
+    // Division nodes — rounded rectangles with glow
     nodes.filter(d => d.data._type === 'division')
-      .append('circle')
-      .attr('r', 14)
+      .append('rect')
+      .attr('x', -24)
+      .attr('y', -16)
+      .attr('width', 48)
+      .attr('height', 32)
+      .attr('rx', 8)
+      .attr('ry', 8)
       .attr('fill', d => d.data._color)
-      .attr('fill-opacity', 0.15)
+      .attr('fill-opacity', 0.12)
       .attr('stroke', d => d.data._color)
-      .attr('stroke-width', 2.5)
+      .attr('stroke-width', 2)
       .attr('filter', 'url(#dendro-glow)');
 
     nodes.filter(d => d.data._type === 'division')
       .append('text')
       .attr('class', 'dendro-label dendro-label-div')
-      .attr('dy', -20)
+      .attr('dy', -24)
+      .attr('fill', d => d.data._color)
       .text(d => d.data.name);
 
     // Division member count
@@ -335,29 +343,29 @@ window.DendroRenderer = {
         .attr('width', 1).attr('height', 1)
         .append('image')
         .attr('href', `/api/badge/${d.data._badge.employeeId}/thumb`)
-        .attr('width', 20)
-        .attr('height', 20)
+        .attr('width', 28)
+        .attr('height', 28)
         .attr('preserveAspectRatio', 'xMidYMid slice');
 
       d3.select(elems[i]).append('circle')
-        .attr('r', 10)
+        .attr('r', 14)
         .attr('fill', `url(#${patId})`)
         .attr('stroke', d.data._color)
-        .attr('stroke-width', 1.5);
+        .attr('stroke-width', 2);
     });
 
     // Employee name labels
     empNodes.append('text')
       .attr('class', 'dendro-label dendro-label-emp')
-      .attr('x', 16)
-      .attr('dy', 4)
+      .attr('x', 20)
+      .attr('dy', 2)
       .text(d => d.data.name);
 
     // Employee title labels
     empNodes.append('text')
       .attr('class', 'dendro-label-title')
-      .attr('x', 16)
-      .attr('dy', 16)
+      .attr('x', 20)
+      .attr('dy', 15)
       .text(d => d.data._badge ? d.data._badge.title : '');
 
     // Click handler for employees
