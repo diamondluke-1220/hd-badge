@@ -1569,10 +1569,10 @@ body {
   border: 1px solid rgba(212, 168, 67, 0.3);
   border-radius: 8px;
   padding: 24px 32px;
-  max-width: 560px;
+  max-width: 680px;
   width: 90%;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.8;
   color: #4ADE80;
   box-shadow: 0 0 40px rgba(212, 168, 67, 0.12), 0 0 80px rgba(212, 168, 67, 0.05);
@@ -1615,9 +1615,9 @@ body {
 /* ─── Badge Scan Animation ────────────────────────────── */
 .term-scan-wrap {
   position: relative;
-  width: 80px;
-  height: 80px;
-  margin: 12px auto 16px;
+  width: 200px;
+  height: 200px;
+  margin: 20px auto 24px;
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid rgba(212, 168, 67, 0.3);
@@ -1652,7 +1652,7 @@ body {
 }
 .term-scan-wrap.scanning .term-scanline {
   opacity: 1;
-  animation: scanSweep 1.5s ease-in-out forwards;
+  animation: scanSweep 2.5s ease-in-out forwards;
 }
 @keyframes scanSweep {
   0%   { top: 0; }
@@ -1668,6 +1668,12 @@ body {
   }
   .term-scan-wrap.scanning .term-scanline {
     animation: none;
+  }
+}
+@media (max-width: 480px) {
+  .term-scan-wrap {
+    width: 140px;
+    height: 140px;
   }
 }
 
@@ -1945,6 +1951,41 @@ body {
   background: rgba(147, 180, 245, 0.2);
   align-self: center;
   margin: 0 4px;
+}
+
+/* ─── Replay Stop FAB ─────────────────────────────────── */
+.replay-stop-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10001; /* above terminal-overlay */
+  padding: 10px 20px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid rgba(156, 163, 175, 0.25);
+  border-radius: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.3s ease, transform 0.3s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.replay-stop-fab.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.replay-stop-fab:hover {
+  color: #e5e7eb;
+  border-color: rgba(212, 168, 67, 0.5);
+}
+
+.view-switch-btn.anim-on {
+  color: #4ADE80;
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(74, 222, 128, 0.1);
 }
 
 .view-switch-btn.replay-active {

@@ -1253,6 +1253,10 @@ function buildViewSwitcher() {
     <button class="view-switch-btn" id="replayToggleBtn" title="Start Replay (R)">
       <span class="view-switch-icon">&#9654;</span> Replay <kbd>R</kbd>
     </button>
+    <span class="view-switch-divider"></span>
+    <button class="view-switch-btn ${animationsEnabled() ? 'anim-on' : ''}" id="animToggleBtn" title="${animationsEnabled() ? 'Animations On (A)' : 'Animations Off (A)'}">
+      <span class="view-switch-icon">&#10024;</span> FX <kbd>A</kbd>
+    </button>
   `;
 
   // Insert after nav
@@ -1260,6 +1264,9 @@ function buildViewSwitcher() {
 
   // Replay toggle handler
   document.getElementById('replayToggleBtn').addEventListener('click', toggleReplay);
+
+  // Animation toggle handler
+  document.getElementById('animToggleBtn').addEventListener('click', toggleAnimations);
 
   // Click handlers (skip replay — it has its own handler above)
   switcher.querySelectorAll('.view-switch-btn[data-mode]').forEach(btn => {
@@ -1274,6 +1281,7 @@ function buildViewSwitcher() {
     else if (e.key === '2') switchView('win98');
     else if (e.key === '3') switchView('dendro');
     else if (e.key === 'r' || e.key === 'R') toggleReplay();
+    else if (e.key === 'a' || e.key === 'A') toggleAnimations();
   });
 }
 
@@ -1489,11 +1497,13 @@ function scheduleNextReplay() {
     queueLiveAnimation(badge, true);
 
     // Wait for animation to finish, then schedule next
+    // When animations are off, add a short delay so badges don't flash instantly
+    const minDelay = animationsEnabled() ? 0 : 800;
     const waitForIdle = () => {
       if (liveIsAnimating) {
         setTimeout(waitForIdle, 200);
       } else {
-        scheduleNextReplay();
+        setTimeout(scheduleNextReplay, minDelay);
       }
     };
     waitForIdle();
@@ -1538,7 +1548,18 @@ function stopReplay() {
     }
   }
 
+  // Clear any in-flight terminal overlay
+  const overlay = document.querySelector('.terminal-overlay');
+  if (overlay) overlay.remove();
+
+  // Clear spotlight
+  const dimmed = document.querySelector('.orgchart-dimmed');
+  if (dimmed) dimmed.classList.remove('orgchart-dimmed');
+  const spotlight = document.querySelector('.spotlight-active');
+  if (spotlight) spotlight.classList.remove('spotlight-active');
+
   updateReplayButton();
+  removeReplayStopFAB();
 }
 
 function toggleReplay() {
@@ -1555,6 +1576,28 @@ function updateReplayButton() {
   btn.classList.toggle('active', replayActive);
   btn.classList.toggle('replay-active', replayActive);
   btn.title = replayActive ? 'Stop Replay (R)' : 'Start Replay (R)';
+
+  if (replayActive) showReplayStopFAB();
+  else removeReplayStopFAB();
+}
+
+function showReplayStopFAB() {
+  if (document.getElementById('replayStopFAB')) return;
+  const fab = document.createElement('button');
+  fab.id = 'replayStopFAB';
+  fab.className = 'replay-stop-fab';
+  fab.innerHTML = '&#9724; Stop';
+  fab.title = 'Stop Replay (R)';
+  fab.addEventListener('click', toggleReplay);
+  document.body.appendChild(fab);
+  requestAnimationFrame(() => fab.classList.add('visible'));
+}
+
+function removeReplayStopFAB() {
+  const fab = document.getElementById('replayStopFAB');
+  if (!fab) return;
+  fab.classList.remove('visible');
+  setTimeout(() => fab.remove(), 300);
 }
 
 // --- Stock Ticker Banner ---
@@ -1620,24 +1663,94 @@ function updateTicker(badge) {
   buildTickerContent();
 }
 
+// --- Animation Toggle ---
+
+function animationsEnabled() {
+  const stored = localStorage.getItem('hd-animations');
+  if (stored !== null) return stored === '1';
+  // Default: OFF on mobile, ON on desktop
+  return !window.matchMedia('(max-width: 768px)').matches;
+}
+
+function setAnimationsEnabled(enabled) {
+  localStorage.setItem('hd-animations', enabled ? '1' : '0');
+  const btn = document.getElementById('animToggleBtn');
+  if (btn) {
+    btn.classList.toggle('anim-on', enabled);
+    btn.title = enabled ? 'Animations On (A)' : 'Animations Off (A)';
+  }
+}
+
+function toggleAnimations() {
+  setAnimationsEnabled(!animationsEnabled());
+}
+
 // --- Terminal Onboarding Animation ---
 
-const TERMINAL_LINES = [
-  { type: 'prompt', text: '> INITIATING EMPLOYEE ONBOARDING PROTOCOL...' },
-  { type: 'scan' },
-  { type: 'progress' },
-  { type: 'data',   key: 'EMPLOYEE IDENTIFIED', field: 'name' },
-  { type: 'data',   key: 'TITLE',               field: 'title' },
-  { type: 'data',   key: 'DEPARTMENT',           field: 'department' },
-  { type: 'data',   key: 'CLEARANCE LEVEL',      field: 'accessLevel' },
-  { type: 'data',   key: 'EMPLOYEE ID',          field: 'employeeId' },
-  { type: 'warn',   text: '> WARNING: Employee has opinions. Proceed with caution.' },
-  { type: 'success', text: '> ONBOARDING COMPLETE. Welcome to the nightmare.' },
+const WARNING_MESSAGES = [
+  '> WARNING: Employee has opinions. Proceed with caution.',
+  '> WARNING: Subject has been known to reply-all. Quarantine recommended.',
+  '> WARNING: Clearance level does not include the good coffee.',
+  '> WARNING: Employee claims to "know a little Excel." Threat level: SEVERE.',
+  '> WARNING: Subject has strong feelings about open-plan offices.',
+  '> WARNING: Badge holder may attempt to "fix" the printer. Do not engage.',
+  '> WARNING: Employee insists their password is "very secure." It is not.',
+  '> WARNING: Subject has 47 unread emails. And counting.',
+  '> WARNING: This employee will ask you to restart your computer.',
+  '> WARNING: Detected residual energy from previous meeting. Proceed carefully.',
+  '> WARNING: Employee has submitted 14 VPN tickets this quarter. Alone.',
+  '> WARNING: Subject keeps saying "it worked on my machine."',
+  '> WARNING: Employee claims to love Mondays. Trust level: ZERO.',
 ];
+
+const COMPLETE_MESSAGES = [
+  '> ONBOARDING COMPLETE. Welcome to the nightmare.',
+  '> ONBOARDING COMPLETE. Your ticket has been closed without resolution.',
+  '> ONBOARDING COMPLETE. Please do not contact IT about this.',
+  '> ONBOARDING COMPLETE. Badge activated. Expectations deactivated.',
+  '> ONBOARDING COMPLETE. You are now someone else\'s problem.',
+  '> ONBOARDING COMPLETE. The Wi-Fi password is "Stop Asking."',
+  '> ONBOARDING COMPLETE. Your first meeting starts 5 minutes ago.',
+  '> ONBOARDING COMPLETE. Please submit a ticket to celebrate.',
+  '> ONBOARDING COMPLETE. Have you tried turning yourself off and on again?',
+  '> ONBOARDING COMPLETE. Welcome aboard. The printer is already broken.',
+  '> ONBOARDING COMPLETE. Added to 37 distribution lists. You\'re welcome.',
+  '> ONBOARDING COMPLETE. Your "temporary" desk is now permanent.',
+  '> ONBOARDING COMPLETE. Basically, they\'re Keanu Reeves.',
+];
+
+let _lastWarningIdx = -1;
+let _lastCompleteIdx = -1;
+
+function _pickRandom(arr, lastIdx) {
+  let idx;
+  do { idx = Math.floor(Math.random() * arr.length); } while (idx === lastIdx && arr.length > 1);
+  return idx;
+}
+
+function buildTerminalLines() {
+  const wIdx = _pickRandom(WARNING_MESSAGES, _lastWarningIdx);
+  const cIdx = _pickRandom(COMPLETE_MESSAGES, _lastCompleteIdx);
+  _lastWarningIdx = wIdx;
+  _lastCompleteIdx = cIdx;
+
+  return [
+    { type: 'prompt', text: '> INITIATING EMPLOYEE ONBOARDING PROTOCOL...' },
+    { type: 'scan' },
+    { type: 'progress' },
+    { type: 'data',   key: 'EMPLOYEE IDENTIFIED', field: 'name' },
+    { type: 'data',   key: 'TITLE',               field: 'title' },
+    { type: 'data',   key: 'DEPARTMENT',           field: 'department' },
+    { type: 'data',   key: 'CLEARANCE LEVEL',      field: 'accessLevel' },
+    { type: 'data',   key: 'EMPLOYEE ID',          field: 'employeeId' },
+    { type: 'warn',   text: WARNING_MESSAGES[wIdx] },
+    { type: 'success', text: COMPLETE_MESSAGES[cIdx] },
+  ];
+}
 
 function playTerminalAnimation(badge) {
   return new Promise((resolve) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!animationsEnabled() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       resolve();
       return;
     }
@@ -1651,6 +1764,7 @@ function playTerminalAnimation(badge) {
 
     requestAnimationFrame(() => overlay.classList.add('active'));
 
+    const termLines = buildTerminalLines();
     let lineIndex = 0;
     const lineDelay = 700;
 
@@ -1685,14 +1799,14 @@ function playTerminalAnimation(badge) {
           scanWrap.classList.add('scanning');
         });
 
-        // Scan takes 1.8s, then fade out
+        // Scan takes 2.8s, then fade out
         setTimeout(() => {
           scanWrap.classList.add('scan-done');
           setTimeout(() => {
             scanWrap.remove();
             scanResolve();
           }, 400);
-        }, 1800);
+        }, 2800);
       });
     }
 
@@ -1728,15 +1842,18 @@ function playTerminalAnimation(badge) {
     }
 
     function typeLine() {
-      if (lineIndex >= TERMINAL_LINES.length) {
+      if (lineIndex >= termLines.length) {
+        // Remove cursor, let the final lines breathe
+        const oldCursor = box.querySelector('.terminal-cursor');
+        if (oldCursor) oldCursor.remove();
         setTimeout(() => {
           overlay.classList.remove('active');
           setTimeout(() => { overlay.remove(); resolve(); }, 300);
-        }, 800);
+        }, 3500);
         return;
       }
 
-      const def = TERMINAL_LINES[lineIndex];
+      const def = termLines[lineIndex];
 
       if (def.type === 'scan') {
         lineIndex++;
@@ -1778,8 +1895,7 @@ function playTerminalAnimation(badge) {
 
 function playSpotlight(card) {
   return new Promise((resolve) => {
-    // Check reduced motion preference
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!animationsEnabled() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       resolve();
       return;
     }
@@ -1811,7 +1927,10 @@ function playSpotlight(card) {
 
 function playPingTrace(nodeEl) {
   return new Promise((resolve) => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (!animationsEnabled() || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      // Still mark as arrived so photo shows immediately
+      const empId = nodeEl.getAttribute('data-emp-id');
+      if (empId && window.DendroRenderer) window.DendroRenderer._arrived.add(empId);
       resolve();
       return;
     }
