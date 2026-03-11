@@ -1695,10 +1695,10 @@ body {
 .donut-legend {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 13px;
+  color: #CBD5E1;
 }
 .donut-legend-item {
   display: flex;
@@ -1712,15 +1712,16 @@ body {
   flex-shrink: 0;
 }
 .donut-legend-name {
-  color: #8899AA;
-  font-size: 10px;
+  color: #B0BEC5;
+  font-size: 12px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 .donut-legend-count {
-  color: #e5e7eb;
+  color: #F1F5F9;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
+  font-size: 13px;
 }
 
 /* --- Stats cards (shared) --- */
@@ -1733,9 +1734,9 @@ body {
 }
 .stats-card-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
-  color: #556677;
+  color: #93C5FD;
   letter-spacing: 2px;
   text-transform: uppercase;
   margin-bottom: 8px;
@@ -1757,22 +1758,22 @@ body {
 .newest-hire-name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 15px;
-  color: #e5e7eb;
+  font-size: 17px;
+  color: #F1F5F9;
   letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
 .newest-hire-dept {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: #8899AA;
+  font-size: 13px;
+  color: #B0BEC5;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
 }
 .newest-hire-time {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: #4ADE80;
   font-weight: 600;
 }
@@ -1797,8 +1798,8 @@ body {
 }
 .sparkline-empty {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: #556677;
+  font-size: 12px;
+  color: #8899AA;
   font-style: italic;
 }
 .sparkline-dot {
