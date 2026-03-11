@@ -17,6 +17,9 @@ window.DendroRenderer = {
   _nodeIndex: {},  // employeeId → tree node data
   _collapsed: new Set(), // division themes that are collapsed
   _COLLAPSE_THRESHOLD: 50, // auto-collapse when total badges exceed this
+  _pendingBadges: [],      // SSE badges awaiting batch render
+  _debounceTimer: null,    // debounce timer for batch SSE renders
+  _DEBOUNCE_MS: 2000,      // batch window for SSE re-renders
 
   // Division → color (matches network view)
   _COLORS: {
@@ -47,12 +50,18 @@ window.DendroRenderer = {
       return;
     }
 
-    // Fetch all badges
+    // Fetch all badges (paginated to handle 500+)
     let allBadges = [];
     try {
-      const resp = await fetch('/api/orgchart?page=1&limit=200');
-      const data = await resp.json();
-      allBadges = data.badges || [];
+      let page = 1;
+      let totalPages = 1;
+      while (page <= totalPages) {
+        const resp = await fetch(`/api/orgchart?page=${page}&limit=100`);
+        const data = await resp.json();
+        allBadges = allBadges.concat(data.badges || []);
+        totalPages = data.pages;
+        page++;
+      }
     } catch {
       container.innerHTML = '<div class="dendro-fallback">Failed to load employee data.</div>';
       return;
@@ -79,18 +88,18 @@ window.DendroRenderer = {
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
     const empKey = badge.employeeId;
 
-    // Auto-expand division if collapsed so new badge is visible
-    if (this._collapsed.has(divTheme)) {
-      this._collapsed.delete(divTheme);
-    }
-
     // Dedup
     if (this._nodeIndex[empKey]) {
       console.log('[Dendro] addBadge bail: dedup', empKey);
       return null;
     }
 
-    // Find the division node in tree — create if it doesn't exist yet
+    // Auto-expand division if collapsed so new badge is visible
+    if (this._collapsed.has(divTheme)) {
+      this._collapsed.delete(divTheme);
+    }
+
+    // Add to tree data immediately (so subsequent addBadge calls see it for dedup)
     let divNode = this._treeData.children.find(c => c._divTheme === divTheme);
     if (!divNode) {
       const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
@@ -105,7 +114,6 @@ window.DendroRenderer = {
       console.log('[Dendro] Created new division node:', divTheme);
     }
 
-    // Add employee as leaf
     const empNode = {
       name: badge.name,
       _type: 'employee',
@@ -117,18 +125,44 @@ window.DendroRenderer = {
     divNode.children.push(empNode);
     this._nodeIndex[empKey] = empNode;
 
-    // Re-render tree
+    // Queue for debounced batch render instead of immediate re-render
+    this._pendingBadges.push({ badge, empKey });
+
+    // If only 1 pending badge (first in batch), render immediately for responsiveness
+    if (this._pendingBadges.length === 1 && !this._debounceTimer) {
+      this._flushPendingBadges();
+    } else {
+      // Additional badges within debounce window — defer render
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = setTimeout(() => this._flushPendingBadges(), this._DEBOUNCE_MS);
+    }
+
+    // Return the node element (will exist after flush for first badge, null for queued)
+    const nodeEl = this._g.select(`[data-emp-id="${empKey}"]`).node();
+    console.log('[Dendro] addBadge result:', empKey, divTheme, nodeEl ? 'found' : 'queued');
+    return nodeEl;
+  },
+
+  _flushPendingBadges() {
+    clearTimeout(this._debounceTimer);
+    this._debounceTimer = null;
+
+    if (this._pendingBadges.length === 0) return;
+
+    const flushed = this._pendingBadges.splice(0);
+    console.log(`[Dendro] Batch render: ${flushed.length} badge(s)`);
+
+    // Single D3 re-render for all queued badges
     this._renderTree();
 
-    // Find the new node element — animation handled by playPingTrace() in app.js
-    const nodeEl = this._g.select(`[data-emp-id="${empKey}"]`).node();
-    console.log('[Dendro] addBadge result:', empKey, divTheme, nodeEl ? 'found' : 'NOT FOUND');
-    return nodeEl;
+    // Queue ping trace animations sequentially for each flushed badge
+    // (handled by processLiveQueue in app.js — the nodeEl lookup happens after render)
   },
 
   destroy() {
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
+    if (this._debounceTimer) { clearTimeout(this._debounceTimer); this._debounceTimer = null; }
     if (this._container) { this._container.innerHTML = ''; }
     this._container = null;
     this._stats = null;
@@ -139,6 +173,7 @@ window.DendroRenderer = {
     this._treeData = null;
     this._nodeIndex = {};
     this._collapsed = new Set();
+    this._pendingBadges = [];
   },
 
   // ─── Private helpers ────────────────────────────────────

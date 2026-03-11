@@ -17,29 +17,20 @@ window.Win98Renderer = {
     this._container = container;
     this._stats = stats;
     this._badges = {};
+    this._divCounts = {};  // { divTheme: count } from stats
     this._activeFolder = null;
 
     // Load 98.css dynamically
     await this._loadCSS();
 
-    // Fetch all badges
-    let allBadges = [];
-    try {
-      const resp = await fetch('/api/orgchart?page=1&limit=200');
-      const data = await resp.json();
-      allBadges = data.badges || [];
-    } catch {
-      container.innerHTML = '<div class="no-badges-msg">Failed to load employee data.</div>';
-      return;
+    // Compute division counts from stats (no badge fetch needed)
+    PUBLIC_DIVISIONS.forEach(d => { this._badges[d.theme] = []; this._divCounts[d.theme] = 0; });
+    if (stats.byDepartment) {
+      Object.entries(stats.byDepartment).forEach(([dept, count]) => {
+        const divTheme = getDivisionForDept(dept, BAND_DEPTS.has(dept));
+        this._divCounts[divTheme] = (this._divCounts[divTheme] || 0) + count;
+      });
     }
-
-    // Group by division
-    PUBLIC_DIVISIONS.forEach(d => { this._badges[d.theme] = []; });
-    allBadges.forEach(badge => {
-      const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-      if (!this._badges[divTheme]) this._badges[divTheme] = [];
-      this._badges[divTheme].push(badge);
-    });
 
     // Update shared stats
     window._tickerTotalHires = stats.visible || 0;
@@ -59,6 +50,7 @@ window.Win98Renderer = {
     // Dedup
     if (this._badges[divTheme].some(b => b.employeeId === badge.employeeId)) return null;
     this._badges[divTheme].push(badge);
+    this._divCounts[divTheme] = (this._divCounts[divTheme] || 0) + 1;
 
     // If we have the download dialog container, show the animation
     const desktop = this._container.querySelector('.win98-desktop');
@@ -98,7 +90,7 @@ window.Win98Renderer = {
           if (iconEl) {
             const div = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
             if (div) {
-              iconEl.textContent = `${div.name} (${this._badges[divTheme].length})`;
+              iconEl.textContent = `${div.name} (${this._divCounts[divTheme] || 0})`;
             }
           } else {
             // First badge in this division — create desktop icon dynamically
@@ -176,7 +168,7 @@ window.Win98Renderer = {
 
     // Division folders — hide empty divisions
     PUBLIC_DIVISIONS.forEach(div => {
-      const count = this._badges[div.theme]?.length || 0;
+      const count = this._divCounts[div.theme] || 0;
       if (count === 0) return; // skip empty divisions
       iconArea.appendChild(this._createDesktopIcon(
         '📁', `${div.name} (${count})`, () => this._openFolder(div),
@@ -283,7 +275,7 @@ window.Win98Renderer = {
     }, 50);
   },
 
-  _openFolder(div, page) {
+  async _openFolder(div, page) {
     this._activeFolder = div.theme;
     this._folderPage = page || 1;
 
@@ -291,11 +283,27 @@ window.Win98Renderer = {
     const existing = this._container.querySelector('.win98-window');
     if (existing) existing.remove();
 
-    const badges = this._badges[div.theme] || [];
-    const totalPages = Math.max(1, Math.ceil(badges.length / this._PAGE_SIZE));
+    // Fetch this division's badges from server, paginated
+    const divName = PUBLIC_DIVISIONS.find(d => d.theme === div.theme)?.name || div.name;
+    let pageBadges = [];
+    let totalCount = this._divCounts[div.theme] || 0;
+    let totalPages = 1;
+
+    try {
+      const resp = await fetch(`/api/orgchart?division=${encodeURIComponent(divName)}&page=${this._folderPage}&limit=${this._PAGE_SIZE}`);
+      const data = await resp.json();
+      pageBadges = data.badges || [];
+      totalCount = data.total;
+      totalPages = data.pages;
+    } catch {
+      // Fall back to any cached badges
+      const cached = this._badges[div.theme] || [];
+      totalPages = Math.max(1, Math.ceil(cached.length / this._PAGE_SIZE));
+      const start = (this._folderPage - 1) * this._PAGE_SIZE;
+      pageBadges = cached.slice(start, start + this._PAGE_SIZE);
+    }
+
     if (this._folderPage > totalPages) this._folderPage = totalPages;
-    const start = (this._folderPage - 1) * this._PAGE_SIZE;
-    const pageBadges = badges.slice(start, start + this._PAGE_SIZE);
 
     const win = document.createElement('div');
     win.className = 'win98-window window';
@@ -303,7 +311,7 @@ window.Win98Renderer = {
     const pageInfo = totalPages > 1 ? ` — Page ${this._folderPage} of ${totalPages}` : '';
     win.innerHTML = `
       <div class="title-bar">
-        <div class="title-bar-text">📁 ${esc(div.name)} — ${badges.length} employees</div>
+        <div class="title-bar-text">📁 ${esc(div.name)} — ${totalCount} employees</div>
         <div class="title-bar-controls">
           <button aria-label="Minimize"></button>
           <button aria-label="Maximize"></button>
@@ -313,7 +321,7 @@ window.Win98Renderer = {
       <div class="window-body">
         <div class="win98-explorer-toolbar">
           <span class="win98-explorer-path">C:\\HELPDESK\\${div.name.replace(/ /g, '_')}\\</span>
-          <span class="win98-explorer-count">${badges.length} object(s)${pageInfo}</span>
+          <span class="win98-explorer-count">${totalCount} object(s)${pageInfo}</span>
         </div>
         <div class="win98-file-grid"></div>
         ${totalPages > 1 ? '<div class="win98-explorer-pager"></div>' : ''}
@@ -332,7 +340,7 @@ window.Win98Renderer = {
       grid.appendChild(this._createFileIcon(badge));
     });
 
-    if (badges.length === 0) {
+    if (totalCount === 0) {
       grid.innerHTML = '<div class="win98-empty-folder">This folder is empty.</div>';
     }
 

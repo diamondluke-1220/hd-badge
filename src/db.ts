@@ -271,10 +271,12 @@ export function listBadges(options: {
   hasPhoto?: boolean;
   page?: number;
   limit?: number;
+  maxLimit?: number;
   includeHidden?: boolean;
 }): { badges: BadgeRow[]; total: number; page: number; pages: number } {
   const page = options.page || 1;
-  const limit = Math.min(options.limit || 50, 100);
+  const cap = options.maxLimit || 100;
+  const limit = Math.min(options.limit || 50, cap);
   const offset = (page - 1) * limit;
 
   // Build dynamic WHERE clause for advanced filters

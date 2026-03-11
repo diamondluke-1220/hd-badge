@@ -158,9 +158,9 @@ window.GridRenderer = {
     grid.className = 'badge-grid';
     for (let i = 0; i < count; i++) {
       const card = document.createElement('div');
-      card.className = 'skeleton-card';
+      card.className = 'skeleton-card compact';
       card.innerHTML = `
-        <div class="skeleton-img"></div>
+        <div class="skeleton-photo"></div>
         <div class="skeleton-info">
           <div class="skeleton-line skeleton-line-name"></div>
           <div class="skeleton-line skeleton-line-title"></div>
@@ -183,7 +183,7 @@ window.GridRenderer = {
     }
     loadMoreArea.innerHTML = '';
 
-    let url = `/api/orgchart?page=${window._publicOrgPage}&limit=48`;
+    let url = `/api/orgchart?page=${window._publicOrgPage}&limit=60`;
     if (window._publicOrgDept) url += `&department=${encodeURIComponent(window._publicOrgDept)}`;
 
     let data;
@@ -271,10 +271,15 @@ window.GridRenderer = {
 
   _createBadgeCard(badge) {
     const card = document.createElement('div');
-    card.className = 'badge-grid-card' + (badge.isBandMember ? ' band-member' : '');
+    card.className = 'badge-grid-card compact' + (badge.isBandMember ? ' band-member' : '');
     card.setAttribute('data-employee-id', badge.employeeId);
+    const initials = (badge.name || '?').charAt(0).toUpperCase();
     card.innerHTML = `
-      <img class="badge-grid-img" src="/api/badge/${esc(badge.employeeId)}/thumb" alt="${esc(badge.name)}" loading="lazy">
+      <div class="badge-grid-photo">
+        <img class="badge-grid-avatar" src="/api/badge/${esc(badge.employeeId)}/thumb" alt="${esc(badge.name)}" loading="lazy"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="badge-grid-fallback" style="display:none">${initials}</div>
+      </div>
       <div class="badge-grid-info">
         <div class="badge-grid-name">${esc(badge.name)}</div>
         <div class="badge-grid-title">${esc(badge.title)}</div>

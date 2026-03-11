@@ -577,10 +577,11 @@ app.delete('/api/badge/:id', (c) => {
 // Public org chart listing
 app.get('/api/orgchart', (c) => {
   const department = c.req.query('department') || undefined;
+  const division = c.req.query('division') || undefined;
   const page = parseInt(c.req.query('page') || '1', 10);
   const limit = parseInt(c.req.query('limit') || '50', 10);
 
-  const result = listBadges({ department, page, limit });
+  const result = listBadges({ department, division, page, limit });
 
   return c.json({
     badges: result.badges.map(b => ({
@@ -604,7 +605,7 @@ app.get('/api/orgchart', (c) => {
 
 // Replay mode: all visible badges for weighted animation loop
 app.get('/api/badges/replay', (c) => {
-  const result = listBadges({ page: 1, limit: 9999 });
+  const result = listBadges({ page: 1, limit: 5000, maxLimit: 5000 });
 
   return c.json({
     badges: result.badges.map(b => ({

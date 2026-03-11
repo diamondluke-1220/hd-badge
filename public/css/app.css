@@ -1114,19 +1114,21 @@ body {
   margin-top: 4px;
 }
 
-/* Badge grid */
+/* Badge grid — compact photo-circle cards */
 .badge-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 12px;
 }
 .badge-grid-card {
   background: #2A2A32;
   border: 1px solid #3A3A44;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
   transition: transform 300ms ease-out, border-color 300ms ease-out, box-shadow 300ms ease-out;
+  text-align: center;
+  padding: 14px 8px 10px;
 }
 .badge-grid-card:hover {
   border-color: #5B8DEF;
@@ -1146,29 +1148,59 @@ body {
   border-color: #22C55E;
   box-shadow: 0 4px 16px rgba(34,197,94,0.2), 0 2px 8px rgba(0,0,0,0.3);
 }
-.badge-grid-img {
+.badge-grid-photo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #1C1C22;
+  border: 2px solid #3A3A44;
+}
+.badge-grid-card.band-member .badge-grid-photo {
+  border-color: rgba(27,107,42,0.6);
+}
+.badge-grid-avatar {
   width: 100%;
-  aspect-ratio: 1276 / 2026;
+  height: 100%;
   object-fit: cover;
+  object-position: top center;
   display: block;
+}
+.badge-grid-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: 28px;
+  color: #556677;
   background: #1C1C22;
 }
 .badge-grid-info {
-  padding: 8px 10px;
+  padding: 0 4px;
 }
 .badge-grid-name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 13px;
+  font-size: 12px;
   color: white;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .badge-grid-title {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  font-size: 10px;
   color: #8899AA;
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .load-more-btn {
   display: block;
@@ -1280,17 +1312,21 @@ body {
   }
 
   .badge-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .badge-grid-card {
+    padding: 10px 6px 8px;
+  }
+  .badge-grid-photo {
+    width: 56px;
+    height: 56px;
   }
   .badge-grid-name {
-    font-size: 12px;
+    font-size: 11px;
   }
   .badge-grid-title {
-    font-size: 10px;
-  }
-  .badge-grid-info {
-    padding: 6px 8px;
+    font-size: 9px;
   }
 
   .dept-filter-btn {
@@ -1317,17 +1353,24 @@ body {
   }
 }
 
-/* Tablet — 3 columns */
+/* Tablet — 4 columns */
 @media (min-width: 641px) and (max-width: 900px) {
   .badge-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
-/* Small desktop — 4 columns */
+/* Small desktop — 5 columns */
 @media (min-width: 901px) and (max-width: 1100px) {
   .badge-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
+/* Large desktop — 8 columns */
+@media (min-width: 1400px) {
+  .badge-grid {
+    grid-template-columns: repeat(8, 1fr);
   }
 }
 
@@ -1408,22 +1451,27 @@ body {
 .skeleton-card {
   background: #2A2A32;
   border: 1px solid #3A3A44;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
+  text-align: center;
+  padding: 14px 8px 10px;
 }
-.skeleton-img {
-  width: 100%;
-  aspect-ratio: 1276 / 2026;
+.skeleton-photo {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 8px;
+  border-radius: 50%;
   background: linear-gradient(90deg, #2A2A32 25%, #3A3A44 50%, #2A2A32 75%);
   background-size: 800px 100%;
   animation: shimmer 1.5s infinite linear;
 }
 .skeleton-info {
-  padding: 5px 6px;
+  padding: 0 4px;
 }
 .skeleton-line {
   height: 11px;
   border-radius: 4px;
+  margin: 0 auto;
   background: linear-gradient(90deg, #2A2A32 25%, #3A3A44 50%, #2A2A32 75%);
   background-size: 800px 100%;
   animation: shimmer 1.5s infinite linear;
