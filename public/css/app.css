@@ -1270,10 +1270,10 @@ body {
   }
 
   .preview-wrapper {
-    height: 700px;
+    height: 580px;
   }
   .badge-preview-scaled {
-    transform: scale(0.34);
+    transform: scale(0.28);
     margin-left: -638px;
   }
 

@@ -72,21 +72,7 @@
 }
 .badge .navy-stripe::before,
 .badge .navy-stripe::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  width: 180px;
-  height: 100%;
-  z-index: 2;
-  pointer-events: none;
-}
-.badge .navy-stripe::before {
-  left: 0;
-  background: linear-gradient(90deg, #0A1F3F 0%, transparent 100%);
-}
-.badge .navy-stripe::after {
-  right: 0;
-  background: linear-gradient(270deg, #0A1F3F 0%, transparent 100%);
+  display: none;
 }
 .badge .stripe-keys {
   position: absolute;
