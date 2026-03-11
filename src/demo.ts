@@ -20,6 +20,10 @@ const DEPARTMENTS = [
   { name: 'MOSH PIT HR', css: 'mosh' },
   { name: 'ENTERPRISE GUITAR WORSHIP', css: 'guitar' },
   { name: 'STAGE DIVE RISK ASSESSMENT', css: 'stage' },
+  // Custom departments → INDEPENDENT CONTRACTORS division
+  { name: 'VENDING MACHINE DIPLOMACY', css: '' },
+  { name: 'REPLY-ALL CONTAINMENT', css: '' },
+  { name: 'PARKING LOT JUSTICE LEAGUE', css: '' },
 ];
 
 const TITLES = [

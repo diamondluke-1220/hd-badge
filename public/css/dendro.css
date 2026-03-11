@@ -20,6 +20,7 @@
 .dendro-link {
   fill: none;
   stroke-width: 1.5;
+  transition: stroke-opacity 0.3s ease, stroke-width 0.3s ease;
 }
 
 /* ─── Labels ───────────────────────────────────────────── */
@@ -43,6 +44,13 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.8px;
+}
+
+.dendro-label-dept {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  pointer-events: none;
 }
 
 .dendro-label-count {
@@ -79,26 +87,40 @@
   font-size: 14px;
 }
 
-/* ─── New Badge Animation ──────────────────────────────── */
+/* ─── Awaiting Badge (empty placeholder) ──────────────── */
 
-@keyframes dendro-flash-in {
-  0% { opacity: 0; transform: scale(0.3); }
-  50% { opacity: 1; transform: scale(1.2); }
-  100% { opacity: 1; transform: scale(1); }
+@keyframes dendro-await-pulse {
+  0%, 100% { stroke-opacity: 0.3; }
+  50%      { stroke-opacity: 0.7; }
 }
 
-.dendro-node-flash {
-  animation: dendro-flash-in 0.6s ease-out;
+.dendro-awaiting {
+  animation: dendro-await-pulse 2s ease-in-out infinite;
+}
+
+/* ─── Ping Photo Travel ───────────────────────────────── */
+
+.ping-photo {
+  pointer-events: none;
+}
+
+/* ─── Arrival Glow (replaces flash-in) ────────────────── */
+
+@keyframes dendro-arrival-pulse {
+  0%   { filter: drop-shadow(0 0 0px transparent); }
+  25%  { filter: drop-shadow(0 0 8px currentColor); }
+  50%  { filter: drop-shadow(0 0 2px currentColor); }
+  75%  { filter: drop-shadow(0 0 10px currentColor); }
+  100% { filter: drop-shadow(0 0 0px transparent); }
+}
+
+.dendro-arrival-glow {
+  animation: dendro-arrival-pulse 2.5s ease-in-out;
   transform-origin: center;
   transform-box: fill-box;
 }
 
-/* ─── Ping Trace Animation ────────────────────────────── */
-
-.ping-dot {
-  pointer-events: none;
-  filter: url(#dendro-glow);
-}
+/* ─── Ping Ring Expand ────────────────────────────────── */
 
 @keyframes ping-ring-expand {
   0% { r: 12; opacity: 0.9; stroke-width: 3; }
@@ -113,13 +135,16 @@
 /* ─── Reduced Motion ───────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
-  .dendro-node-flash {
+  .dendro-awaiting {
+    animation: none;
+  }
+  .dendro-arrival-glow {
     animation: none;
   }
   .ping-ring {
     animation: none;
   }
-  .ping-dot {
+  .ping-photo {
     display: none;
   }
 }

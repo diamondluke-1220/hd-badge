@@ -1181,8 +1181,13 @@ async function switchView(mode) {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
 
-  // Initialize new renderer
-  if (orgChartContainer && orgChartStats) {
+  // Re-fetch stats so newest hire / counts reflect current state
+  if (orgChartContainer) {
+    try {
+      const resp = await fetch('/api/orgchart/stats');
+      orgChartStats = await resp.json();
+    } catch { /* use stale stats as fallback */ }
+
     orgChartContainer.innerHTML = '';
     await currentRenderer.init(orgChartContainer, orgChartStats);
   }
@@ -1619,7 +1624,8 @@ function updateTicker(badge) {
 
 const TERMINAL_LINES = [
   { type: 'prompt', text: '> INITIATING EMPLOYEE ONBOARDING PROTOCOL...' },
-  { type: 'prompt', text: '> SCANNING BADGE... [████████████████] 100%' },
+  { type: 'scan' },
+  { type: 'progress' },
   { type: 'data',   key: 'EMPLOYEE IDENTIFIED', field: 'name' },
   { type: 'data',   key: 'TITLE',               field: 'title' },
   { type: 'data',   key: 'DEPARTMENT',           field: 'department' },
@@ -1631,7 +1637,6 @@ const TERMINAL_LINES = [
 
 function playTerminalAnimation(badge) {
   return new Promise((resolve) => {
-    // Check reduced motion preference
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       resolve();
       return;
@@ -1647,11 +1652,83 @@ function playTerminalAnimation(badge) {
     requestAnimationFrame(() => overlay.classList.add('active'));
 
     let lineIndex = 0;
-    const lineDelay = 700; // ms per line — 9 lines × 700ms ≈ 6.3s total
+    const lineDelay = 700;
+
+    function addCursor(parentEl) {
+      const oldCursor = box.querySelector('.terminal-cursor');
+      if (oldCursor) oldCursor.remove();
+      const cursor = document.createElement('span');
+      cursor.className = 'terminal-cursor';
+      parentEl.appendChild(cursor);
+    }
+
+    // --- Badge Scan Animation ---
+    function playScanPhase() {
+      return new Promise((scanResolve) => {
+        const scanWrap = document.createElement('div');
+        scanWrap.className = 'term-scan-wrap';
+
+        const badgeImg = document.createElement('img');
+        badgeImg.src = `/api/badge/${badge.employeeId}/thumb`;
+        badgeImg.className = 'term-scan-badge';
+        badgeImg.alt = 'Badge';
+
+        const scanLine = document.createElement('div');
+        scanLine.className = 'term-scanline';
+
+        scanWrap.appendChild(badgeImg);
+        scanWrap.appendChild(scanLine);
+        box.appendChild(scanWrap);
+
+        // Start scan animation
+        requestAnimationFrame(() => {
+          scanWrap.classList.add('scanning');
+        });
+
+        // Scan takes 1.8s, then fade out
+        setTimeout(() => {
+          scanWrap.classList.add('scan-done');
+          setTimeout(() => {
+            scanWrap.remove();
+            scanResolve();
+          }, 400);
+        }, 1800);
+      });
+    }
+
+    // --- Progress Bar Animation ---
+    function playProgressBar() {
+      return new Promise((barResolve) => {
+        const line = document.createElement('div');
+        const totalBlocks = 20;
+        const duration = 2500; // 2.5 seconds
+        const interval = duration / totalBlocks;
+        let filled = 0;
+
+        function renderBar() {
+          const filledStr = '\u2588'.repeat(filled);
+          const emptyStr = '\u2591'.repeat(totalBlocks - filled);
+          const pct = Math.round((filled / totalBlocks) * 100);
+          line.innerHTML = `<span class="term-prompt">&gt; SCANNING BADGE... [</span><span class="term-progress">${filledStr}${emptyStr}</span><span class="term-prompt">] ${pct}%</span>`;
+          addCursor(line);
+        }
+
+        renderBar();
+        box.appendChild(line);
+
+        const timer = setInterval(() => {
+          filled++;
+          renderBar();
+          if (filled >= totalBlocks) {
+            clearInterval(timer);
+            setTimeout(barResolve, 400);
+          }
+        }, interval);
+      });
+    }
 
     function typeLine() {
       if (lineIndex >= TERMINAL_LINES.length) {
-        // Done — auto-dismiss after brief pause
         setTimeout(() => {
           overlay.classList.remove('active');
           setTimeout(() => { overlay.remove(); resolve(); }, 300);
@@ -1660,6 +1737,19 @@ function playTerminalAnimation(badge) {
       }
 
       const def = TERMINAL_LINES[lineIndex];
+
+      if (def.type === 'scan') {
+        lineIndex++;
+        playScanPhase().then(typeLine);
+        return;
+      }
+
+      if (def.type === 'progress') {
+        lineIndex++;
+        playProgressBar().then(typeLine);
+        return;
+      }
+
       const line = document.createElement('div');
 
       if (def.type === 'prompt') {
@@ -1674,13 +1764,7 @@ function playTerminalAnimation(badge) {
       }
 
       box.appendChild(line);
-
-      // Remove old cursor, add new one
-      const oldCursor = box.querySelector('.terminal-cursor');
-      if (oldCursor) oldCursor.remove();
-      const cursor = document.createElement('span');
-      cursor.className = 'terminal-cursor';
-      line.appendChild(cursor);
+      addCursor(line);
 
       lineIndex++;
       setTimeout(typeLine, lineDelay);
@@ -1741,78 +1825,227 @@ function playPingTrace(nodeEl) {
     if (!empId) { resolve(); return; }
 
     // Find links using data attributes (tagged during _renderTree)
-    // Chain: root→division link, then division→employee link
+    // 4-level tree: Root → Division → Department → Employee
+    // Chain: root→div link, div→dept link, dept→emp link (3 segments)
     const empLink = g.querySelector(`path.dendro-link[data-target-id="${empId}"]`);
     const chain = [];
 
     if (empLink) {
-      // Find the parent link (root → division)
-      const divTheme = empLink.getAttribute('data-source-id');
-      if (divTheme) {
-        const divLink = g.querySelector(`path.dendro-link[data-target-id="${divTheme}"]`);
-        if (divLink) chain.push(divLink);
+      // Walk backward: emp link → dept link → div link
+      const deptKey = empLink.getAttribute('data-source-id');
+      if (deptKey) {
+        const deptLink = g.querySelector(`path.dendro-link[data-target-id="${CSS.escape(deptKey)}"]`);
+        if (deptLink) {
+          const divTheme = deptLink.getAttribute('data-source-id');
+          if (divTheme) {
+            const divLink = g.querySelector(`path.dendro-link[data-target-id="${CSS.escape(divTheme)}"]`);
+            if (divLink) chain.push(divLink);
+          }
+          chain.push(deptLink);
+        }
       }
       chain.push(empLink);
     }
 
     if (chain.length === 0) {
-      // No path found — just flash the node directly
-      nodeEl.classList.add('dendro-node-flash');
-      setTimeout(() => { nodeEl.classList.remove('dendro-node-flash'); resolve(); }, 1500);
+      // No path found — subtle glow only
+      nodeEl.classList.add('dendro-arrival-glow');
+      setTimeout(() => { nodeEl.classList.remove('dendro-arrival-glow'); resolve(); }, 2000);
       return;
     }
 
-    // Animate a dot traveling along each link in sequence
-    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    dot.setAttribute('r', '4');
-    dot.setAttribute('fill', '#D4A843');
-    dot.setAttribute('filter', 'url(#dendro-glow)');
-    dot.classList.add('ping-dot');
-    g.appendChild(dot);
+    // Get division color for arrival glow
+    const divColor = empLink ? (empLink.getAttribute('stroke') || '#D4A843') : '#D4A843';
+
+    // --- Subtle zoom toward the destination node ---
+    const dendroRenderer = window.DendroRenderer;
+    let origTransform = null;
+    if (dendroRenderer && dendroRenderer._zoom && dendroRenderer._svg && typeof d3 !== 'undefined') {
+      try {
+        origTransform = d3.zoomTransform(dendroRenderer._svg.node());
+        // Get destination node position
+        const nodeTransform = nodeEl.getAttribute('transform');
+        const nodeMatch = nodeTransform && nodeTransform.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+        if (nodeMatch) {
+          const nx = parseFloat(nodeMatch[1]);
+          const ny = parseFloat(nodeMatch[2]);
+          const zoomIn = 1.25; // 25% zoom boost
+          const newScale = origTransform.k * zoomIn;
+          const svgRect = dendroRenderer._svg.node().getBoundingClientRect();
+          const cx = svgRect.width / 2;
+          const cy = svgRect.height / 2;
+          // Center on destination with zoom boost
+          const tx = cx - nx * newScale;
+          const ty = cy - ny * newScale;
+          const targetTransform = d3.zoomIdentity.translate(tx, ty).scale(newScale);
+          dendroRenderer._svg.transition().duration(1800).ease(d3.easeCubicInOut)
+            .call(dendroRenderer._zoom.transform, targetTransform);
+        }
+      } catch { /* zoom is best-effort */ }
+    }
+
+    // Create circular-clipped badge photo that travels along the path
+    const clipId = `ping-clip-${empId}`;
+    const defs = svg.querySelector('defs');
+
+    const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    clipPath.setAttribute('id', clipId);
+    const clipCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    clipCircle.setAttribute('r', '14');
+    clipCircle.setAttribute('cx', '14');
+    clipCircle.setAttribute('cy', '14');
+    clipPath.appendChild(clipCircle);
+    defs.appendChild(clipPath);
+
+    // Photo group: image + glow border circle
+    const photoGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    photoGroup.classList.add('ping-photo');
+    photoGroup.setAttribute('filter', 'url(#dendro-glow)');
+
+    const photoImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    photoImg.setAttribute('href', `/api/badge/${empId}/thumb`);
+    photoImg.setAttribute('width', '28');
+    photoImg.setAttribute('height', '28');
+    photoImg.setAttribute('x', '-14');
+    photoImg.setAttribute('y', '-14');
+    photoImg.setAttribute('clip-path', `url(#${clipId})`);
+    photoImg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    // Adjust clipPath center to match negative offset
+    clipCircle.setAttribute('cx', '0');
+    clipCircle.setAttribute('cy', '0');
+
+    const photoBorder = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    photoBorder.setAttribute('r', '14');
+    photoBorder.setAttribute('fill', 'none');
+    photoBorder.setAttribute('stroke', divColor);
+    photoBorder.setAttribute('stroke-width', '2.5');
+
+    photoGroup.appendChild(photoImg);
+    photoGroup.appendChild(photoBorder);
+
+    // Append to animation layer (survives _renderTree re-renders)
+    const animLayer = dendroRenderer && dendroRenderer._animLayer
+      ? dendroRenderer._animLayer.node()
+      : g;
+    animLayer.appendChild(photoGroup);
 
     let linkIdx = 0;
 
     function animateLink() {
       if (linkIdx >= chain.length) {
-        dot.remove();
-        nodeEl.classList.add('dendro-node-flash');
-        // Expanding glow ring
+        // Arrival — remove traveling photo
+        photoGroup.remove();
+        clipPath.remove();
+
+        // Find the LIVE DOM element (original nodeEl may be detached by re-render)
+        const liveNodeEl = g.querySelector(`[data-emp-id="${empId}"]`);
+        const targetNode = liveNodeEl || nodeEl;
+        const isLive = !!liveNodeEl;
+        const isAttached = targetNode.isConnected;
+        console.log(`[PingTrace] ARRIVAL emp=${empId} — liveFound=${isLive}, isAttached=${isAttached}, targetNode=`, targetNode);
+
+        // Mark as arrived — all future re-renders will show the photo
+        if (window.DendroRenderer) {
+          window.DendroRenderer._arrived.add(empId);
+          console.log(`[PingTrace] _arrived now: [${[...window.DendroRenderer._arrived].join(',')}]`);
+        }
+
+        // Reveal the badge photo on the LIVE element (swap placeholder → thumbnail)
+        const awaitingCircle = targetNode.querySelector('circle.dendro-awaiting');
+        console.log(`[PingTrace] awaitingCircle found=${!!awaitingCircle}, empId=${empId}`);
+        if (awaitingCircle) {
+          const patId = awaitingCircle.getAttribute('data-pat-id');
+          const patternExists = !!svg.querySelector(`#${patId}`);
+          console.log(`[PingTrace] SWAP placeholder→photo: patId=${patId}, patternExists=${patternExists}`);
+          awaitingCircle.setAttribute('fill', patId ? `url(#${patId})` : divColor);
+          awaitingCircle.setAttribute('stroke-dasharray', 'none');
+          awaitingCircle.setAttribute('stroke-opacity', '1');
+          awaitingCircle.classList.remove('dendro-awaiting');
+        }
+
+        // Subtle arrival glow on the employee node (division-colored)
+        const empCircle = targetNode.querySelector('circle');
+        if (empCircle) {
+          empCircle.setAttribute('data-orig-stroke', empCircle.getAttribute('stroke') || divColor);
+          empCircle.setAttribute('data-orig-stroke-width', empCircle.getAttribute('stroke-width') || '2');
+        }
+        targetNode.classList.add('dendro-arrival-glow');
+
+        // Expanding glow ring at destination
         const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         ring.setAttribute('r', '18');
         ring.setAttribute('fill', 'none');
-        ring.setAttribute('stroke', '#D4A843');
+        ring.setAttribute('stroke', divColor);
         ring.setAttribute('stroke-width', '2');
         ring.setAttribute('opacity', '0.8');
         ring.classList.add('ping-ring');
-        nodeEl.appendChild(ring);
+        targetNode.appendChild(ring);
+
+        // Ripple effect — pulse all branches outward from this node
+        playBranchRipple(g, targetNode, divColor);
+
+        // Ease zoom back to original after arrival
+        if (origTransform && dendroRenderer && dendroRenderer._zoom && dendroRenderer._svg) {
+          try {
+            dendroRenderer._svg.transition().duration(2000).ease(d3.easeCubicInOut)
+              .call(dendroRenderer._zoom.transform, origTransform);
+          } catch { /* best-effort */ }
+        }
+
         setTimeout(() => {
-          nodeEl.classList.remove('dendro-node-flash');
+          targetNode.classList.remove('dendro-arrival-glow');
           ring.remove();
-        }, 2000);
-        setTimeout(resolve, 2000);
+        }, 2500);
+
+        // --- DEBUG: verify photo persists after arrival effects complete ---
+        setTimeout(() => {
+          const verifyNode = g.querySelector(`[data-emp-id="${empId}"]`);
+          if (verifyNode) {
+            const circle = verifyNode.querySelector('circle');
+            const fill = circle ? circle.getAttribute('fill') : 'NO_CIRCLE';
+            const isPhoto = fill && fill.startsWith('url(#dendro-thumb-');
+            const isPlaceholder = fill === '#1C1C22';
+            const hasAwaitingClass = circle ? circle.classList.contains('dendro-awaiting') : false;
+            console.log(`[PingTrace] POST-ARRIVAL VERIFY (3s) emp=${empId}: fill=${fill}, isPhoto=${isPhoto}, isPlaceholder=${isPlaceholder}, hasAwaiting=${hasAwaitingClass}, nodeAttached=${verifyNode.isConnected}`);
+            if (!isPhoto) {
+              console.error(`[PingTrace] ❌ PHOTO LOST for emp=${empId}! fill=${fill}. Check for unexpected re-render.`);
+            }
+          } else {
+            console.error(`[PingTrace] ❌ NODE GONE for emp=${empId}! Node not found in DOM 3s after arrival.`);
+          }
+        }, 3000);
+
+        setTimeout(resolve, 2500);
         return;
       }
 
       const path = chain[linkIdx];
       const len = path.getTotalLength();
-      const duration = 3000;
+      // Scale duration by link type: root→div slower (dramatic), dept→emp faster
+      const linkType = path.getAttribute('data-link-type') || '';
+      const duration = linkType === 'root-div' ? 2200 : linkType === 'div-dept' ? 1800 : 1500;
       const startTime = performance.now();
 
+      // Thicken the active branch segment during travel
       const origOpacity = path.getAttribute('stroke-opacity') || '0.3';
+      const origWidth = path.getAttribute('stroke-width') || '1.5';
       path.setAttribute('stroke-opacity', '0.9');
+      path.setAttribute('stroke-width', parseFloat(origWidth) + 2);
 
       function step(now) {
         const elapsed = now - startTime;
         const t = Math.min(elapsed / duration, 1);
         const eased = 1 - Math.pow(1 - t, 2);
         const pt = path.getPointAtLength(eased * len);
-        dot.setAttribute('cx', pt.x);
-        dot.setAttribute('cy', pt.y);
+        photoGroup.setAttribute('transform', `translate(${pt.x},${pt.y})`);
 
         if (t < 1) {
           requestAnimationFrame(step);
         } else {
-          setTimeout(() => path.setAttribute('stroke-opacity', origOpacity), 300);
+          setTimeout(() => {
+            path.setAttribute('stroke-opacity', origOpacity);
+            path.setAttribute('stroke-width', origWidth);
+          }, 300);
           linkIdx++;
           animateLink();
         }
@@ -1822,6 +2055,116 @@ function playPingTrace(nodeEl) {
     }
 
     animateLink();
+  });
+}
+
+// --- Branch Ripple Effect ---
+// Organic multi-wave ripple radiating from a source node
+
+function playBranchRipple(g, sourceNode, color) {
+  // Get source position from the node's transform
+  const sourceTransform = sourceNode.getAttribute('transform');
+  let sx = 0, sy = 0;
+  if (sourceTransform) {
+    const match = sourceTransform.match(/translate\(([-\d.]+),([-\d.]+)\)/);
+    if (match) { sx = parseFloat(match[1]); sy = parseFloat(match[2]); }
+  }
+
+  const allLinks = Array.from(g.querySelectorAll('path.dendro-link'));
+  if (allLinks.length === 0) return;
+
+  // Classify links: root→division vs division→employee
+  const rootLinks = [];
+  const empLinks = [];
+  const linkMeta = [];
+
+  allLinks.forEach(link => {
+    try {
+      const len = link.getTotalLength();
+      const mid = link.getPointAtLength(len / 2);
+      const dx = mid.x - sx;
+      const dy = mid.y - sy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const sourceId = link.getAttribute('data-source-id') || '';
+      const isRootLink = sourceId === 'root';
+      const meta = { link, dist, isRootLink };
+      linkMeta.push(meta);
+      if (isRootLink) rootLinks.push(meta);
+      else empLinks.push(meta);
+    } catch { /* skip */ }
+  });
+
+  const maxDist = Math.max(...linkMeta.map(m => m.dist), 1);
+
+  // --- Wave 1: Initial outward ripple with randomized jitter ---
+  linkMeta.forEach(({ link, dist, isRootLink }) => {
+    const baseDelay = (dist / maxDist) * 1200;
+    const jitter = (Math.random() - 0.3) * 400; // asymmetric jitter, slightly forward-biased
+    const delay = Math.max(0, baseDelay + jitter);
+    const origOpacity = link.getAttribute('stroke-opacity') || '0.25';
+    const origWidth = link.getAttribute('stroke-width') || '1.5';
+    const peakOpacity = isRootLink ? '1' : '0.8';
+    const widthBoost = isRootLink ? 2.5 : 1;
+
+    setTimeout(() => {
+      link.setAttribute('stroke-opacity', peakOpacity);
+      link.setAttribute('stroke-width', parseFloat(origWidth) + widthBoost);
+      setTimeout(() => {
+        link.setAttribute('stroke-opacity', origOpacity);
+        link.setAttribute('stroke-width', origWidth);
+      }, isRootLink ? 800 : 500);
+    }, delay);
+  });
+
+  // --- Wave 2: Secondary echo ripple (reverse direction, softer) ---
+  setTimeout(() => {
+    linkMeta.forEach(({ link, dist }) => {
+      const reverseDelay = ((maxDist - dist) / maxDist) * 1000;
+      const jitter = Math.random() * 300;
+      const origOpacity = link.getAttribute('stroke-opacity') || '0.25';
+
+      setTimeout(() => {
+        link.setAttribute('stroke-opacity', '0.55');
+        setTimeout(() => {
+          link.setAttribute('stroke-opacity', origOpacity);
+        }, 400);
+      }, reverseDelay + jitter);
+    });
+  }, 1400);
+
+  // --- Root→Division links: extra pulsing glow effect ---
+  rootLinks.forEach(({ link }, i) => {
+    const origOpacity = link.getAttribute('stroke-opacity') || '0.6';
+    const origWidth = link.getAttribute('stroke-width') || '2';
+
+    // Staggered triple-pulse on trunk links
+    [0, 600, 1200].forEach((offset, pulseIdx) => {
+      const delay = 200 + (i * 150) + offset;
+      setTimeout(() => {
+        const intensity = 1 - (pulseIdx * 0.2); // decreasing intensity
+        link.setAttribute('stroke-opacity', String(Math.min(1, intensity)));
+        link.setAttribute('stroke-width', String(parseFloat(origWidth) + 3 - pulseIdx));
+        setTimeout(() => {
+          link.setAttribute('stroke-opacity', origOpacity);
+          link.setAttribute('stroke-width', origWidth);
+        }, 350);
+      }, delay);
+    });
+  });
+
+  // --- Scattered sparkle: random individual links flash independently ---
+  const sparkleCount = Math.min(allLinks.length, Math.floor(allLinks.length * 0.4));
+  const shuffled = [...linkMeta].sort(() => Math.random() - 0.5).slice(0, sparkleCount);
+  shuffled.forEach(({ link }, i) => {
+    const delay = 2200 + Math.random() * 1200;
+    const origOpacity = link.getAttribute('stroke-opacity') || '0.25';
+
+    setTimeout(() => {
+      link.setAttribute('stroke-opacity', '0.7');
+      setTimeout(() => {
+        link.setAttribute('stroke-opacity', origOpacity);
+      }, 250 + Math.random() * 200);
+    }, delay);
   });
 }
 

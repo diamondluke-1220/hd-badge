@@ -1,6 +1,6 @@
 // ─── Dendrogram Renderer (Org Tree View) ──────────────────
 // Implements the renderer interface: { init, addBadge, destroy }
-// D3 tree layout: CEO node → divisions → departments → employees.
+// D3 tree layout: Root → Divisions → Departments → Employees (4 levels).
 
 window.DendroRenderer = {
   _container: null,
@@ -14,12 +14,15 @@ window.DendroRenderer = {
   _width: 0,
   _height: 0,
   _resizeObserver: null,
+  _animLayer: null, // separate SVG group for animations (survives _renderTree)
   _nodeIndex: {},  // employeeId → tree node data
-  _collapsed: new Set(), // division themes that are collapsed
-  _COLLAPSE_THRESHOLD: 50, // auto-collapse when total badges exceed this
-  _pendingBadges: [],      // SSE badges awaiting batch render
-  _debounceTimer: null,    // debounce timer for batch SSE renders
-  _DEBOUNCE_MS: 2000,      // batch window for SSE re-renders
+  _collapsed: new Set(),      // division themes that are collapsed
+  _collapsedDepts: new Set(), // department keys that are collapsed (format: "divTheme::deptName")
+  _arrived: new Set(),        // empIds whose animation has completed (show photo)
+  _pendingBadges: [],         // SSE badges awaiting batch render
+  _debounceTimer: null,       // debounce timer for batch SSE renders
+  _DEBOUNCE_MS: 2000,         // batch window for SSE re-renders
+  _OTHER_THRESHOLD: 2,        // custom depts with ≤ this many employees → "OTHER" bucket
 
   // Division → color (matches network view)
   _COLORS: {
@@ -36,6 +39,8 @@ window.DendroRenderer = {
     this._stats = stats;
     this._nodeIndex = {};
     this._collapsed = new Set();
+    this._collapsedDepts = new Set();
+    this._arrived = new Set();
 
     // Load CSS
     this._cssLink = document.createElement('link');
@@ -86,6 +91,7 @@ window.DendroRenderer = {
     }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const deptName = badge.department;
     const empKey = badge.employeeId;
 
     // Dedup
@@ -94,12 +100,16 @@ window.DendroRenderer = {
       return null;
     }
 
-    // Auto-expand division if collapsed so new badge is visible
+    // Auto-expand division and department if collapsed so new badge is visible
     if (this._collapsed.has(divTheme)) {
       this._collapsed.delete(divTheme);
     }
+    const deptKey = `${divTheme}::${deptName}`;
+    if (this._collapsedDepts.has(deptKey)) {
+      this._collapsedDepts.delete(deptKey);
+    }
 
-    // Add to tree data immediately (so subsequent addBadge calls see it for dedup)
+    // Find or create division node
     let divNode = this._treeData.children.find(c => c._divTheme === divTheme);
     if (!divNode) {
       const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
@@ -114,15 +124,33 @@ window.DendroRenderer = {
       console.log('[Dendro] Created new division node:', divTheme);
     }
 
+    // Find or create department node within division
+    if (!divNode.children) divNode.children = [];
+    let deptNode = divNode.children.find(c => c._type === 'department' && c._deptName === deptName);
+    if (!deptNode) {
+      deptNode = {
+        name: deptName,
+        _type: 'department',
+        _deptName: deptName,
+        _divTheme: divTheme,
+        _color: this._COLORS[divTheme] || '#ffd700',
+        children: [],
+      };
+      divNode.children.push(deptNode);
+      console.log('[Dendro] Created new department node:', deptName, 'in', divTheme);
+    }
+
+    // Add employee to department
     const empNode = {
       name: badge.name,
       _type: 'employee',
       _badge: badge,
       _divTheme: divTheme,
+      _deptName: deptName,
       _color: this._COLORS[divTheme] || '#ffd700',
     };
-    if (!divNode.children) divNode.children = [];
-    divNode.children.push(empNode);
+    if (!deptNode.children) deptNode.children = [];
+    deptNode.children.push(empNode);
     this._nodeIndex[empKey] = empNode;
 
     // Queue for debounced batch render instead of immediate re-render
@@ -130,16 +158,18 @@ window.DendroRenderer = {
 
     // If only 1 pending badge (first in batch), render immediately for responsiveness
     if (this._pendingBadges.length === 1 && !this._debounceTimer) {
+      console.log(`[Dendro.addBadge] IMMEDIATE flush for ${empKey} (first in batch)`);
       this._flushPendingBadges();
     } else {
       // Additional badges within debounce window — defer render
+      console.log(`[Dendro.addBadge] DEFERRED ${empKey} (pending=${this._pendingBadges.length}, timerActive=${!!this._debounceTimer})`);
       clearTimeout(this._debounceTimer);
       this._debounceTimer = setTimeout(() => this._flushPendingBadges(), this._DEBOUNCE_MS);
     }
 
     // Return the node element (will exist after flush for first badge, null for queued)
     const nodeEl = this._g.select(`[data-emp-id="${empKey}"]`).node();
-    console.log('[Dendro] addBadge result:', empKey, divTheme, nodeEl ? 'found' : 'queued');
+    console.log('[Dendro] addBadge result:', empKey, divTheme, deptName, nodeEl ? 'found' : 'queued');
     return nodeEl;
   },
 
@@ -160,6 +190,7 @@ window.DendroRenderer = {
   },
 
   destroy() {
+    if (this._mutObserver) { this._mutObserver.disconnect(); this._mutObserver = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._debounceTimer) { clearTimeout(this._debounceTimer); this._debounceTimer = null; }
@@ -168,11 +199,14 @@ window.DendroRenderer = {
     this._stats = null;
     this._svg = null;
     this._g = null;
+    this._animLayer = null;
     this._zoom = null;
     this._defs = null;
     this._treeData = null;
     this._nodeIndex = {};
     this._collapsed = new Set();
+    this._collapsedDepts = new Set();
+    this._arrived = new Set();
     this._pendingBadges = [];
   },
 
@@ -189,17 +223,26 @@ window.DendroRenderer = {
     });
   },
 
+  // Generate a stable key for a department node (used in collapse sets and data attributes)
+  _deptKey(divTheme, deptName) {
+    return `${divTheme}::${deptName}`;
+  },
+
   _buildTree(allBadges) {
-    // Group badges by division
-    const byDiv = {};
-    PUBLIC_DIVISIONS.forEach(d => { byDiv[d.theme] = []; });
+    const totalBadges = allBadges.length;
+
+    // Group badges: division → department → badges[]
+    const byDivDept = {};
+    PUBLIC_DIVISIONS.forEach(d => { byDivDept[d.theme] = {}; });
     allBadges.forEach(badge => {
       const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-      if (!byDiv[divTheme]) byDiv[divTheme] = [];
-      byDiv[divTheme].push(badge);
+      if (!byDivDept[divTheme]) byDivDept[divTheme] = {};
+      const dept = badge.department;
+      if (!byDivDept[divTheme][dept]) byDivDept[divTheme][dept] = [];
+      byDivDept[divTheme][dept].push(badge);
     });
 
-    // Build hierarchy: Root → Divisions → Employees
+    // Build hierarchy: Root → Divisions → Departments → Employees
     const root = {
       name: 'HELP DESK INC.',
       _type: 'root',
@@ -208,35 +251,108 @@ window.DendroRenderer = {
     };
 
     PUBLIC_DIVISIONS.forEach(div => {
-      const badges = byDiv[div.theme] || [];
+      const deptMap = byDivDept[div.theme] || {};
+      const deptNames = Object.keys(deptMap);
+      if (deptNames.length === 0) return; // skip empty divisions
+
+      const divColor = this._COLORS[div.theme] || '#ffd700';
       const divNode = {
         name: div.name,
         _type: 'division',
         _divTheme: div.theme,
-        _color: this._COLORS[div.theme] || '#ffd700',
-        children: badges.map(badge => {
-          const empNode = {
-            name: badge.name,
-            _type: 'employee',
-            _badge: badge,
-            _divTheme: div.theme,
-            _color: this._COLORS[div.theme] || '#ffd700',
-          };
-          this._nodeIndex[badge.employeeId] = empNode;
-          return empNode;
-        }),
+        _color: divColor,
+        children: [],
       };
-      // Only include divisions that have members
-      if (badges.length > 0) {
-        root.children.push(divNode);
+
+      // For _custom division, bucket small departments into "OTHER"
+      let otherBadges = [];
+      const normalDepts = [];
+
+      deptNames.forEach(deptName => {
+        const badges = deptMap[deptName];
+        if (div.theme === '_custom' && badges.length <= this._OTHER_THRESHOLD) {
+          otherBadges = otherBadges.concat(badges);
+        } else {
+          normalDepts.push({ deptName, badges });
+        }
+      });
+
+      // Create department nodes
+      normalDepts.forEach(({ deptName, badges }) => {
+        const deptNode = {
+          name: deptName,
+          _type: 'department',
+          _deptName: deptName,
+          _divTheme: div.theme,
+          _color: divColor,
+          children: badges.map(badge => {
+            const empNode = {
+              name: badge.name,
+              _type: 'employee',
+              _badge: badge,
+              _divTheme: div.theme,
+              _deptName: deptName,
+              _color: divColor,
+            };
+            this._nodeIndex[badge.employeeId] = empNode;
+            this._arrived.add(badge.employeeId); // initial load = already arrived
+            return empNode;
+          }),
+        };
+        divNode.children.push(deptNode);
+      });
+
+      // "OTHER" bucket for small custom departments
+      if (otherBadges.length > 0) {
+        const otherNode = {
+          name: 'OTHER',
+          _type: 'department',
+          _deptName: 'OTHER',
+          _divTheme: div.theme,
+          _color: divColor,
+          children: otherBadges.map(badge => {
+            const empNode = {
+              name: badge.name,
+              _type: 'employee',
+              _badge: badge,
+              _divTheme: div.theme,
+              _deptName: 'OTHER',
+              _color: divColor,
+            };
+            this._nodeIndex[badge.employeeId] = empNode;
+            this._arrived.add(badge.employeeId);
+            return empNode;
+          }),
+        };
+        divNode.children.push(otherNode);
       }
+
+      root.children.push(divNode);
     });
 
     this._treeData = root;
 
-    // Auto-collapse all divisions when total badge count exceeds threshold
-    const totalBadges = allBadges.length;
-    if (totalBadges > this._COLLAPSE_THRESHOLD) {
+    // --- Tiered auto-collapse ---
+    // Collapse departments with >15 employees
+    root.children.forEach(divNode => {
+      (divNode.children || []).forEach(deptNode => {
+        if ((deptNode.children || []).length > 15) {
+          this._collapsedDepts.add(this._deptKey(divNode._divTheme, deptNode._deptName));
+        }
+      });
+    });
+
+    // Collapse all departments when total >100
+    if (totalBadges > 100) {
+      root.children.forEach(divNode => {
+        (divNode.children || []).forEach(deptNode => {
+          this._collapsedDepts.add(this._deptKey(divNode._divTheme, deptNode._deptName));
+        });
+      });
+    }
+
+    // Collapse all divisions when total >200
+    if (totalBadges > 200) {
       root.children.forEach(divNode => {
         this._collapsed.add(divNode._divTheme);
       });
@@ -273,15 +389,17 @@ window.DendroRenderer = {
       .join('feMergeNode')
       .attr('in', d => d);
 
-    // Zoom
+    // Zoom — apply transform to both tree layer and animation layer
     this._zoom = d3.zoom()
       .scaleExtent([0.2, 3])
       .on('zoom', (event) => {
         this._g.attr('transform', event.transform);
+        if (this._animLayer) this._animLayer.attr('transform', event.transform);
       });
     this._svg.call(this._zoom);
 
     this._g = this._svg.append('g');
+    this._animLayer = this._svg.append('g').attr('class', 'dendro-anim-layer');
 
     this._renderTree();
 
@@ -299,36 +417,88 @@ window.DendroRenderer = {
       this._svg.attr('width', w).attr('height', h);
     });
     this._resizeObserver.observe(wrapper);
+
+    // --- DEBUG: MutationObserver to detect unexpected DOM changes ---
+    this._mutObserver = new MutationObserver((mutations) => {
+      const childChanges = mutations.filter(m => m.type === 'childList');
+      if (childChanges.length > 0) {
+        const removedCount = childChanges.reduce((n, m) => n + m.removedNodes.length, 0);
+        const addedCount = childChanges.reduce((n, m) => n + m.addedNodes.length, 0);
+        if (removedCount > 5) {
+          console.warn(`[Dendro.MutObserver] Major DOM change: +${addedCount} -${removedCount} nodes`, new Error().stack?.split('\n').slice(1,4).map(s=>s.trim()));
+        }
+      }
+    });
+    this._mutObserver.observe(this._g.node(), { childList: true, subtree: true });
   },
 
   _renderTree() {
     if (!this._g || !this._treeData) return;
 
-    // Clear previous
+    // --- DEBUG: trace re-render cause ---
+    const arrivedSnapshot = [...this._arrived];
+    const patternsBefore = this._defs ? this._defs.node().querySelectorAll('pattern[id^="dendro-thumb-"]').length : 0;
+    console.log(`[Dendro._renderTree] START — arrived=(${arrivedSnapshot.length}), patterns_before=${patternsBefore}`, new Error().stack?.split('\n').slice(1,4).map(s=>s.trim()));
+
+    // Clear previous tree content
     this._g.selectAll('*').remove();
 
-    // Build filtered tree copy — collapsed divisions become leaf nodes
+    // Clear old thumbnail patterns from defs to prevent duplicate IDs
+    if (this._defs) {
+      this._defs.selectAll('pattern[id^="dendro-thumb-"]').remove();
+    }
+
+    // Count total visible employees for dynamic spacing
+    let totalVisible = 0;
+    const countEmployees = (node) => {
+      if (node._type === 'employee') { totalVisible++; return; }
+      (node.children || []).forEach(countEmployees);
+    };
+    countEmployees(this._treeData);
+
+    // Build filtered tree — handle collapse at both division and department level
     const filteredTree = {
       ...this._treeData,
       children: (this._treeData.children || []).map(divNode => {
         if (this._collapsed.has(divNode._divTheme)) {
-          // Collapsed: show as leaf with _childCount but no children
+          // Collapsed division: count ALL employees across all departments
+          let empCount = 0;
+          (divNode.children || []).forEach(dept => {
+            empCount += (dept.children || []).length;
+          });
           return {
             ...divNode,
-            _childCount: (divNode.children || []).length,
+            _childCount: empCount,
             children: undefined,
           };
         }
-        return divNode;
+        // Division expanded — check department-level collapse
+        return {
+          ...divNode,
+          children: (divNode.children || []).map(deptNode => {
+            const deptKey = this._deptKey(divNode._divTheme, deptNode._deptName);
+            if (this._collapsedDepts.has(deptKey)) {
+              return {
+                ...deptNode,
+                _childCount: (deptNode.children || []).length,
+                children: undefined,
+              };
+            }
+            return deptNode;
+          }),
+        };
       }),
     };
 
     // Create D3 hierarchy
     const root = d3.hierarchy(filteredTree);
 
-    // Use tree layout (horizontal: root on left, leaves on right)
+    // Dynamic spacing based on badge count
+    const verticalSpacing = totalVisible <= 50 ? 42 : totalVisible <= 200 ? 32 : 26;
+    const horizontalSpacing = 260; // wider to use canvas width with 4 levels
+
     const treeLayout = d3.tree()
-      .nodeSize([42, 200])
+      .nodeSize([verticalSpacing, horizontalSpacing])
       .separation((a, b) => a.parent === b.parent ? 1 : 1.4);
 
     treeLayout(root);
@@ -338,15 +508,43 @@ window.DendroRenderer = {
       .data(root.links())
       .join('path')
       .attr('class', 'dendro-link')
-      .attr('data-target-id', d => d.target.data._badge ? d.target.data._badge.employeeId : (d.target.data._divTheme || ''))
-      .attr('data-source-id', d => d.source.data._badge ? d.source.data._badge.employeeId : (d.source.data._divTheme || 'root'))
+      .attr('data-target-id', d => {
+        const td = d.target.data;
+        if (td._badge) return td._badge.employeeId;
+        if (td._type === 'department') return this._deptKey(td._divTheme, td._deptName);
+        if (td._divTheme) return td._divTheme;
+        return '';
+      })
+      .attr('data-source-id', d => {
+        const sd = d.source.data;
+        if (sd._badge) return sd._badge.employeeId;
+        if (sd._type === 'department') return this._deptKey(sd._divTheme, sd._deptName);
+        if (sd._divTheme) return sd._divTheme;
+        return 'root';
+      })
+      .attr('data-link-type', d => {
+        const tt = d.target.data._type;
+        if (tt === 'division') return 'root-div';
+        if (tt === 'department') return 'div-dept';
+        if (tt === 'employee') return 'dept-emp';
+        return 'unknown';
+      })
       .attr('d', d => {
         return `M${d.source.y},${d.source.x} C${(d.source.y + d.target.y) / 2},${d.source.x} ${(d.source.y + d.target.y) / 2},${d.target.x} ${d.target.y},${d.target.x}`;
       })
       .attr('stroke', d => d.target.data._color || '#4b5563')
-      .attr('stroke-opacity', d => d.target.data._type === 'employee' ? 0.25 : 0.6)
-      .attr('stroke-dasharray', d => d.target.data._type === 'employee' ? 'none' : 'none')
-      .attr('stroke-width', d => d.target.data._type === 'employee' ? 1.5 : 2);
+      .attr('stroke-opacity', d => {
+        const t = d.target.data._type;
+        if (t === 'division') return 0.6;
+        if (t === 'department') return 0.4;
+        return 0.25; // employee
+      })
+      .attr('stroke-width', d => {
+        const t = d.target.data._type;
+        if (t === 'division') return 2.5;
+        if (t === 'department') return 2;
+        return 1.5; // employee
+      });
 
     // Node groups
     const nodes = this._g.selectAll('g.dendro-node')
@@ -354,9 +552,10 @@ window.DendroRenderer = {
       .join('g')
       .attr('class', d => `dendro-node dendro-node-${d.data._type}`)
       .attr('data-emp-id', d => d.data._badge ? d.data._badge.employeeId : null)
+      .attr('data-dept-key', d => d.data._type === 'department' ? this._deptKey(d.data._divTheme, d.data._deptName) : null)
       .attr('transform', d => `translate(${d.y},${d.x})`);
 
-    // Root node — large circle with amber accent
+    // ─── Root node ───
     nodes.filter(d => d.data._type === 'root')
       .append('circle')
       .attr('r', 24)
@@ -371,9 +570,10 @@ window.DendroRenderer = {
       .attr('dy', -28)
       .text(d => d.data.name);
 
-    // Division nodes — rounded rectangles with glow
-    nodes.filter(d => d.data._type === 'division')
-      .append('rect')
+    // ─── Division nodes ───
+    const divNodes = nodes.filter(d => d.data._type === 'division');
+
+    divNodes.append('rect')
       .attr('x', -24)
       .attr('y', -16)
       .attr('width', 48)
@@ -386,26 +586,29 @@ window.DendroRenderer = {
       .attr('stroke-width', 2)
       .attr('filter', 'url(#dendro-glow)');
 
-    nodes.filter(d => d.data._type === 'division')
-      .append('text')
+    divNodes.append('text')
       .attr('class', 'dendro-label dendro-label-div')
       .attr('dy', -24)
       .attr('fill', d => d.data._color)
       .text(d => d.data.name);
 
-    // Division member count (use _childCount for collapsed, children.length for expanded)
-    nodes.filter(d => d.data._type === 'division')
-      .append('text')
+    // Division count: total employees across all departments
+    divNodes.append('text')
       .attr('class', 'dendro-label-count')
       .attr('dy', 4)
       .text(d => {
         if (d.data._childCount != null) return d.data._childCount; // collapsed
-        return d.children ? d.children.length : 0;
+        // Expanded: sum employees across departments
+        let count = 0;
+        (d.children || []).forEach(dept => {
+          if (dept.data._childCount != null) count += dept.data._childCount;
+          else count += (dept.children || []).length;
+        });
+        return count;
       });
 
-    // Collapsed indicator (▶ / ▼)
-    nodes.filter(d => d.data._type === 'division')
-      .append('text')
+    // Collapsed indicator
+    divNodes.append('text')
       .attr('class', 'dendro-label-count')
       .attr('dx', 30)
       .attr('dy', 4)
@@ -414,9 +617,9 @@ window.DendroRenderer = {
       .text(d => this._collapsed.has(d.data._divTheme) ? '▶' : (d.children && d.children.length > 0 ? '▼' : ''));
 
     // Click handler for division collapse/expand
-    nodes.filter(d => d.data._type === 'division')
-      .style('cursor', 'pointer')
+    divNodes.style('cursor', 'pointer')
       .on('click', (event, d) => {
+        event.stopPropagation();
         const theme = d.data._divTheme;
         if (this._collapsed.has(theme)) {
           this._collapsed.delete(theme);
@@ -427,7 +630,69 @@ window.DendroRenderer = {
         this._autoFit(this._container.querySelector('.dendro-container'));
       });
 
-    // Employee nodes — small circles with thumbnail
+    // ─── Department nodes ───
+    const deptNodes = nodes.filter(d => d.data._type === 'department');
+
+    deptNodes.append('rect')
+      .attr('x', -18)
+      .attr('y', -12)
+      .attr('width', 36)
+      .attr('height', 24)
+      .attr('rx', 6)
+      .attr('ry', 6)
+      .attr('fill', d => d.data._color)
+      .attr('fill-opacity', 0.08)
+      .attr('stroke', d => d.data._color)
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.6);
+
+    deptNodes.append('text')
+      .attr('class', 'dendro-label dendro-label-dept')
+      .attr('dy', -18)
+      .attr('fill', d => d.data._color)
+      .attr('fill-opacity', 0.8)
+      .attr('font-size', '9px')
+      .attr('text-anchor', 'middle')
+      .text(d => d.data.name);
+
+    // Department count
+    deptNodes.append('text')
+      .attr('class', 'dendro-label-count')
+      .attr('dy', 3)
+      .attr('font-size', '9px')
+      .text(d => {
+        if (d.data._childCount != null) return d.data._childCount; // collapsed
+        return d.children ? d.children.length : 0;
+      });
+
+    // Collapsed indicator for departments
+    deptNodes.append('text')
+      .attr('class', 'dendro-label-count')
+      .attr('dx', 22)
+      .attr('dy', 3)
+      .attr('font-size', '8px')
+      .attr('fill', '#6b7280')
+      .text(d => {
+        const deptKey = this._deptKey(d.data._divTheme, d.data._deptName);
+        if (this._collapsedDepts.has(deptKey)) return '▶';
+        return (d.children && d.children.length > 0) ? '▼' : '';
+      });
+
+    // Click handler for department collapse/expand
+    deptNodes.style('cursor', 'pointer')
+      .on('click', (event, d) => {
+        event.stopPropagation();
+        const deptKey = this._deptKey(d.data._divTheme, d.data._deptName);
+        if (this._collapsedDepts.has(deptKey)) {
+          this._collapsedDepts.delete(deptKey);
+        } else {
+          this._collapsedDepts.add(deptKey);
+        }
+        this._renderTree();
+        this._autoFit(this._container.querySelector('.dendro-container'));
+      });
+
+    // ─── Employee nodes ───
     const empNodes = nodes.filter(d => d.data._type === 'employee');
 
     empNodes.each((d, i, elems) => {
@@ -442,11 +707,25 @@ window.DendroRenderer = {
         .attr('height', 28)
         .attr('preserveAspectRatio', 'xMidYMid slice');
 
-      d3.select(elems[i]).append('circle')
-        .attr('r', 14)
-        .attr('fill', `url(#${patId})`)
-        .attr('stroke', d.data._color)
-        .attr('stroke-width', 2);
+      const el = d3.select(elems[i]);
+      const hasArrived = this._arrived.has(d.data._badge.employeeId);
+      if (!hasArrived) {
+        el.append('circle')
+          .attr('r', 14)
+          .attr('fill', '#1C1C22')
+          .attr('stroke', d.data._color)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '4 3')
+          .attr('stroke-opacity', 0.5)
+          .attr('class', 'dendro-awaiting')
+          .attr('data-pat-id', patId);
+      } else {
+        el.append('circle')
+          .attr('r', 14)
+          .attr('fill', `url(#${patId})`)
+          .attr('stroke', d.data._color)
+          .attr('stroke-width', 2);
+      }
     });
 
     // Employee name labels
@@ -469,6 +748,12 @@ window.DendroRenderer = {
       .on('click', (event, d) => {
         showBadgeDetail(d.data._badge.employeeId, d.data._badge.name);
       });
+
+    // --- DEBUG: summary at end of render ---
+    const patternsAfter = this._defs ? this._defs.node().querySelectorAll('pattern[id^="dendro-thumb-"]').length : 0;
+    const awaitingCount = this._g.node().querySelectorAll('circle.dendro-awaiting').length;
+    const photoCount = this._g.node().querySelectorAll('circle[fill^="url(#dendro-thumb-"]').length;
+    console.log(`[Dendro._renderTree] END — patterns=${patternsAfter}, awaiting=${awaitingCount}, photos=${photoCount}`);
   },
 
   _autoFit(wrapper) {

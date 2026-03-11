@@ -153,7 +153,8 @@ app.use('/api/admin/*', async (c, next) => {
     record.lastAttempt = Date.now();
     adminFailures.set(ip, record);
     log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
-    throw e;
+    // Return JSON error instead of plain text "Unauthorized" (client expects JSON)
+    return c.json({ error: 'Unauthorized. Invalid or missing admin token.' }, 401);
   }
 });
 
