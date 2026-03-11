@@ -1256,8 +1256,8 @@ function buildViewSwitcher() {
   // Replay toggle handler
   document.getElementById('replayToggleBtn').addEventListener('click', toggleReplay);
 
-  // Click handlers
-  switcher.querySelectorAll('.view-switch-btn').forEach(btn => {
+  // Click handlers (skip replay — it has its own handler above)
+  switcher.querySelectorAll('.view-switch-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.mode));
   });
 
