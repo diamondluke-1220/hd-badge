@@ -413,6 +413,8 @@ export function getStats(): {
   flaggedCount: number;
   byDepartment: Record<string, number>;
   newest: string | null;
+  newestHire: { name: string; department: string; createdAt: string } | null;
+  sparkline: { date: string; count: number }[];
 } {
   const visible = (stmts.countVisible.get() as { count: number }).count;
   const total = (db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number }).count;
@@ -420,6 +422,18 @@ export function getStats(): {
   const flaggedCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1').get() as { count: number }).count;
   const byDeptRows = stmts.countByDept.all() as { department: string; count: number }[];
   const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
+
+  // Newest hire with full details (prefer non-band, fall back to any)
+  const newestRow = db.prepare(
+    'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'
+  ).get() as { name: string; department: string; created_at: string } | null;
+
+  // Sparkline: daily badge creation counts for last 30 days
+  const sparklineRows = db.prepare(
+    `SELECT date(created_at) as date, COUNT(*) as count
+     FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-30 days')
+     GROUP BY date(created_at) ORDER BY date ASC`
+  ).all() as { date: string; count: number }[];
 
   const byDepartment: Record<string, number> = {};
   for (const row of byDeptRows) {
@@ -434,6 +448,8 @@ export function getStats(): {
     flaggedCount,
     byDepartment,
     newest: newest?.employee_id || null,
+    newestHire: newestRow ? { name: newestRow.name, department: newestRow.department, createdAt: newestRow.created_at } : null,
+    sparkline: sparklineRows,
   };
 }
 

@@ -29,28 +29,28 @@
     <div class="badge-preview-scaled" id="badgePreviewArea"></div>
   </div>
 
+  <!-- Action buttons — docked below badge preview -->
+  <div class="fab-group">
+    <button class="fab-reboot" id="rebootBtn">
+      <span class="fab-label">sudo randomize</span>
+    </button>
+    <!-- Print Test button — hidden from UI, uncomment to restore for testing
+    <button class="fab-print" id="printTestBtn">
+      <span class="fab-label">Print Test</span>
+    </button>
+    -->
+    <button class="fab-download" id="downloadBtn">
+      <span class="fab-icon">&darr;</span>
+      <span class="fab-label">Download</span>
+    </button>
+  </div>
+
   <!-- Popover container (click-to-edit popovers appear here) -->
   <div id="popoverContainer"></div>
 
   <!-- Hidden file input for photo upload -->
   <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
 </main>
-
-<!-- Floating action buttons -->
-<div class="fab-group">
-  <button class="fab-reboot" id="rebootBtn">
-    <span class="fab-label">sudo randomize</span>
-  </button>
-  <!-- Print Test button — hidden from UI, uncomment to restore for testing
-  <button class="fab-print" id="printTestBtn">
-    <span class="fab-label">Print Test</span>
-  </button>
-  -->
-  <button class="fab-download" id="downloadBtn">
-    <span class="fab-icon">&darr;</span>
-    <span class="fab-label">Download</span>
-  </button>
-</div>
 
 <!-- Full-size badge for capture (hidden off-screen) -->
 <div class="badge-capture" id="badgeCapture">

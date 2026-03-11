@@ -109,7 +109,6 @@ body {
    3. EDITOR LAYOUT
    ========================================================== */
 .editor {
-  max-width: 900px;
   margin: 0 auto;
   padding: 0 20px 40px;
   position: relative;
@@ -563,13 +562,11 @@ body {
    10. FAB BUTTONS
    ========================================================== */
 .fab-group {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
   display: flex;
+  justify-content: center;
   gap: 10px;
   align-items: center;
-  z-index: 100;
+  padding: 16px 0;
 }
 .fab-download {
   background: #1B6B2A;
@@ -1301,12 +1298,6 @@ body {
     grid-template-columns: 1fr 1fr;
   }
 
-  .fab-group {
-    bottom: 16px;
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
-  }
   .fab-download:hover {
     transform: translateY(-2px);
   }
@@ -1654,19 +1645,34 @@ body {
 }
 
 /* ==========================================================
-   28. DONUT CHART
+   28. STATS PANEL (Donut + Newest Hire + Sparkline)
    ========================================================== */
-.orgchart-donut-wrap {
+.stats-panel {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin: 12px auto 0;
-  max-width: 320px;
+  gap: 24px;
+  margin: 16px auto 8px;
+  max-width: 800px;
+  flex-wrap: wrap;
+}
+
+/* --- Donut section --- */
+.stats-donut-section {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.stats-donut-section.donut-entrance {
+  animation: donutIn 0.6s ease-out both;
+}
+@keyframes donutIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
 }
 .orgchart-donut {
-  width: 80px;
-  height: 80px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   position: relative;
   flex-shrink: 0;
@@ -1679,17 +1685,17 @@ body {
   align-items: center;
   justify-content: center;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 700;
   color: #e5e7eb;
   background: #1C1C22;
   border-radius: 50%;
-  margin: 16px;
+  margin: 24px;
 }
 .donut-legend {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+  flex-direction: column;
+  gap: 4px;
   font-family: 'Inter', sans-serif;
   font-size: 11px;
   color: #9ca3af;
@@ -1697,13 +1703,110 @@ body {
 .donut-legend-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .donut-legend-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+.donut-legend-name {
+  color: #8899AA;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.donut-legend-count {
+  color: #e5e7eb;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+
+/* --- Stats cards (shared) --- */
+.stats-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid #2A2A32;
+  border-radius: 12px;
+  padding: 14px 18px;
+  min-width: 160px;
+}
+.stats-card-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: #556677;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* --- Newest hire card --- */
+.newest-hire-card {
+  border-color: rgba(74,222,128,0.2);
+  animation: hireGlow 2s ease-in-out infinite alternate;
+}
+@keyframes hireGlow {
+  from { box-shadow: 0 0 0 rgba(74,222,128,0); }
+  to   { box-shadow: 0 0 12px rgba(74,222,128,0.15); }
+}
+.newest-hire-card.newest-hire-empty {
+  border-color: #2A2A32;
+  animation: none;
+}
+.newest-hire-name {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  color: #e5e7eb;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+.newest-hire-dept {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: #8899AA;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.newest-hire-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #4ADE80;
+  font-weight: 600;
+}
+.newest-hire-empty .newest-hire-name {
+  color: #556677;
+  font-size: 12px;
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* --- Sparkline card --- */
+.sparkline-card {
+  border-color: rgba(46,125,255,0.2);
+}
+.sparkline-container {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+.sparkline-container svg {
+  display: block;
+}
+.sparkline-empty {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: #556677;
+  font-style: italic;
+}
+.sparkline-dot {
+  animation: sparkPulse 1.5s ease-in-out infinite;
+}
+@keyframes sparkPulse {
+  0%, 100% { opacity: 1; r: 3; }
+  50%      { opacity: 0.5; r: 5; }
 }
 
 /* ==========================================================

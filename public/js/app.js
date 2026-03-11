@@ -1825,7 +1825,18 @@ function playPingTrace(nodeEl) {
   });
 }
 
-// --- Donut Chart ---
+// --- Stats Panel (Donut + Newest Hire + Sparkline) ---
+
+function loadD3() {
+  return new Promise((resolve) => {
+    if (typeof d3 !== 'undefined') { resolve(true); return; }
+    const script = document.createElement('script');
+    script.src = '/lib/d3.min.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.head.appendChild(script);
+  });
+}
 
 const DIVISION_COLORS = {
   '_exec':    '#4ADE80',
@@ -1838,16 +1849,17 @@ const DIVISION_COLORS = {
 
 let donutCounts = {}; // { divisionTheme: count }
 let donutTotal = 0;
+let _donutAnimated = false;
+let _currentNewestHire = null;
+let _currentSparkline = [];
 
-function initDonut(stats) {
-  // Build initial counts from stats
+function initStatsPanel(stats) {
+  // Build initial donut counts
   donutTotal = stats.visible || 0;
   donutCounts = {};
 
-  // We need to map department counts to division counts
   if (stats.byDepartment) {
     Object.entries(stats.byDepartment).forEach(([dept, count]) => {
-      // Band depts → exec, known depts → theme, unknown → custom
       let theme;
       if (BAND_DEPTS.has(dept)) {
         theme = '_exec';
@@ -1858,21 +1870,40 @@ function initDonut(stats) {
     });
   }
 
-  renderDonut();
+  _currentNewestHire = stats.newestHire || null;
+  _currentSparkline = stats.sparkline || [];
+  _donutAnimated = false;
+
+  renderStatsPanel();
 }
 
-function renderDonut() {
-  // Remove existing donut
-  const existing = document.querySelector('.orgchart-donut-wrap');
+// --- Relative time helper ---
+function timeAgo(dateStr) {
+  const now = new Date();
+  const then = new Date(dateStr);
+  const diffMs = now - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return days + 'd ago';
+  const weeks = Math.floor(days / 7);
+  return weeks + 'w ago';
+}
+
+function renderStatsPanel() {
+  const existing = document.querySelector('.stats-panel');
   if (existing) existing.remove();
 
   const header = document.querySelector('.org-header');
   if (!header) return;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'orgchart-donut-wrap';
+  const panel = document.createElement('div');
+  panel.className = 'stats-panel';
 
-  // Build conic-gradient stops
+  // --- Donut section ---
   const segments = [];
   let offset = 0;
   const legend = [];
@@ -1887,7 +1918,6 @@ function renderDonut() {
     offset += pct;
   });
 
-  // Fill remainder if rounding leaves a gap
   if (offset < 100 && segments.length > 0) {
     const lastSeg = segments[segments.length - 1];
     segments[segments.length - 1] = lastSeg.replace(/[\d.]+%$/, '100%');
@@ -1897,21 +1927,172 @@ function renderDonut() {
     ? `conic-gradient(${segments.join(', ')})`
     : 'conic-gradient(#3A3A44 0% 100%)';
 
-  wrap.innerHTML = `
-    <div class="orgchart-donut" style="background: ${gradient}" data-total="${donutTotal}"></div>
-    <div class="donut-legend">
-      ${legend.map(l => `<div class="donut-legend-item"><span class="donut-legend-dot" style="background:${l.color}"></span>${l.count}</div>`).join('')}
+  const animClass = !_donutAnimated ? ' donut-entrance' : '';
+
+  // --- Newest hire section ---
+  let newestHtml = '';
+  if (_currentNewestHire) {
+    newestHtml = `
+      <div class="stats-card newest-hire-card">
+        <div class="stats-card-label">LATEST HIRE</div>
+        <div class="newest-hire-name">${esc(_currentNewestHire.name)}</div>
+        <div class="newest-hire-dept">${esc(_currentNewestHire.department)}</div>
+        <div class="newest-hire-time">${timeAgo(_currentNewestHire.createdAt)}</div>
+      </div>
+    `;
+  } else {
+    newestHtml = `
+      <div class="stats-card newest-hire-card newest-hire-empty">
+        <div class="stats-card-label">LATEST HIRE</div>
+        <div class="newest-hire-name">Awaiting applicants...</div>
+      </div>
+    `;
+  }
+
+  // --- Sparkline section ---
+  const hasSparkData = _currentSparkline.length > 0;
+  const sparkHtml = `
+    <div class="stats-card sparkline-card">
+      <div class="stats-card-label">HIRE ACTIVITY</div>
+      <div class="sparkline-container" id="sparklineChart">
+        ${hasSparkData ? '' : '<div class="sparkline-empty">No recent activity</div>'}
+      </div>
     </div>
   `;
 
-  header.after(wrap);
+  panel.innerHTML = `
+    <div class="stats-donut-section${animClass}">
+      <div class="orgchart-donut" style="background: ${gradient}" data-total="${donutTotal}"></div>
+      <div class="donut-legend">
+        ${legend.map(l => `<div class="donut-legend-item"><span class="donut-legend-dot" style="background:${l.color}"></span><span class="donut-legend-name">${esc(l.name)}</span> <span class="donut-legend-count">${l.count}</span></div>`).join('')}
+      </div>
+    </div>
+    ${newestHtml}
+    ${sparkHtml}
+  `;
+
+  header.after(panel);
+  _donutAnimated = true;
+
+  // Animate count-up in donut center
+  const donutEl = panel.querySelector('.orgchart-donut');
+  if (donutEl && donutTotal > 0) {
+    animateCountUp(donutEl, donutTotal);
+  }
+
+  // Render sparkline with D3 (lazy-load if needed)
+  if (hasSparkData) {
+    loadD3().then(ok => { if (ok) renderSparkline(_currentSparkline); });
+  }
+}
+
+function animateCountUp(el, target) {
+  const duration = 800;
+  const start = performance.now();
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+    const current = Math.round(eased * target);
+    el.setAttribute('data-total', current);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  el.setAttribute('data-total', '0');
+  requestAnimationFrame(step);
+}
+
+function renderSparkline(data) {
+  const container = document.getElementById('sparklineChart');
+  if (!container) return;
+
+  const width = 200;
+  const height = 52;
+  const margin = { top: 4, right: 4, bottom: 4, left: 4 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  // Fill in missing days in the 30-day range
+  const today = new Date();
+  const points = [];
+  const dataMap = {};
+  data.forEach(d => { dataMap[d.date] = d.count; });
+
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const key = date.toISOString().split('T')[0];
+    points.push({ date: key, count: dataMap[key] || 0 });
+  }
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', width)
+    .attr('height', height)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([0, points.length - 1]).range([0, w]);
+  const y = d3.scaleLinear().domain([0, d3.max(points, d => d.count) || 1]).range([h, 0]);
+
+  const area = d3.area()
+    .x((d, i) => x(i))
+    .y0(h)
+    .y1(d => y(d.count))
+    .curve(d3.curveMonotoneX);
+
+  const line = d3.line()
+    .x((d, i) => x(i))
+    .y(d => y(d.count))
+    .curve(d3.curveMonotoneX);
+
+  // Gradient fill
+  const defs = svg.append('defs');
+  const grad = defs.append('linearGradient')
+    .attr('id', 'sparkGrad')
+    .attr('x1', '0').attr('y1', '0')
+    .attr('x2', '0').attr('y2', '1');
+  grad.append('stop').attr('offset', '0%').attr('stop-color', '#2E7DFF').attr('stop-opacity', 0.4);
+  grad.append('stop').attr('offset', '100%').attr('stop-color', '#2E7DFF').attr('stop-opacity', 0.05);
+
+  svg.append('path')
+    .datum(points)
+    .attr('d', area)
+    .attr('fill', 'url(#sparkGrad)');
+
+  svg.append('path')
+    .datum(points)
+    .attr('d', line)
+    .attr('fill', 'none')
+    .attr('stroke', '#2E7DFF')
+    .attr('stroke-width', 1.5);
+
+  // Dot on latest point
+  const last = points[points.length - 1];
+  if (last.count > 0) {
+    svg.append('circle')
+      .attr('cx', x(points.length - 1))
+      .attr('cy', y(last.count))
+      .attr('r', 3)
+      .attr('fill', '#2E7DFF')
+      .attr('class', 'sparkline-dot');
+  }
+}
+
+// Backward-compat wrapper
+function initDonut(stats) {
+  initStatsPanel(stats);
 }
 
 function updateDonut(badge) {
   const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
   donutCounts[divTheme] = (donutCounts[divTheme] || 0) + 1;
   donutTotal++;
-  renderDonut();
+  // Update newest hire to this badge
+  _currentNewestHire = { name: badge.name, department: badge.department, createdAt: new Date().toISOString() };
+  // Add to sparkline (today)
+  const todayKey = new Date().toISOString().split('T')[0];
+  const existing = _currentSparkline.find(d => d.date === todayKey);
+  if (existing) { existing.count++; } else { _currentSparkline.push({ date: todayKey, count: 1 }); }
+  renderStatsPanel();
 }
 
 // ─── Init ─────────────────────────────────────────────────
