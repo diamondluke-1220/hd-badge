@@ -319,6 +319,18 @@
   }
 }
 
+/* ─── Explorer Pagination ─────────────────────────────── */
+.win98-explorer-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #f0f0f0;
+  border-top: 1px solid #808080;
+  font-family: 'MS Sans Serif', Tahoma, sans-serif;
+}
+
 /* ─── Reduced motion ───────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .win98-progress-fill {

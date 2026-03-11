@@ -9,6 +9,8 @@ window.Win98Renderer = {
   _overrideLink: null,
   _badges: {},        // { divTheme: [badge, ...] }
   _activeFolder: null, // currently open division theme
+  _folderPage: 1,      // current page in open explorer
+  _PAGE_SIZE: 12,      // max icons per explorer page
   _clockInterval: null,
 
   async init(container, stats) {
@@ -80,23 +82,41 @@ window.Win98Renderer = {
         setTimeout(() => {
           dialog.remove();
 
-          // If Explorer is open for this division, add to the window
+          // If Explorer is open for this division, refresh to page 1 to show new badge
           if (this._activeFolder === divTheme) {
-            const explorerGrid = this._container.querySelector('.win98-file-grid');
-            if (explorerGrid) {
-              const icon = this._createFileIcon(badge);
-              explorerGrid.insertBefore(icon, explorerGrid.firstChild);
+            const div = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
+            if (div) {
+              this._openFolder(div, 1);
+              const icon = this._container.querySelector(`[data-employee-id="${badge.employeeId}"]`);
               resolve(icon);
               return;
             }
           }
 
-          // Update desktop icon count
+          // Update desktop icon count — or create icon if division was empty
           const iconEl = desktop.querySelector(`[data-div-theme="${divTheme}"] .win98-icon-label`);
           if (iconEl) {
             const div = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
             if (div) {
               iconEl.textContent = `${div.name} (${this._badges[divTheme].length})`;
+            }
+          } else {
+            // First badge in this division — create desktop icon dynamically
+            const div = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
+            if (div) {
+              const iconArea = desktop.querySelector('.win98-icons');
+              const recycleIcon = iconArea?.querySelector('[data-div-theme]:last-of-type')?.nextElementSibling
+                || iconArea?.lastElementChild;
+              const newIcon = this._createDesktopIcon(
+                '📁', `${div.name} (1)`, () => this._openFolder(div),
+                div.theme
+              );
+              // Insert before Recycle Bin
+              if (recycleIcon && iconArea) {
+                iconArea.insertBefore(newIcon, recycleIcon);
+              } else if (iconArea) {
+                iconArea.appendChild(newIcon);
+              }
             }
           }
 
@@ -154,9 +174,10 @@ window.Win98Renderer = {
       '💻', 'My Computer', () => this._openBandWindow()
     ));
 
-    // Division folders
+    // Division folders — hide empty divisions
     PUBLIC_DIVISIONS.forEach(div => {
       const count = this._badges[div.theme]?.length || 0;
+      if (count === 0) return; // skip empty divisions
       iconArea.appendChild(this._createDesktopIcon(
         '📁', `${div.name} (${count})`, () => this._openFolder(div),
         div.theme
@@ -262,18 +283,24 @@ window.Win98Renderer = {
     }, 50);
   },
 
-  _openFolder(div) {
+  _openFolder(div, page) {
     this._activeFolder = div.theme;
+    this._folderPage = page || 1;
 
     // Remove existing explorer
     const existing = this._container.querySelector('.win98-window');
     if (existing) existing.remove();
 
     const badges = this._badges[div.theme] || [];
+    const totalPages = Math.max(1, Math.ceil(badges.length / this._PAGE_SIZE));
+    if (this._folderPage > totalPages) this._folderPage = totalPages;
+    const start = (this._folderPage - 1) * this._PAGE_SIZE;
+    const pageBadges = badges.slice(start, start + this._PAGE_SIZE);
 
     const win = document.createElement('div');
     win.className = 'win98-window window';
 
+    const pageInfo = totalPages > 1 ? ` — Page ${this._folderPage} of ${totalPages}` : '';
     win.innerHTML = `
       <div class="title-bar">
         <div class="title-bar-text">📁 ${esc(div.name)} — ${badges.length} employees</div>
@@ -286,9 +313,10 @@ window.Win98Renderer = {
       <div class="window-body">
         <div class="win98-explorer-toolbar">
           <span class="win98-explorer-path">C:\\HELPDESK\\${div.name.replace(/ /g, '_')}\\</span>
-          <span class="win98-explorer-count">${badges.length} object(s)</span>
+          <span class="win98-explorer-count">${badges.length} object(s)${pageInfo}</span>
         </div>
         <div class="win98-file-grid"></div>
+        ${totalPages > 1 ? '<div class="win98-explorer-pager"></div>' : ''}
       </div>
     `;
 
@@ -298,14 +326,37 @@ window.Win98Renderer = {
       this._activeFolder = null;
     });
 
-    // Populate files
+    // Populate files for current page
     const grid = win.querySelector('.win98-file-grid');
-    badges.forEach(badge => {
+    pageBadges.forEach(badge => {
       grid.appendChild(this._createFileIcon(badge));
     });
 
     if (badges.length === 0) {
       grid.innerHTML = '<div class="win98-empty-folder">This folder is empty.</div>';
+    }
+
+    // Pagination buttons
+    const pager = win.querySelector('.win98-explorer-pager');
+    if (pager && totalPages > 1) {
+      if (this._folderPage > 1) {
+        const prevBtn = document.createElement('button');
+        prevBtn.textContent = '< Prev';
+        prevBtn.style.cssText = 'font-size:11px;cursor:pointer;margin-right:8px;';
+        prevBtn.addEventListener('click', () => this._openFolder(div, this._folderPage - 1));
+        pager.appendChild(prevBtn);
+      }
+      const pageLabel = document.createElement('span');
+      pageLabel.textContent = `Page ${this._folderPage} of ${totalPages}`;
+      pageLabel.style.cssText = 'font-size:11px;color:#333;';
+      pager.appendChild(pageLabel);
+      if (this._folderPage < totalPages) {
+        const nextBtn = document.createElement('button');
+        nextBtn.textContent = 'Next >';
+        nextBtn.style.cssText = 'font-size:11px;cursor:pointer;margin-left:8px;';
+        nextBtn.addEventListener('click', () => this._openFolder(div, this._folderPage + 1));
+        pager.appendChild(nextBtn);
+      }
     }
 
     this._container.querySelector('.win98-desktop').appendChild(win);

@@ -15,6 +15,8 @@ window.DendroRenderer = {
   _height: 0,
   _resizeObserver: null,
   _nodeIndex: {},  // employeeId → tree node data
+  _collapsed: new Set(), // division themes that are collapsed
+  _COLLAPSE_THRESHOLD: 50, // auto-collapse when total badges exceed this
 
   // Division → color (matches network view)
   _COLORS: {
@@ -30,6 +32,7 @@ window.DendroRenderer = {
     this._container = container;
     this._stats = stats;
     this._nodeIndex = {};
+    this._collapsed = new Set();
 
     // Load CSS
     this._cssLink = document.createElement('link');
@@ -75,6 +78,11 @@ window.DendroRenderer = {
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
     const empKey = badge.employeeId;
+
+    // Auto-expand division if collapsed so new badge is visible
+    if (this._collapsed.has(divTheme)) {
+      this._collapsed.delete(divTheme);
+    }
 
     // Dedup
     if (this._nodeIndex[empKey]) {
@@ -130,6 +138,7 @@ window.DendroRenderer = {
     this._defs = null;
     this._treeData = null;
     this._nodeIndex = {};
+    this._collapsed = new Set();
   },
 
   // ─── Private helpers ────────────────────────────────────
@@ -189,6 +198,14 @@ window.DendroRenderer = {
     });
 
     this._treeData = root;
+
+    // Auto-collapse all divisions when total badge count exceeds threshold
+    const totalBadges = allBadges.length;
+    if (totalBadges > this._COLLAPSE_THRESHOLD) {
+      root.children.forEach(divNode => {
+        this._collapsed.add(divNode._divTheme);
+      });
+    }
   },
 
   _render() {
@@ -255,8 +272,24 @@ window.DendroRenderer = {
     // Clear previous
     this._g.selectAll('*').remove();
 
+    // Build filtered tree copy — collapsed divisions become leaf nodes
+    const filteredTree = {
+      ...this._treeData,
+      children: (this._treeData.children || []).map(divNode => {
+        if (this._collapsed.has(divNode._divTheme)) {
+          // Collapsed: show as leaf with _childCount but no children
+          return {
+            ...divNode,
+            _childCount: (divNode.children || []).length,
+            children: undefined,
+          };
+        }
+        return divNode;
+      }),
+    };
+
     // Create D3 hierarchy
-    const root = d3.hierarchy(this._treeData);
+    const root = d3.hierarchy(filteredTree);
 
     // Use tree layout (horizontal: root on left, leaves on right)
     const treeLayout = d3.tree()
@@ -325,12 +358,39 @@ window.DendroRenderer = {
       .attr('fill', d => d.data._color)
       .text(d => d.data.name);
 
-    // Division member count
+    // Division member count (use _childCount for collapsed, children.length for expanded)
     nodes.filter(d => d.data._type === 'division')
       .append('text')
       .attr('class', 'dendro-label-count')
       .attr('dy', 4)
-      .text(d => d.children ? d.children.length : 0);
+      .text(d => {
+        if (d.data._childCount != null) return d.data._childCount; // collapsed
+        return d.children ? d.children.length : 0;
+      });
+
+    // Collapsed indicator (▶ / ▼)
+    nodes.filter(d => d.data._type === 'division')
+      .append('text')
+      .attr('class', 'dendro-label-count')
+      .attr('dx', 30)
+      .attr('dy', 4)
+      .attr('font-size', '9px')
+      .attr('fill', '#6b7280')
+      .text(d => this._collapsed.has(d.data._divTheme) ? '▶' : (d.children && d.children.length > 0 ? '▼' : ''));
+
+    // Click handler for division collapse/expand
+    nodes.filter(d => d.data._type === 'division')
+      .style('cursor', 'pointer')
+      .on('click', (event, d) => {
+        const theme = d.data._divTheme;
+        if (this._collapsed.has(theme)) {
+          this._collapsed.delete(theme);
+        } else {
+          this._collapsed.add(theme);
+        }
+        this._renderTree();
+        this._autoFit(this._container.querySelector('.dendro-container'));
+      });
 
     // Employee nodes — small circles with thumbnail
     const empNodes = nodes.filter(d => d.data._type === 'employee');
