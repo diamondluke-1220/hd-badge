@@ -405,6 +405,16 @@ export function toggleFlagged(employeeId: string): boolean {
   return true;
 }
 
+export function setHasPhoto(employeeId: string, hasPhoto: boolean): boolean {
+  const badge = getBadge(employeeId);
+  if (!badge) return false;
+  db.prepare('UPDATE badges SET has_photo = $photo WHERE employee_id = $id').run({
+    $photo: hasPhoto ? 1 : 0,
+    $id: employeeId,
+  });
+  return true;
+}
+
 export function getStats(): {
   totalBadges: number;
   visible: number;

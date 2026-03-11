@@ -8,7 +8,7 @@ import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, unlinkSync, statSync } from 'fs';
 import sharp from 'sharp';
-import { initDb, createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, getStats, getAnalytics, getDivisionNames, exportAllBadges, closeDb } from './db';
+import { initDb, createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, closeDb } from './db';
 import { checkRateLimit } from './rate-limit';
 import { isNameClean, shouldFlag } from './profanity';
 import { log, getLog } from './logger';
@@ -749,6 +749,51 @@ app.post('/api/admin/badge/:id/flag', (c) => {
   }
 
   return c.json({ success: true, message: 'Flag status toggled.' });
+});
+
+// Admin: upload photo for existing badge
+app.post('/api/admin/badge/:id/photo', async (c) => {
+  const id = c.req.param('id');
+  const badge = getBadge(id);
+  if (!badge) {
+    return c.json({ error: 'Badge not found.' }, 404);
+  }
+
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get('photo');
+    if (!file || !(file instanceof File)) {
+      return c.json({ error: 'No photo file provided.' }, 400);
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      return c.json({ error: 'File must be an image.' }, 400);
+    }
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Process with sharp — resize to reasonable max, save as JPEG
+    await sharp(buffer)
+      .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 90 })
+      .toFile(join(PHOTOS_DIR, `${id}.jpg`));
+
+    // Update DB
+    setHasPhoto(id, true);
+
+    // Invalidate thumbnail so it regenerates on next request
+    const thumbPath = join(THUMBS_DIR, `${id}.png`);
+    if (existsSync(thumbPath)) {
+      unlinkSync(thumbPath);
+    }
+
+    log('info', 'admin', `Photo uploaded for ${id} (${badge.name})`);
+    return c.json({ success: true, message: `Photo uploaded for ${badge.name}.` });
+  } catch (err: any) {
+    log('error', 'admin', `Photo upload failed for ${id}: ${err.message}`);
+    return c.json({ error: 'Photo upload failed.' }, 500);
+  }
 });
 
 // Admin: analytics data (auth handled by middleware)

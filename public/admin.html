@@ -822,6 +822,7 @@ function renderTable(badges) {
       <td><span class="${printedClass}">${printedText}</span></td>
       <td>${date}</td>
       <td>
+        <button class="btn-action" onclick="uploadPhoto('${b.employeeId}')" title="Upload photo">&#128247; Photo</button>
         <button class="${flagBtnClass}" onclick="toggleFlag('${b.employeeId}')">${flagBtnLabel}</button>
         <button class="${paidBtnClass}" onclick="togglePaid('${b.employeeId}')">${paidBtnLabel}</button>
         <button class="${printedBtnClass}" onclick="togglePrinted('${b.employeeId}')">${printedBtnLabel}</button>
@@ -866,6 +867,35 @@ async function toggleHide(id) {
   await apiFetch(`/api/admin/badge/${id}/hide`, { method: 'POST' });
   loadStats();
   loadBadges();
+}
+
+function uploadPhoto(id) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('photo', file);
+    try {
+      const res = await fetch(`/api/admin/badge/${id}/photo`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` },
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadBadges();
+      } else {
+        alert('Upload failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    }
+  };
+  input.click();
 }
 
 function confirmDelete(id, name) {
