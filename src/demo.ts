@@ -4,7 +4,7 @@
 import { createBadge, listDemoBadgeIds, deleteDemoBadges } from './db';
 import { log } from './logger';
 import { join } from 'path';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, readFileSync } from 'fs';
 
 // ─── Badge Data (mirrors badge-render.js constants) ──────
 
@@ -75,13 +75,20 @@ const DEMO_NAMES = [
   'RACE CONDITION RAY', 'MEMORY LEAK MEL',
 ];
 
-// ─── Placeholder Badge PNG ───────────────────────────────
-// Minimal 1x1 transparent PNG (67 bytes) — just needs to be a valid PNG
-// for the file write + thumbnail generation to not crash.
-const PLACEHOLDER_PNG = Buffer.from(
+// ─── Placeholder Photo ──────────────────────────────────
+// Skull-with-headset placeholder loaded from public/ at init time.
+// Falls back to 1x1 transparent PNG if the file is missing.
+const FALLBACK_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
   'base64'
 );
+let PLACEHOLDER_PNG: Buffer = FALLBACK_PNG;
+try {
+  const placeholderPath = join(import.meta.dir, '..', 'public', 'placeholder-photo.png');
+  if (existsSync(placeholderPath)) {
+    PLACEHOLDER_PNG = readFileSync(placeholderPath);
+  }
+} catch { /* use fallback */ }
 
 // ─── Demo State ──────────────────────────────────────────
 
@@ -144,7 +151,7 @@ function createDemoBadge(): string | null {
       song: pick(SONGS),
       accessLevel: access.label,
       accessCss: access.css,
-      hasPhoto: false,
+      hasPhoto: true,
       photoPublic: true,
       source: 'demo',
       isDemo: true,
