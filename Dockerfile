@@ -23,7 +23,7 @@ COPY src/ ./src/
 COPY public/ ./public/
 
 # Create data directory (mounted as volume in production)
-RUN mkdir -p /app/data/photos /app/data/badges /app/data/thumbs
+RUN mkdir -p /app/data/photos /app/data/badges /app/data/thumbs /app/data/headshots
 
 # Default environment
 ENV PORT=3030
