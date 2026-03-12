@@ -28,7 +28,8 @@ function refreshPreview() {
   previewArea.appendChild(clone);
 
   attachBadgeClickHandlers();
-  reanchorPopover();
+  // Only reanchor if no popover is actively open (prevents sliding while typing)
+  if (!activeField) reanchorPopover();
 }
 
 // ─── Badge Click Handlers ─────────────────────────────────
@@ -236,9 +237,9 @@ function buildDeptPopover() {
       <div class="card-grid">${cards}</div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popDeptCustom"
-          placeholder="or type your own" maxlength="24" autocomplete="off"
+          placeholder="or type your own" maxlength="28" autocomplete="off"
           value="${esc(customVal)}">
-        <span class="char-count" id="popDeptCount">${customVal.length}/24</span>
+        <span class="char-count" id="popDeptCount">${customVal.length}/28</span>
       </div>
     </div>`;
 }
@@ -388,10 +389,10 @@ function attachPopoverEvents(fieldName, popover) {
       const input = popover.querySelector('#popDeptCustom');
       const counter = popover.querySelector('#popDeptCount');
       input.addEventListener('input', () => {
-        const val = input.value.slice(0, 24);
+        const val = input.value.slice(0, 28);
         input.value = val;
-        counter.textContent = `${val.length}/24`;
-        counter.className = 'char-count' + (val.length >= 24 ? ' full' : val.length >= 20 ? ' warn' : '');
+        counter.textContent = `${val.length}/28`;
+        counter.className = 'char-count' + (val.length >= 28 ? ' full' : val.length >= 24 ? ' warn' : '');
         if (val.trim()) {
           state.department = val.trim().toUpperCase();
           if (!accessManuallySet) state.accessLevel = 'FAST TRACK PROMOTED';
