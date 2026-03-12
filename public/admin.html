@@ -600,6 +600,7 @@
     <div style="display:flex;gap:8px;">
       <button onclick="toggleAnalytics()">Analytics</button>
       <button onclick="toggleDemo()">Demo Mode</button>
+      <button onclick="togglePresentation()">Presentation</button>
       <button onclick="toggleLogs()">System Log</button>
       <button onclick="exportCSV()">Export CSV</button>
       <button onclick="doLogout()">Sign Out</button>
@@ -672,6 +673,34 @@
       </div>
       <div style="margin-top:8px;height:6px;background:#1C1C22;border-radius:3px;overflow:hidden;">
         <div id="demoProgressBar" style="height:100%;width:0%;background:#5B8DEF;transition:width 0.5s;border-radius:3px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Presentation Mode Section -->
+  <div class="analytics-section" id="presentationSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>Presentation Mode</h2>
+      <span style="font-size:11px;color:#667788;" id="presStatus">Inactive</span>
+    </div>
+    <div class="analytics-card" style="max-width:700px;">
+      <div style="display:flex;gap:12px;align-items:start;margin-bottom:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <button class="btn-action" style="padding:8px 16px;font-size:13px;" id="presStartBtn" onclick="presStart()">Start Presentation</button>
+          <button class="btn-action btn-danger" style="padding:8px 16px;font-size:13px;display:none;" id="presStopBtn" onclick="presStop()">Stop</button>
+          <button class="btn-action" style="padding:8px 16px;font-size:13px;display:none;" id="presSkipIntroBtn" onclick="presSkipIntro()">Skip Intro</button>
+          <div style="margin-top:12px;">
+            <a href="/presentation" target="_blank" style="color:#5B8DEF;font-size:12px;text-decoration:underline;">Open display window ↗</a>
+          </div>
+        </div>
+        <div style="flex:1;min-width:250px;">
+          <label style="display:block;font-size:11px;color:#667788;margin-bottom:4px;">Chyron Messages (one per line)</label>
+          <textarea id="presChyronInput" class="filter-input" style="width:100%;min-width:auto;height:80px;resize:vertical;font-family:'JetBrains Mono',monospace;font-size:11px;" placeholder="GET YOUR BADGE → hdbadge.nav.computer&#10;HELP DESK — Live in Madison, WI"></textarea>
+          <button class="btn-action" style="padding:4px 12px;font-size:11px;margin-top:4px;" onclick="presUpdateChyron()">Update Chyron</button>
+        </div>
+      </div>
+      <div id="presProgress" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#667788;">
+        Status: inactive
       </div>
     </div>
   </div>
@@ -1299,6 +1328,90 @@ function pollDemoStatus() {
   };
   poll();
   demoPolling = setInterval(poll, 2000);
+}
+
+// ─── Presentation Mode ──────────────────────────────────
+let presVisible = false;
+let presPolling = null;
+
+function togglePresentation() {
+  presVisible = !presVisible;
+  document.getElementById('presentationSection').style.display = presVisible ? 'block' : 'none';
+  if (presVisible) pollPresStatus();
+  else if (presPolling) { clearInterval(presPolling); presPolling = null; }
+}
+
+async function presStart() {
+  const lines = document.getElementById('presChyronInput').value.trim();
+  const chyronMessages = lines ? lines.split('\n').map(l => l.trim()).filter(Boolean) : [];
+  const res = await apiFetch('/api/admin/presentation/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chyronMessages }),
+  });
+  if (res.error) {
+    document.getElementById('presProgress').textContent = 'Error: ' + res.error;
+    return;
+  }
+  pollPresStatus();
+}
+
+async function presStop() {
+  await apiFetch('/api/admin/presentation/stop', { method: 'POST' });
+  pollPresStatus();
+}
+
+async function presSkipIntro() {
+  await apiFetch('/api/admin/presentation/skip-intro', { method: 'POST' });
+  pollPresStatus();
+}
+
+async function presUpdateChyron() {
+  const lines = document.getElementById('presChyronInput').value.trim();
+  const messages = lines ? lines.split('\n').map(l => l.trim()).filter(Boolean) : [];
+  await apiFetch('/api/admin/presentation/chyron', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages }),
+  });
+}
+
+function pollPresStatus() {
+  if (presPolling) clearInterval(presPolling);
+  const poll = async () => {
+    const data = await apiFetch('/api/admin/presentation/status');
+    const statusEl = document.getElementById('presStatus');
+    const progressEl = document.getElementById('presProgress');
+    const startBtn = document.getElementById('presStartBtn');
+    const stopBtn = document.getElementById('presStopBtn');
+    const skipBtn = document.getElementById('presSkipIntroBtn');
+
+    if (data.active) {
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'inline-block';
+      skipBtn.style.display = data.phase === 'band_intro' ? 'inline-block' : 'none';
+
+      if (data.phase === 'band_intro') {
+        statusEl.textContent = `Band Intro (${data.bandIntroIndex + 1}/5)`;
+        statusEl.style.color = '#22C55E';
+        progressEl.textContent = `Phase: Band Intro — Member ${data.bandIntroIndex + 1} of 5`;
+      } else {
+        statusEl.textContent = `Rotating: ${data.currentView}`;
+        statusEl.style.color = '#D4A843';
+        progressEl.textContent = `Phase: View Rotation — Current: ${data.currentView}`;
+      }
+    } else {
+      startBtn.style.display = 'inline-block';
+      stopBtn.style.display = 'none';
+      skipBtn.style.display = 'none';
+      statusEl.textContent = 'Inactive';
+      statusEl.style.color = '#667788';
+      progressEl.textContent = 'Status: inactive';
+      if (presPolling) { clearInterval(presPolling); presPolling = null; }
+    }
+  };
+  poll();
+  presPolling = setInterval(poll, 2000);
 }
 
 // ─── System Log ─────────────────────────────────────────

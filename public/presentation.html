@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Help Desk — Presentation</title>
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/splitflap.css">
+<link rel="stylesheet" href="/css/dendro.css">
+<link rel="stylesheet" href="/css/arcade.css">
+<link rel="stylesheet" href="/css/presentation.css">
+</head>
+<body class="presentation-mode">
+
+<!-- Presentation overlay — band intro, between-view transitions -->
+<div class="presentation-overlay" id="presentationOverlay">
+  <div class="presentation-waiting" id="presentationWaiting">
+    <div class="presentation-waiting-text">PRESENTATION MODE</div>
+    <div class="presentation-waiting-sub">Waiting for admin to start...</div>
+  </div>
+  <div class="band-intro-screen" id="bandIntroScreen" style="display:none;">
+    <div class="band-intro-scanline"></div>
+    <div class="band-intro-photo">
+      <img src="" alt="" class="band-intro-img" id="bandIntroImg">
+      <div class="band-intro-glow" id="bandIntroGlow"></div>
+    </div>
+    <div class="band-intro-terminal" id="bandIntroTerminal"></div>
+  </div>
+</div>
+
+<!-- View container — renderers init here during rotation -->
+<div class="presentation-view-container" id="viewContainer" style="display:none;"></div>
+
+<!-- Chyron lower-third overlay -->
+<div class="chyron-overlay" id="chyronOverlay" style="display:none;">
+  <div class="chyron-bar">
+    <div class="chyron-logo">HD</div>
+    <div class="chyron-text" id="chyronText"></div>
+  </div>
+</div>
+
+<!-- Audio element for intro music (optional) -->
+<audio id="introAudio" preload="auto"></audio>
+
+<!-- Click-to-enable overlay for audio autoplay -->
+<div class="audio-enable-overlay" id="audioEnableOverlay" style="display:none;">
+  <button class="audio-enable-btn" id="audioEnableBtn">Click to enable audio</button>
+</div>
+
+<!-- View renderer scripts -->
+<script src="/js/view-grid.js"></script>
+<script src="/js/view-splitflap.js"></script>
+<script src="/js/view-dendro.js"></script>
+<script src="/js/arcade-stats.js"></script>
+<script src="/js/view-arcade.js"></script>
+
+<!-- Presentation client -->
+<script src="/js/presentation.js"></script>
+</body>
+</html>

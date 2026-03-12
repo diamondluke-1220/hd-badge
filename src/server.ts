@@ -13,6 +13,7 @@ import { checkRateLimit } from './rate-limit';
 import { isNameClean, shouldFlag } from './profanity';
 import { log, getLog } from './logger';
 import { initDemo, startDemo, stopDemo, getDemoStatus, cleanupDemo } from './demo';
+import { initPresentation, startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro, isPresentationActive } from './presentation';
 
 // ─── Config ──────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ app.use('*', async (c, next) => {
     "img-src 'self' data: blob:",
     "connect-src 'self'",
     "font-src 'self'",
+    "media-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -392,12 +394,28 @@ function broadcastNewBadge(badge: { employeeId: string; name: string; department
   }
 }
 
+/** Broadcast a generic SSE event to all connected clients */
+function broadcastSSE(event: string, data: any) {
+  const json = JSON.stringify(data);
+  for (const client of sseClients) {
+    try {
+      sseWrite(client, event, json);
+    } catch {
+      clearInterval(client.keepalive);
+      sseClients.delete(client);
+    }
+  }
+}
+
 // Wire up demo engine now that broadcastNewBadge is defined
 initDemo({
   broadcast: broadcastNewBadge,
   writeFile: writeFileSync,
   badgesDir: BADGES_DIR,
 });
+
+// Wire up presentation engine
+initPresentation({ broadcast: broadcastSSE });
 
 /** Handle SSE directly at the Bun.serve level — bypasses Hono entirely */
 function handleSSEDirect(): Response {
@@ -496,6 +514,11 @@ app.post('/api/badge', async (c) => {
     const cleanName = clampField(name.trim().toUpperCase());
     const cleanTitle = clampField(title.trim());
     const flagged = shouldFlag(cleanName) || shouldFlag(cleanTitle);
+
+    // During presentation, block flagged content (big screen safety)
+    if (isPresentationActive() && flagged) {
+      return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
+    }
 
     // Create DB record (clamp all text fields to prevent abuse)
     const result = createBadge({
@@ -1093,10 +1116,58 @@ app.post('/api/admin/demo/cleanup', (c) => {
   return c.json({ success: true, ...result });
 });
 
+// ─── Admin: Presentation Mode ─────────────────────────────
+
+app.post('/api/admin/presentation/start', async (c) => {
+  let body: any;
+  try { body = await c.req.json(); } catch { body = {}; }
+  const result = startPresentation({ chyronMessages: body.chyronMessages });
+  if ('error' in result) {
+    return c.json({ success: false, error: result.error }, 400);
+  }
+  return c.json(result);
+});
+
+app.post('/api/admin/presentation/stop', (c) => {
+  const result = stopPresentation();
+  if ('error' in result) {
+    return c.json({ success: false, error: result.error }, 400);
+  }
+  return c.json(result);
+});
+
+app.get('/api/admin/presentation/status', (c) => {
+  return c.json(getPresentationState());
+});
+
+app.post('/api/admin/presentation/chyron', async (c) => {
+  let body: any;
+  try { body = await c.req.json(); } catch { body = {}; }
+  const messages = Array.isArray(body.messages) ? body.messages.filter((m: any) => typeof m === 'string' && m.trim()) : [];
+  const result = updateChyron(messages);
+  return c.json(result);
+});
+
+app.post('/api/admin/presentation/skip-intro', (c) => {
+  const result = skipBandIntro();
+  if ('error' in result) {
+    return c.json({ success: false, error: result.error }, 400);
+  }
+  return c.json(result);
+});
+
+// Public presentation status (for SSE reconnect recovery — no auth needed)
+app.get('/api/presentation/status', (c) => {
+  return c.json(getPublicState());
+});
+
 // ─── HTML Page Routes ────────────────────────────────────
 
 // Org chart page (serves same SPA, client detects pathname)
 app.get('/orgchart', serveStatic({ path: './public/index.html' }));
+
+// Presentation mode display (dedicated big-screen route)
+app.get('/presentation', serveStatic({ path: './public/presentation.html' }));
 
 // Admin panel (separate page)
 app.get('/admin', serveStatic({ path: './public/admin.html' }));
@@ -1114,6 +1185,7 @@ log('info', 'server', `Started on port ${port} (admin=${ADMIN_TOKEN ? 'enabled' 
 console.log(`🎫 Help Desk Badge Generator running at http://localhost:${port}`);
 if (ADMIN_TOKEN) {
   console.log(`🔐 Admin panel: http://localhost:${port}/admin`);
+  console.log(`📺 Presentation: http://localhost:${port}/presentation`);
 } else {
   console.log(`⚠️  No ADMIN_TOKEN set — admin panel disabled`);
 }

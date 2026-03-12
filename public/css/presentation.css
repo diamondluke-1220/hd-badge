@@ -1,0 +1,284 @@
+/* ============================================================
+   PRESENTATION MODE — presentation.css
+   Dedicated big-screen display for live shows
+   ============================================================ */
+
+/* ─── Base ─────────────────────────────────────────────── */
+
+body.presentation-mode {
+  margin: 0;
+  padding: 0;
+  background: #0a0a0f;
+  color: #E0E8F0;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+  font-family: 'Barlow', 'Inter', sans-serif;
+  cursor: none; /* hide cursor on display device */
+}
+
+/* ─── Presentation Overlay ─────────────────────────────── */
+
+.presentation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: #0a0a0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+/* Waiting state */
+.presentation-waiting {
+  text-align: center;
+}
+
+.presentation-waiting-text {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: #D4A843;
+  margin-bottom: 16px;
+}
+
+.presentation-waiting-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  color: #667788;
+  animation: pulse-dim 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dim {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ─── Band Intro ───────────────────────────────────────── */
+
+.band-intro-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.band-intro-scanline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0%, #D4A843 20%, #D4A843 80%, transparent 100%);
+  opacity: 0.6;
+  animation: scanline-sweep 2s ease-out forwards;
+  z-index: 1;
+}
+
+@keyframes scanline-sweep {
+  0% { top: 0; opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
+}
+
+.band-intro-photo {
+  position: relative;
+  width: 320px;
+  height: 320px;
+  margin-bottom: 40px;
+}
+
+.band-intro-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 8px;
+  filter: grayscale(100%);
+  animation: intro-photo-in 3s ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes intro-photo-in {
+  0% { opacity: 0; transform: scale(0.8); filter: grayscale(100%); }
+  30% { opacity: 1; transform: scale(0.95); filter: grayscale(100%); }
+  100% { opacity: 1; transform: scale(1); filter: grayscale(0%); }
+}
+
+.band-intro-glow {
+  position: absolute;
+  inset: -8px;
+  border-radius: 12px;
+  opacity: 0;
+  animation: intro-glow-pulse 2s ease-in-out 5s infinite;
+  z-index: -1;
+}
+
+@keyframes intro-glow-pulse {
+  0%, 100% { opacity: 0.3; box-shadow: 0 0 30px var(--glow-color, #D4A843); }
+  50% { opacity: 0.7; box-shadow: 0 0 50px var(--glow-color, #D4A843); }
+}
+
+.band-intro-terminal {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  line-height: 1.8;
+  color: #C8D4E0;
+  text-align: left;
+  min-width: 500px;
+  max-width: 600px;
+}
+
+.band-intro-terminal .intro-line {
+  opacity: 0;
+  animation: intro-line-appear 0.3s ease-out forwards;
+}
+
+@keyframes intro-line-appear {
+  0% { opacity: 0; transform: translateX(-10px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.band-intro-terminal .intro-prompt {
+  color: #D4A843;
+}
+
+.band-intro-terminal .intro-value {
+  color: #E0E8F0;
+}
+
+.band-intro-terminal .intro-status-bar {
+  color: #22C55E;
+}
+
+/* Fade out transition between members */
+.band-intro-fadeout {
+  animation: intro-fadeout 0.8s ease-in forwards;
+}
+
+@keyframes intro-fadeout {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ─── View Container ───────────────────────────────────── */
+
+.presentation-view-container {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+
+/* ─── Chyron (Lower-Third Ticker) ──────────────────────── */
+
+.chyron-overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9001;
+  pointer-events: none;
+}
+
+.chyron-bar {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.75) 100%);
+  backdrop-filter: blur(10px);
+  padding: 14px 32px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-top: 2px solid #D4A843;
+}
+
+.chyron-logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: #D4A843;
+  letter-spacing: 2px;
+  flex-shrink: 0;
+}
+
+.chyron-text {
+  font-family: 'Barlow', sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #E0E8F0;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Fade-rotate animation for message cycling */
+.chyron-text-enter {
+  animation: chyron-in 0.6s ease-out forwards;
+}
+
+.chyron-text-exit {
+  animation: chyron-out 0.4s ease-in forwards;
+}
+
+@keyframes chyron-in {
+  0% { opacity: 0; transform: translateY(12px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chyron-out {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-12px); }
+}
+
+/* New hire flash on chyron */
+.chyron-flash {
+  color: #22C55E;
+  animation: chyron-flash-pulse 0.5s ease-in-out 3;
+}
+
+@keyframes chyron-flash-pulse {
+  0%, 100% { color: #22C55E; }
+  50% { color: #D4A843; }
+}
+
+/* ─── Audio Enable Overlay ─────────────────────────────── */
+
+.audio-enable-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.audio-enable-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  padding: 16px 32px;
+  background: #1C1C22;
+  color: #D4A843;
+  border: 2px solid #D4A843;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.audio-enable-btn:hover {
+  background: #2A2A32;
+}
+
+/* ─── View Transition ──────────────────────────────────── */
+
+.presentation-view-entering {
+  animation: view-fade-in 0.5s ease-out forwards;
+}
+
+@keyframes view-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
