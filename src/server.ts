@@ -922,7 +922,23 @@ app.post('/api/admin/badge/:id/render', async (c) => {
     const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: true });
     await browser.close();
 
-    writeFileSync(join(BADGES_DIR, `${id}.png`), screenshot);
+    // Post-process: apply rounded-corner alpha mask to remove white corner artifacts
+    // Step 1: ensure RGBA (Playwright screenshots may be RGB)
+    const rgbaBuf = await sharp(screenshot).ensureAlpha().png().toBuffer();
+    const meta = await sharp(rgbaBuf).metadata();
+    const W = meta.width!;
+    const H = meta.height!;
+    const R = Math.round(75 * (W / 1276)); // scale radius to actual screenshot size
+    // Step 2: composite with rounded-rect mask using dest-in to clip corners
+    const roundedMask = Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
+    );
+    const clippedPng = await sharp(rgbaBuf)
+      .composite([{ input: roundedMask, blend: 'dest-in' }])
+      .png()
+      .toBuffer();
+
+    writeFileSync(join(BADGES_DIR, `${id}.png`), clippedPng);
 
     // Invalidate thumbnail
     const thumbPath = join(THUMBS_DIR, `${id}.png`);

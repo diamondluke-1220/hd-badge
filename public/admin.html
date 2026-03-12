@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HR Dashboard — Help Desk Inc.</title>
   <link rel="stylesheet" href="/css/badge.css">
+  <link rel="stylesheet" href="/lib/cropper.min.css">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -516,6 +517,57 @@
       color: #667788;
     }
 
+    /* Crop Modal */
+    .admin-crop-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 200;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .admin-crop-modal.active {
+      display: flex;
+    }
+    .admin-crop-container {
+      width: 100%;
+      max-width: 500px;
+      max-height: 60vh;
+    }
+    .admin-crop-container img {
+      max-width: 100%;
+      display: block;
+    }
+    .admin-crop-actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .admin-crop-actions button {
+      padding: 10px 24px;
+      border-radius: 8px;
+      border: 1px solid #3A3A44;
+      background: #2A2A32;
+      color: #E0E8F0;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: 'Barlow', sans-serif;
+      font-weight: 600;
+    }
+    .admin-crop-actions button:hover {
+      border-color: #667788;
+    }
+    .admin-crop-actions .btn-crop-confirm {
+      background: #2E7DFF;
+      border-color: #2E7DFF;
+      color: white;
+    }
+    .admin-crop-actions .btn-crop-confirm:hover {
+      background: #5BA3FF;
+    }
+
     @media (max-width: 768px) {
       .stats-bar { flex-direction: column; }
       .stat-card { min-width: auto; }
@@ -656,6 +708,18 @@
   <div class="pagination" id="pagination"></div>
 </div>
 
+<!-- Crop Modal -->
+<div class="admin-crop-modal" id="adminCropModal">
+  <div class="admin-crop-container">
+    <img id="adminCropImage" alt="Crop photo">
+  </div>
+  <div class="admin-crop-actions">
+    <button onclick="cancelAdminCrop()">Cancel</button>
+    <button class="btn-crop-confirm" onclick="applyAdminCrop()">Use This Photo</button>
+  </div>
+</div>
+
+<script src="/lib/cropper.min.js"></script>
 <script>
 // ─── State ──────────────────────────────────────────────
 let token = sessionStorage.getItem('admin-token') || '';
@@ -871,17 +935,67 @@ async function toggleHide(id) {
   loadBadges();
 }
 
+let adminCropper = null;
+let adminCropTargetId = null;
+
 function uploadPhoto(id) {
+  adminCropTargetId = id;
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
-  input.onchange = async () => {
+  input.onchange = () => {
     const file = input.files[0];
     if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => openAdminCropModal(e.target.result);
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function openAdminCropModal(imgSrc) {
+  const modal = document.getElementById('adminCropModal');
+  const img = document.getElementById('adminCropImage');
+  img.src = imgSrc;
+  modal.classList.add('active');
+
+  if (adminCropper) adminCropper.destroy();
+
+  img.onload = () => {
+    adminCropper = new Cropper(img, {
+      aspectRatio: 740 / 720,
+      viewMode: 1,
+      dragMode: 'move',
+      autoCropArea: 0.9,
+      cropBoxResizable: true,
+      cropBoxMovable: true,
+      guides: false,
+      highlight: false,
+      background: false,
+    });
+  };
+}
+
+function cancelAdminCrop() {
+  document.getElementById('adminCropModal').classList.remove('active');
+  if (adminCropper) { adminCropper.destroy(); adminCropper = null; }
+  adminCropTargetId = null;
+}
+
+async function applyAdminCrop() {
+  if (!adminCropper || !adminCropTargetId) return;
+
+  const canvas = adminCropper.getCroppedCanvas({
+    width: 700,
+    height: 630,
+    imageSmoothingQuality: 'high',
+  });
+
+  canvas.toBlob(async (blob) => {
     const formData = new FormData();
-    formData.append('photo', file);
+    formData.append('photo', blob, 'photo.jpg');
     try {
-      const res = await fetch(`/api/admin/badge/${id}/photo`, {
+      const res = await fetch(`/api/admin/badge/${adminCropTargetId}/photo`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin-token')}` },
         body: formData,
@@ -896,8 +1010,8 @@ function uploadPhoto(id) {
     } catch (err) {
       alert('Upload failed: ' + err.message);
     }
-  };
-  input.click();
+    cancelAdminCrop();
+  }, 'image/jpeg', 0.85);
 }
 
 function confirmDelete(id, name) {
