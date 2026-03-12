@@ -1187,11 +1187,6 @@ let orgChartContainer = null;
 let orgChartStats = null;
 
 async function switchView(mode) {
-  // Stop replay on view switch to prevent orphaned animations
-  if (replayActive) {
-    stopReplay();
-  }
-
   // Destroy current renderer
   if (currentRenderer && currentRenderer.destroy) {
     currentRenderer.destroy();
@@ -1294,10 +1289,6 @@ function buildViewSwitcher() {
       <span class="view-switch-icon">&#127918;</span> Arcade <kbd>4</kbd>
     </button>
     <span class="view-switch-divider"></span>
-    <button class="view-switch-btn" id="replayToggleBtn" title="Start Replay (R)">
-      <span class="view-switch-icon">&#9654;</span> Replay <kbd>R</kbd>
-    </button>
-    <span class="view-switch-divider"></span>
     <button class="view-switch-btn ${animationsEnabled() ? 'anim-on' : ''}" id="animToggleBtn" title="${animationsEnabled() ? 'Animations On (A)' : 'Animations Off (A)'}">
       <span class="view-switch-icon">&#10024;</span> FX <kbd>A</kbd>
     </button>
@@ -1306,13 +1297,10 @@ function buildViewSwitcher() {
   // Insert after nav
   nav.after(switcher);
 
-  // Replay toggle handler
-  document.getElementById('replayToggleBtn').addEventListener('click', toggleReplay);
-
   // Animation toggle handler
   document.getElementById('animToggleBtn').addEventListener('click', toggleAnimations);
 
-  // Click handlers (skip replay — it has its own handler above)
+  // View switch click handlers
   switcher.querySelectorAll('.view-switch-btn[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => switchView(btn.dataset.mode));
   });
@@ -1325,7 +1313,6 @@ function buildViewSwitcher() {
     else if (e.key === '2') switchView('splitflap');
     else if (e.key === '3') switchView('dendro');
     else if (e.key === '4') switchView('arcade');
-    else if (e.key === 'r' || e.key === 'R') toggleReplay();
     else if (e.key === 'a' || e.key === 'A') toggleAnimations();
   });
 }
@@ -1375,12 +1362,7 @@ function connectSSE() {
     console.log('[SSE] Received new-badge event:', e.data);
     try {
       const badge = JSON.parse(e.data);
-      // Pause replay scheduling while SSE events are processed
-      if (replayActive) {
-        clearTimeout(_replayTimer);
-        _replayScheduled = false;
-      }
-      queueLiveAnimation(badge, false);
+      queueLiveAnimation(badge);
     } catch (err) {
       console.error('[SSE] Failed to process badge event:', err);
     }
@@ -1391,8 +1373,8 @@ function connectSSE() {
   };
 }
 
-function queueLiveAnimation(badge, isReplay = false) {
-  liveAnimationQueue.push({ ...badge, _isReplay: isReplay });
+function queueLiveAnimation(badge) {
+  liveAnimationQueue.push({ ...badge });
   if (!liveIsAnimating) processLiveQueue();
 }
 
@@ -1406,28 +1388,13 @@ function getCurrentViewMode() {
 async function processLiveQueue() {
   liveIsAnimating = true;
   while (liveAnimationQueue.length > 0) {
-    const entry = liveAnimationQueue.shift();
-    const isReplay = entry._isReplay;
-    const badge = entry;
-
-    // SSE arrival pauses replay — move replay items back and process SSE first
-    if (isReplay && liveAnimationQueue.some(b => !b._isReplay)) {
-      // Re-queue this replay badge at the end, skip to SSE items
-      liveAnimationQueue.push(badge);
-      continue;
-    }
-
-    // Track SSE badge IDs to skip in replay
-    if (!isReplay) {
-      _replaySSEBadgeIds.add(badge.employeeId);
-    }
+    const badge = liveAnimationQueue.shift();
 
     updateTicker(badge);
     updateDonut(badge);
 
     const mode = getCurrentViewMode();
-    const src = isReplay ? 'Replay' : 'SSE';
-    console.log(`[${src}] Processing badge ${badge.employeeId} (${badge.name}) in ${mode} mode`);
+    console.log(`[SSE] Processing badge ${badge.employeeId} (${badge.name}) in ${mode} mode`);
 
     if (mode === 'grid') {
       await playTerminalAnimation(badge);
@@ -1443,209 +1410,8 @@ async function processLiveQueue() {
     } else {
       const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
     }
-
-    // Inter-badge pause for replay (2 seconds between badges)
-    if (isReplay && replayActive && liveAnimationQueue.length === 0) {
-      // Don't wait here — scheduleNextReplay handles the 2s gap
-    }
   }
   liveIsAnimating = false;
-
-  // Resume replay if it was paused by SSE
-  if (replayActive && !_replayScheduled) {
-    scheduleNextReplay();
-  }
-}
-
-// --- Replay Mode ---
-let replayActive = false;
-let _replayPool = [];
-let _replayQueue = [];
-let _replayTimer = null;
-let _replayRefreshTimer = null;
-let _replayScheduled = false;
-const _replaySSEBadgeIds = new Set();
-
-async function fetchReplayPool() {
-  try {
-    const resp = await fetch('/api/badges/replay');
-    const data = await resp.json();
-    _replayPool = data.badges || [];
-    console.log(`[Replay] Fetched ${_replayPool.length} badges`);
-  } catch (err) {
-    console.error('[Replay] Failed to fetch badge pool:', err);
-  }
-}
-
-function buildWeightedQueue(badges) {
-  const now = Date.now();
-  const TWO_HOURS = 2 * 60 * 60 * 1000;
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-
-  const bandMembers = [];
-  const weighted = [];
-
-  for (const badge of badges) {
-    // Skip badges that arrived via SSE this cycle
-    if (_replaySSEBadgeIds.has(badge.employeeId)) continue;
-
-    if (badge.isBandMember) {
-      bandMembers.push(badge);
-      continue;
-    }
-
-    const age = now - new Date(badge.createdAt).getTime();
-    const weight = age < TWO_HOURS ? 3 : age < ONE_DAY ? 2 : 1;
-    for (let i = 0; i < weight; i++) {
-      weighted.push(badge);
-    }
-  }
-
-  // Shuffle weighted array (Fisher-Yates)
-  for (let i = weighted.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [weighted[i], weighted[j]] = [weighted[j], weighted[i]];
-  }
-
-  // Deduplicate: keep first occurrence of each badge
-  const seen = new Set();
-  const deduped = [];
-  for (const badge of weighted) {
-    if (!seen.has(badge.employeeId)) {
-      seen.add(badge.employeeId);
-      deduped.push(badge);
-    }
-  }
-
-  // Band members always first
-  return [...bandMembers, ...deduped];
-}
-
-function scheduleNextReplay() {
-  if (!replayActive) return;
-  _replayScheduled = true;
-
-  _replayTimer = setTimeout(async () => {
-    _replayScheduled = false;
-    if (!replayActive) return;
-
-    // Rebuild queue if empty
-    if (_replayQueue.length === 0) {
-      _replaySSEBadgeIds.clear(); // Reset SSE tracking for new cycle
-      _replayQueue = buildWeightedQueue(_replayPool);
-      if (_replayQueue.length === 0) {
-        console.log('[Replay] No badges to replay');
-        scheduleNextReplay(); // Try again after delay
-        return;
-      }
-      console.log(`[Replay] New cycle: ${_replayQueue.length} badges queued`);
-    }
-
-    const badge = _replayQueue.shift();
-    queueLiveAnimation(badge, true);
-
-    // Wait for animation to finish, then schedule next
-    // When animations are off, add a short delay so badges don't flash instantly
-    const minDelay = animationsEnabled() ? 0 : 800;
-    const waitForIdle = () => {
-      if (liveIsAnimating) {
-        setTimeout(waitForIdle, 200);
-      } else {
-        setTimeout(scheduleNextReplay, minDelay);
-      }
-    };
-    waitForIdle();
-  }, 2000);
-}
-
-async function startReplay() {
-  replayActive = true;
-  console.log('[Replay] Started');
-
-  await fetchReplayPool();
-  _replayQueue = buildWeightedQueue(_replayPool);
-
-  // Start the animation cycle
-  scheduleNextReplay();
-
-  // Refresh pool every 5 minutes
-  _replayRefreshTimer = setInterval(async () => {
-    if (replayActive) {
-      await fetchReplayPool();
-      console.log('[Replay] Pool refreshed');
-    }
-  }, 5 * 60 * 1000);
-
-  // Update button state
-  updateReplayButton();
-}
-
-function stopReplay() {
-  replayActive = false;
-  _replayScheduled = false;
-  clearTimeout(_replayTimer);
-  clearInterval(_replayRefreshTimer);
-  _replayQueue = [];
-  _replaySSEBadgeIds.clear();
-  console.log('[Replay] Stopped');
-
-  // Remove any pending replay items from the animation queue
-  for (let i = liveAnimationQueue.length - 1; i >= 0; i--) {
-    if (liveAnimationQueue[i]._isReplay) {
-      liveAnimationQueue.splice(i, 1);
-    }
-  }
-
-  // Clear any in-flight terminal overlay
-  const overlay = document.querySelector('.terminal-overlay');
-  if (overlay) overlay.remove();
-
-  // Clear spotlight
-  const dimmed = document.querySelector('.orgchart-dimmed');
-  if (dimmed) dimmed.classList.remove('orgchart-dimmed');
-  const spotlight = document.querySelector('.spotlight-active');
-  if (spotlight) spotlight.classList.remove('spotlight-active');
-
-  updateReplayButton();
-  removeReplayStopFAB();
-}
-
-function toggleReplay() {
-  if (replayActive) {
-    stopReplay();
-  } else {
-    startReplay();
-  }
-}
-
-function updateReplayButton() {
-  const btn = document.getElementById('replayToggleBtn');
-  if (!btn) return;
-  btn.classList.toggle('active', replayActive);
-  btn.classList.toggle('replay-active', replayActive);
-  btn.title = replayActive ? 'Stop Replay (R)' : 'Start Replay (R)';
-
-  if (replayActive) showReplayStopFAB();
-  else removeReplayStopFAB();
-}
-
-function showReplayStopFAB() {
-  if (document.getElementById('replayStopFAB')) return;
-  const fab = document.createElement('button');
-  fab.id = 'replayStopFAB';
-  fab.className = 'replay-stop-fab';
-  fab.innerHTML = '&#9724; Stop';
-  fab.title = 'Stop Replay (R)';
-  fab.addEventListener('click', toggleReplay);
-  document.body.appendChild(fab);
-  requestAnimationFrame(() => fab.classList.add('visible'));
-}
-
-function removeReplayStopFAB() {
-  const fab = document.getElementById('replayStopFAB');
-  if (!fab) return;
-  fab.classList.remove('visible');
-  setTimeout(() => fab.remove(), 300);
 }
 
 // --- Stock Ticker Banner ---

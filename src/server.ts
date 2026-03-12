@@ -828,24 +828,6 @@ app.get('/api/orgchart', (c) => {
   });
 });
 
-// Replay mode: all visible badges for weighted animation loop
-app.get('/api/badges/replay', (c) => {
-  const result = listBadges({ page: 1, limit: 5000, maxLimit: 5000 });
-
-  return c.json({
-    badges: result.badges.map(b => ({
-      employeeId: b.employee_id,
-      name: b.name,
-      department: b.department,
-      title: b.title,
-      accessLevel: b.access_level,
-      accessCss: b.access_css,
-      isBandMember: !!b.is_band_member,
-      createdAt: b.created_at,
-    })),
-  });
-});
-
 // Org chart stats
 app.get('/api/orgchart/stats', (c) => {
   return c.json(getStats());
