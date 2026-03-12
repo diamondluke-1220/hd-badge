@@ -15,6 +15,25 @@ import { log, getLog } from './logger';
 import { initDemo, startDemo, stopDemo, getDemoStatus, cleanupDemo } from './demo';
 import { initPresentation, startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro, isPresentationActive } from './presentation';
 
+// ─── Playwright Browser Pool ─────────────────────────────
+
+let _browser: import('playwright').Browser | null = null;
+
+async function getBrowser() {
+  if (!_browser || !_browser.isConnected()) {
+    const { chromium } = await import('playwright');
+    _browser = await chromium.launch();
+  }
+  return _browser;
+}
+
+async function closeBrowser() {
+  if (_browser) {
+    await _browser.close().catch(() => {});
+    _browser = null;
+  }
+}
+
 // ─── Config ──────────────────────────────────────────────
 
 const DATA_DIR = './data';
@@ -254,11 +273,10 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
 
 /** Server-side badge render via Playwright + Sharp corner clipping */
 async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean }): Promise<Buffer> {
-  const { chromium } = await import('playwright');
   const serverPort = Number(process.env.PORT) || 3000;
-  const browser = await chromium.launch();
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
     await page.goto(`http://localhost:${serverPort}/`, { waitUntil: 'networkidle' });
 
     const id = badge.employee_id;
@@ -362,7 +380,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       .png()
       .toBuffer();
   } finally {
-    await browser.close();
+    await page.close();
   }
 }
 
@@ -1195,8 +1213,8 @@ if (process.env.SHOW_MODE === '1') {
 }
 
 // Graceful shutdown
-process.on('SIGTERM', () => { closeDb(); process.exit(0); });
-process.on('SIGINT', () => { closeDb(); process.exit(0); });
+process.on('SIGTERM', async () => { await closeBrowser(); closeDb(); process.exit(0); });
+process.on('SIGINT', async () => { await closeBrowser(); closeDb(); process.exit(0); });
 
 export default {
   port,
