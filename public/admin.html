@@ -881,7 +881,7 @@ function uploadPhoto(id) {
     try {
       const res = await fetch(`/api/admin/badge/${id}/photo`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin_token')}` },
+        headers: { 'Authorization': `Bearer ${sessionStorage.getItem('admin-token')}` },
         body: formData,
       });
       const data = await res.json();
