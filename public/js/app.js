@@ -123,27 +123,31 @@ function positionPopover(popover, targetEl) {
     return;
   }
 
-  const rect = targetEl.getBoundingClientRect();
+  // Use the preview wrapper for horizontal anchor (fixed width, doesn't shift with text)
+  const wrapper = document.querySelector('.preview-wrapper');
+  const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : targetEl.getBoundingClientRect();
+  const fieldRect = targetEl.getBoundingClientRect();
+
   const popWidth = 380;
   const viewW = window.innerWidth;
-  const rightSpace = viewW - rect.right;
-  const leftSpace = rect.left;
+  const rightSpace = viewW - wrapperRect.right;
+  const leftSpace = wrapperRect.left;
 
   const gap = 20;
   let left, arrowSide;
   if (rightSpace >= popWidth + 20) {
-    left = rect.right + gap;
+    left = wrapperRect.right + gap;
     arrowSide = 'left';
   } else if (leftSpace >= popWidth + 20) {
-    left = rect.left - popWidth - gap;
+    left = wrapperRect.left - popWidth - gap;
     arrowSide = 'right';
   } else {
     left = Math.max(10, (viewW - popWidth) / 2);
     arrowSide = 'none';
   }
 
-  // Vertically center on the target element, clamped to viewport
-  const targetCenter = rect.top + rect.height / 2;
+  // Vertically center on the target field element, clamped to viewport
+  const targetCenter = fieldRect.top + fieldRect.height / 2;
   const top = Math.max(10, Math.min(targetCenter - 40, window.innerHeight - 420));
 
   popover.style.left = left + 'px';
