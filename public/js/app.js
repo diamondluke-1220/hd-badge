@@ -1200,7 +1200,6 @@ async function switchView(mode) {
   // Select new renderer
   const renderers = {
     grid: window.GridRenderer,
-    win98: window.Win98Renderer,
     splitflap: window.SplitFlapRenderer,
     dendro: window.DendroRenderer,
     arcade: window.ArcadeRenderer,
@@ -1255,14 +1254,13 @@ async function initOrgChart() {
   const savedMode = localStorage.getItem('hd-view-mode') || 'grid';
   const available = {
     grid: !!window.GridRenderer,
-    win98: !!window.Win98Renderer,
     splitflap: !!window.SplitFlapRenderer,
     dendro: !!window.DendroRenderer,
     arcade: !!window.ArcadeRenderer,
   };
   const mode = available[savedMode] ? savedMode : 'grid';
 
-  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, splitflap: window.SplitFlapRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
+  currentRenderer = { grid: window.GridRenderer, splitflap: window.SplitFlapRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
   if (!currentRenderer) {
     orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
     return;
@@ -1399,7 +1397,6 @@ function queueLiveAnimation(badge, isReplay = false) {
 }
 
 function getCurrentViewMode() {
-  if (currentRenderer === window.Win98Renderer) return 'win98';
   if (currentRenderer === window.SplitFlapRenderer) return 'splitflap';
   if (currentRenderer === window.DendroRenderer) return 'dendro';
   if (currentRenderer === window.ArcadeRenderer) return 'arcade';
@@ -1436,8 +1433,6 @@ async function processLiveQueue() {
       await playTerminalAnimation(badge);
       const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
       if (card) await playSpotlight(card);
-    } else if (mode === 'win98') {
-      if (currentRenderer) await currentRenderer.addBadge(badge);
     } else if (mode === 'splitflap') {
       if (currentRenderer) await currentRenderer.addBadge(badge);
     } else if (mode === 'dendro') {

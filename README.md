@@ -21,10 +21,11 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - Division-grouped hierarchy with color-coded headers
 - Responsive grid (5/4/3/2 columns)
 - Server-side thumbnails (sharp, 320px, cached on disk)
-- Three view modes with keyboard shortcuts (1/2/3):
-  - **Grid** — default card layout
-  - **Win98 Desktop** — Windows 98 Explorer windows, teal desktop, taskbar with clock
+- Four view modes with keyboard shortcuts (1/2/3/4):
+  - **Grid** — default card layout with photo circles
+  - **Split-Flap Lobby** — airport departures board aesthetic
   - **Dendrogram Tree** — D3 horizontal hierarchy with neon glow nodes
+  - **Arcade Select** — fighting game character select grid
 
 **Live Show Features**
 - SSE real-time badge events (new hires appear live on the org chart projector)
@@ -48,7 +49,6 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - **Database:** SQLite (bun:sqlite, WAL mode)
 - **Thumbnails:** [sharp](https://sharp.pixelplumbing.com)
 - **Visualizations:** [D3.js](https://d3js.org) (dendrogram tree view)
-- **Win98 theme:** [98.css](https://jdan.github.io/98.css/)
 - **Client-side:** Vanilla JS, html2canvas, Cropper.js
 - **CI/CD:** GitHub Actions → ghcr.io → Docker (Unraid)
 
@@ -115,10 +115,12 @@ public/
   table-tent.html    # Printable merch table card with QR codes
   js/app.js          # Badge editor, SSE, ticker, terminal, shared state
   js/view-grid.js    # Grid renderer (default)
-  js/view-win98.js   # Win98 Desktop renderer
-  js/view-dendro.js  # D3 dendrogram renderer
+  js/view-splitflap.js # Split-Flap Lobby renderer
+  js/view-dendro.js    # D3 dendrogram renderer
+  js/view-arcade.js    # Arcade Select renderer
+  js/arcade-stats.js   # RPG stat generation
   css/               # App styles, badge styles, theme overrides
-  lib/               # Vendored deps (98.css, d3, html2canvas, cropper, qrcode)
+  lib/               # Vendored deps (d3, html2canvas, cropper, qrcode)
   fonts/             # Self-hosted web fonts (Barlow, Inter, JetBrains Mono, Orbitron)
 data/                # Runtime data (gitignored)
   badges.db          # SQLite database
