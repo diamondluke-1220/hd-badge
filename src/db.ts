@@ -3,6 +3,8 @@
 
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'crypto';
+import { existsSync, renameSync } from 'fs';
+import { join } from 'path';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS badges (
@@ -32,13 +34,13 @@ CREATE INDEX IF NOT EXISTS idx_badges_visible ON badges(is_visible);
 CREATE INDEX IF NOT EXISTS idx_badges_employee_id ON badges(employee_id);
 `;
 
-// Band member seed data — HD-0001 through HD-0005
+// Band member seed data — HD-00001 through HD-00005
 const BAND_MEMBERS = [
-  { id: 'HD-0001', name: 'LUKE',  dept: 'TICKET ESCALATION BUREAU',          title: 'Chief Escalation Officer',      song: 'PLEASE HOLD',       access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-0002', name: 'DREW',  dept: 'AUDIO ENGINEERING DIVISION',        title: 'Chief Audio Architect',         song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-0003', name: 'HENRY', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE',   title: 'Chief Impact Officer',          song: 'THE MEMO',          access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-0004', name: 'TODD',  dept: 'INFRASTRUCTURE & POWER CHORDS',     title: 'VP of Power Distribution',      song: 'TAKING LIBERTIES',  access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-0005', name: 'ADAM',  dept: 'LOW FREQUENCY OPERATIONS',          title: 'VP of Bottom Line Operations',  song: 'BOSS LEVEL',        access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00001', name: 'LUKE',  dept: 'TICKET ESCALATION BUREAU',          title: 'Chief Escalation Officer',      song: 'PLEASE HOLD',       access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00002', name: 'DREW',  dept: 'AUDIO ENGINEERING DIVISION',        title: 'Chief Audio Architect',         song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00003', name: 'HENRY', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE',   title: 'Chief Impact Officer',          song: 'THE MEMO',          access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00004', name: 'TODD',  dept: 'INFRASTRUCTURE & POWER CHORDS',     title: 'VP of Power Distribution',      song: 'TAKING LIBERTIES',  access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00005', name: 'ADAM',  dept: 'LOW FREQUENCY OPERATIONS',          title: 'VP of Bottom Line Operations',  song: 'BOSS LEVEL',        access: 'ALL ACCESS', css: 'all-access' },
 ];
 
 // Division → department mapping (mirrors PUBLIC_DIVISIONS + DEPARTMENTS in app.js)
@@ -156,10 +158,38 @@ export function initDb(dbPath: string) {
     unmarkFlagged: db.prepare('UPDATE badges SET is_flagged = 0 WHERE employee_id = $id'),
   };
 
+  // Migrate 4-digit band member IDs to 5-digit format (HD-0001 → HD-00001)
+  migrateBandMemberIds();
+
   // Seed band members if table is empty
   const count = db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number };
   if (count.count === 0) {
     seedBandMembers();
+  }
+}
+
+function migrateBandMemberIds() {
+  const OLD_TO_NEW: Record<string, string> = {
+    'HD-0001': 'HD-00001',
+    'HD-0002': 'HD-00002',
+    'HD-0003': 'HD-00003',
+    'HD-0004': 'HD-00004',
+    'HD-0005': 'HD-00005',
+  };
+  const update = db.prepare('UPDATE badges SET employee_id = $new WHERE employee_id = $old');
+  const dataDir = join(process.cwd(), 'data');
+  for (const [oldId, newId] of Object.entries(OLD_TO_NEW)) {
+    const result = update.run({ $old: oldId, $new: newId });
+    if (result.changes > 0) {
+      // Rename photo + headshot files to match new ID
+      for (const subdir of ['photos', 'headshots']) {
+        const oldPath = join(dataDir, subdir, `${oldId}.jpg`);
+        const newPath = join(dataDir, subdir, `${newId}.jpg`);
+        if (existsSync(oldPath)) {
+          renameSync(oldPath, newPath);
+        }
+      }
+    }
   }
 }
 
@@ -273,6 +303,7 @@ export function listBadges(options: {
   limit?: number;
   maxLimit?: number;
   includeHidden?: boolean;
+  recentFirst?: boolean;
 }): { badges: BadgeRow[]; total: number; page: number; pages: number } {
   const page = options.page || 1;
   const cap = options.maxLimit || 100;
@@ -280,7 +311,7 @@ export function listBadges(options: {
   const offset = (page - 1) * limit;
 
   // Build dynamic WHERE clause for advanced filters
-  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division;
+  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division || options.recentFirst;
 
   if (hasAdvancedFilters || (options.includeHidden && options.department)) {
     const conditions: string[] = [];
@@ -326,7 +357,7 @@ export function listBadges(options: {
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const orderBy = options.includeHidden ? 'ORDER BY created_at DESC' : 'ORDER BY is_band_member DESC, created_at DESC';
+    const orderBy = (options.includeHidden || options.recentFirst) ? 'ORDER BY created_at DESC' : 'ORDER BY is_band_member DESC, created_at DESC';
 
     const badges = db.prepare(`SELECT * FROM badges ${where} ${orderBy} LIMIT $limit OFFSET $offset`).all({ ...params, $limit: limit, $offset: offset }) as BadgeRow[];
     const total = (db.prepare(`SELECT COUNT(*) as count FROM badges ${where}`).get(params) as { count: number }).count;

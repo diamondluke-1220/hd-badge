@@ -26,7 +26,7 @@ interface PresentationState {
 const VIEW_ORDER: PresentationView[] = ['grid', 'splitflap', 'dendro', 'arcade'];
 const VIEW_DURATION_MS = 90_000;       // 90 seconds per view
 const BAND_INTRO_DURATION_MS = 18_000; // 18 seconds per band member
-const BAND_MEMBER_COUNT = 5;           // HD-0001 through HD-0005
+const BAND_MEMBER_COUNT = 5;           // HD-00001 through HD-00005
 
 const DEFAULT_CHYRON: string[] = [
   'GET YOUR BADGE → hdbadge.nav.computer',

@@ -786,8 +786,9 @@ app.get('/api/orgchart', (c) => {
   const division = c.req.query('division') || undefined;
   const page = parseInt(c.req.query('page') || '1', 10);
   const limit = parseInt(c.req.query('limit') || '50', 10);
+  const recentFirst = c.req.query('recentFirst') === '1';
 
-  const result = listBadges({ department, division, page, limit });
+  const result = listBadges({ department, division, page, limit, recentFirst });
 
   return c.json({
     badges: result.badges.map(b => ({

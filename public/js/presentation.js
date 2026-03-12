@@ -34,10 +34,10 @@
 
   const BAND_MEMBERS = [
     { id: 'HD-00001', name: 'LUKE', title: 'Chief Escalation Officer', dept: 'TICKET ESCALATION BUREAU', instrument: 'Vocals', color: '#22C55E' },
-    { id: 'HD-00002', name: 'DREW', title: 'Senior Audio Engineer', dept: 'ENTERPRISE GUITAR WORSHIP', instrument: 'Lead Guitar', color: '#5B8DEF' },
-    { id: 'HD-00003', name: 'HENRY', title: 'Rhythm Infrastructure Lead', dept: 'MOSH PIT HR', instrument: 'Drums', color: '#E74C3C' },
-    { id: 'HD-00004', name: 'TODD', title: 'Redundancy Dept. Manager', dept: 'STAGE DIVE RISK ASSESSMENT', instrument: 'Rhythm Guitar', color: '#D4A843' },
-    { id: 'HD-00005', name: 'ADAM', title: 'Low-End Specialist', dept: 'MORALE SUPPRESSION UNIT', instrument: 'Bass', color: '#9B59B6' },
+    { id: 'HD-00002', name: 'DREW', title: 'Senior Audio Engineer', dept: 'AUDIO ENGINEERING DIVISION', instrument: 'Lead Guitar', color: '#5B8DEF' },
+    { id: 'HD-00003', name: 'HENRY', title: 'Rhythm Infrastructure Lead', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE', instrument: 'Drums', color: '#E74C3C' },
+    { id: 'HD-00004', name: 'TODD', title: 'Redundancy Dept. Manager', dept: 'INFRASTRUCTURE & POWER CHORDS', instrument: 'Rhythm Guitar', color: '#D4A843' },
+    { id: 'HD-00005', name: 'ADAM', title: 'Low-End Specialist', dept: 'LOW FREQUENCY OPERATIONS', instrument: 'Bass', color: '#9B59B6' },
   ];
 
   // ─── Renderers ──────────────────────────────────────────
@@ -270,7 +270,7 @@
     let badges = [];
     try {
       // Get recent badges (last 24h)
-      const recentRes = await fetch('/api/orgchart?limit=50&page=1');
+      const recentRes = await fetch('/api/orgchart?limit=50&page=1&recentFirst=1');
       const recentData = await recentRes.json();
       badges = recentData.badges || [];
 
