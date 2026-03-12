@@ -173,21 +173,46 @@ function renderWaveform(songKey, waveStyle) {
   document.getElementById('waveformDuration').textContent = wf.duration;
 }
 
+// Auto-shrink text to fit within its container (prevents ellipsis clipping)
+function autoShrink(el, minFontSize) {
+  if (!el) return;
+  const min = minFontSize || 32;
+  // Reset to CSS default
+  el.style.fontSize = '';
+  const parent = el.parentElement;
+  if (!parent) return;
+  const maxWidth = parent.clientWidth;
+  let size = parseFloat(getComputedStyle(el).fontSize);
+  while (el.scrollWidth > maxWidth && size > min) {
+    size -= 2;
+    el.style.fontSize = size + 'px';
+  }
+}
+
 // Update all badge fields
 function updateBadge(data) {
   const { name, department, title, song, photoUrl, waveStyle } = data;
 
   // Name
   const nameEl = document.getElementById('nameField');
-  if (nameEl) nameEl.textContent = (name || 'YOUR NAME').toUpperCase();
+  if (nameEl) {
+    nameEl.textContent = (name || 'YOUR NAME').toUpperCase();
+    autoShrink(nameEl, 42);
+  }
 
   // Department
   const deptEl = document.getElementById('deptField');
-  if (deptEl) deptEl.textContent = department || 'SELECT DEPARTMENT';
+  if (deptEl) {
+    deptEl.textContent = department || 'SELECT DEPARTMENT';
+    autoShrink(deptEl, 36);
+  }
 
   // Title
   const titleEl = document.getElementById('titleField');
-  if (titleEl) titleEl.textContent = title || 'Select Title';
+  if (titleEl) {
+    titleEl.textContent = title || 'Select Title';
+    autoShrink(titleEl, 36);
+  }
 
   // Employee ID + Issued date
   const idEl = document.getElementById('idField');
