@@ -1831,7 +1831,7 @@ function playTerminalAnimation(badge) {
         scanWrap.className = 'term-scan-wrap';
 
         const badgeImg = document.createElement('img');
-        badgeImg.src = `/api/badge/${badge.employeeId}/thumb`;
+        badgeImg.src = `/api/badge/${badge.employeeId}/headshot`;
         badgeImg.className = 'term-scan-badge';
         badgeImg.alt = 'Badge';
 
@@ -2070,7 +2070,7 @@ function playPingTrace(nodeEl) {
     photoGroup.setAttribute('filter', 'url(#dendro-glow)');
 
     const photoImg = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    photoImg.setAttribute('href', `/api/badge/${empId}/thumb`);
+    photoImg.setAttribute('href', `/api/badge/${empId}/headshot`);
     photoImg.setAttribute('width', '28');
     photoImg.setAttribute('height', '28');
     photoImg.setAttribute('x', '-14');

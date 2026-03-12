@@ -276,7 +276,7 @@ window.GridRenderer = {
     const initials = (badge.name || '?').charAt(0).toUpperCase();
     card.innerHTML = `
       <div class="badge-grid-photo">
-        <img class="badge-grid-avatar" src="/api/badge/${esc(badge.employeeId)}/thumb" alt="${esc(badge.name)}" loading="lazy"
+        <img class="badge-grid-avatar" src="/api/badge/${esc(badge.employeeId)}/headshot" alt="${esc(badge.name)}" loading="lazy"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <div class="badge-grid-fallback" style="display:none">${initials}</div>
       </div>

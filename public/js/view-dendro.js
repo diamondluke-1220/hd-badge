@@ -702,7 +702,7 @@ window.DendroRenderer = {
         .attr('id', patId)
         .attr('width', 1).attr('height', 1)
         .append('image')
-        .attr('href', `/api/badge/${d.data._badge.employeeId}/thumb`)
+        .attr('href', `/api/badge/${d.data._badge.employeeId}/headshot`)
         .attr('width', 28)
         .attr('height', 28)
         .attr('preserveAspectRatio', 'xMidYMid slice');

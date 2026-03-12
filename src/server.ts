@@ -20,13 +20,16 @@ const DATA_DIR = './data';
 const PHOTOS_DIR = join(DATA_DIR, 'photos');
 const BADGES_DIR = join(DATA_DIR, 'badges');
 const THUMBS_DIR = join(DATA_DIR, 'thumbs');
+const HEADSHOTS_DIR = join(DATA_DIR, 'headshots');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const THUMB_WIDTH = 320;
+const HEADSHOT_WIDTH = 200;
 
 // Ensure data directories exist
 mkdirSync(PHOTOS_DIR, { recursive: true });
 mkdirSync(BADGES_DIR, { recursive: true });
 mkdirSync(THUMBS_DIR, { recursive: true });
+mkdirSync(HEADSHOTS_DIR, { recursive: true });
 
 // Initialize database
 initDb(join(DATA_DIR, 'badges.db'));
@@ -625,6 +628,63 @@ app.get('/api/badge/:id/photo', (c) => {
   });
 });
 
+// Serve employee headshot photo (public, privacy-aware, resized for org chart)
+app.get('/api/badge/:id/headshot', async (c) => {
+  const id = c.req.param('id');
+  const badge = getBadge(id);
+  if (!badge) {
+    return c.json({ error: 'Badge not found.' }, 404);
+  }
+
+  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
+  const placeholderPath = join('public', 'placeholder-photo.png');
+  const hasUsablePhoto = badge.has_photo && badge.photo_public && existsSync(photoPath);
+
+  if (!hasUsablePhoto) {
+    // Serve skull placeholder for no-photo or private-photo badges
+    if (!existsSync(placeholderPath)) {
+      return c.json({ error: 'Placeholder not found.' }, 404);
+    }
+    const file = Bun.file(placeholderPath);
+    return new Response(file, {
+      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' },
+    });
+  }
+
+  // Serve resized headshot (cached)
+  const headshotPath = join(HEADSHOTS_DIR, `${id}.jpg`);
+
+  let needsGenerate = !existsSync(headshotPath);
+  if (!needsGenerate) {
+    const sourceStat = statSync(photoPath);
+    const headshotStat = statSync(headshotPath);
+    if (sourceStat.mtimeMs > headshotStat.mtimeMs) {
+      needsGenerate = true;
+    }
+  }
+
+  if (needsGenerate) {
+    try {
+      await sharp(photoPath)
+        .resize(HEADSHOT_WIDTH)
+        .jpeg({ quality: 85 })
+        .toFile(headshotPath);
+    } catch (err: any) {
+      console.error(`Headshot generation failed for ${id}:`, err.message);
+      // Fall back to full-size photo
+      const file = Bun.file(photoPath);
+      return new Response(file, {
+        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=60' },
+      });
+    }
+  }
+
+  const file = Bun.file(headshotPath);
+  return new Response(file, {
+    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' },
+  });
+});
+
 // Serve badge thumbnail (resized for grid display)
 app.get('/api/badge/:id/thumb', async (c) => {
   const id = c.req.param('id');
@@ -905,10 +965,14 @@ app.post('/api/admin/badge/:id/photo', async (c) => {
     // Update DB
     setHasPhoto(id, true);
 
-    // Invalidate thumbnail so it regenerates on next request
+    // Invalidate thumbnail and headshot caches so they regenerate on next request
     const thumbPath = join(THUMBS_DIR, `${id}.png`);
     if (existsSync(thumbPath)) {
       unlinkSync(thumbPath);
+    }
+    const headshotPath = join(HEADSHOTS_DIR, `${id}.jpg`);
+    if (existsSync(headshotPath)) {
+      unlinkSync(headshotPath);
     }
 
     log('info', 'admin', `Photo uploaded for ${id} (${badge.name})`);
@@ -1025,7 +1089,7 @@ app.get('/api/admin/demo/status', (c) => {
 });
 
 app.post('/api/admin/demo/cleanup', (c) => {
-  const result = cleanupDemo(BADGES_DIR, THUMBS_DIR);
+  const result = cleanupDemo(BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR);
   return c.json({ success: true, ...result });
 });
 

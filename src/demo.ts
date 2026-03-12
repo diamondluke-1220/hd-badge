@@ -276,7 +276,7 @@ export function getDemoStatus() {
   };
 }
 
-export function cleanupDemo(badgesDir: string, thumbsDir: string): { deleted: number } {
+export function cleanupDemo(badgesDir: string, thumbsDir: string, headshotsDir?: string): { deleted: number } {
   // Stop any running demo first
   if (state.running) {
     for (const t of state.timers) clearTimeout(t);
@@ -290,7 +290,8 @@ export function cleanupDemo(badgesDir: string, thumbsDir: string): { deleted: nu
   // Delete files
   let filesDeleted = 0;
   for (const id of ids) {
-    for (const dir of [badgesDir, thumbsDir]) {
+    const dirs = headshotsDir ? [badgesDir, thumbsDir, headshotsDir] : [badgesDir, thumbsDir];
+    for (const dir of dirs) {
       const path = join(dir, `${id}.png`);
       try {
         if (existsSync(path)) {
@@ -304,6 +305,13 @@ export function cleanupDemo(badgesDir: string, thumbsDir: string): { deleted: nu
       const np = join(badgesDir, `${id}-nophoto.png`);
       if (existsSync(np)) unlinkSync(np);
     } catch { /* ignore */ }
+    // Clean up headshot JPEG cache
+    if (headshotsDir) {
+      try {
+        const hs = join(headshotsDir, `${id}.jpg`);
+        if (existsSync(hs)) unlinkSync(hs);
+      } catch { /* ignore */ }
+    }
   }
 
   // Delete from DB

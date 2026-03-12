@@ -224,7 +224,7 @@ window.ArcadeRenderer = {
 
     slot.innerHTML = `
       <div class="arcade-slot-photo-wrap">
-        <img class="arcade-slot-photo" src="/api/badge/${esc(badge.employeeId)}/thumb"
+        <img class="arcade-slot-photo" src="/api/badge/${esc(badge.employeeId)}/headshot"
              alt="${esc(badge.name)}" loading="lazy"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
         <div class="arcade-slot-silhouette" style="display:none">?</div>
@@ -279,7 +279,7 @@ window.ArcadeRenderer = {
     // Portrait
     const portraitEl = this._previewPanel.querySelector('.arcade-preview-portrait');
     portraitEl.innerHTML = `
-      <img class="arcade-preview-img" src="/api/badge/${esc(badge.employeeId)}/thumb"
+      <img class="arcade-preview-img" src="/api/badge/${esc(badge.employeeId)}/headshot"
            alt="${esc(badge.name)}"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
       <div class="arcade-preview-silhouette" style="display:none">?</div>
@@ -630,7 +630,7 @@ window.ArcadeRenderer = {
     // Portrait
     const portraitEl = this._previewPanel.querySelector('.arcade-preview-portrait');
     portraitEl.innerHTML = `
-      <img class="arcade-preview-img" src="/api/badge/${esc(badge.employeeId)}/thumb"
+      <img class="arcade-preview-img" src="/api/badge/${esc(badge.employeeId)}/headshot"
            alt="${esc(badge.name)}"
            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
       <div class="arcade-preview-silhouette" style="display:none">?</div>
@@ -719,7 +719,7 @@ window.ArcadeRenderer = {
         opponent = {
           type: 'boss',
           name: boss.name,
-          photoUrl: `/api/badge/${boss.employeeId}/thumb`,
+          photoUrl: `/api/badge/${boss.employeeId}/headshot`,
           className: bossCls.name,
           move: bossMove,
           stats: bossStats,
@@ -757,7 +757,7 @@ window.ArcadeRenderer = {
 
       // Left side: new employee
       let leftPortrait;
-      leftPortrait = `<img class="arcade-vs-portrait" src="/api/badge/${esc(badge.employeeId)}/thumb"
+      leftPortrait = `<img class="arcade-vs-portrait" src="/api/badge/${esc(badge.employeeId)}/headshot"
         alt="${esc(badge.name)}"
         onerror="this.style.display='none'">`;
 
