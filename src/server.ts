@@ -22,7 +22,7 @@ let _browser: import('playwright').Browser | null = null;
 async function getBrowser() {
   if (!_browser || !_browser.isConnected()) {
     const { chromium } = await import('playwright');
-    _browser = await chromium.launch();
+    _browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   }
   return _browser;
 }
