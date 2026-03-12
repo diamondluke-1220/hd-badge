@@ -801,7 +801,7 @@ async function submitBadge(photoPublic) {
       song: state.song,
       accessLevel: state.accessLevel,
       accessCss: ACCESS_CSS[state.accessLevel] || '',
-      photo: state.photoUrl || null,
+      photo: photoPublic ? (state.photoUrl || null) : null,
       photoPublic,
     };
 
