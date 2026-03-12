@@ -794,22 +794,6 @@ async function submitBadge(photoPublic) {
   loading.classList.add('active');
 
   try {
-    // Capture full badge PNG (with photo)
-    const badgePng = await captureBadgePng();
-
-    // Capture no-photo variant if needed
-    let badgePngNoPhoto = null;
-    if (state.photoUrl && !photoPublic) {
-      const savedPhoto = state.photoUrl;
-      state.photoUrl = null;
-      refreshPreview();
-      updateBadge(state);
-      await new Promise(r => setTimeout(r, 100));
-      badgePngNoPhoto = await captureBadgePng();
-      state.photoUrl = savedPhoto;
-      refreshPreview();
-    }
-
     const body = {
       name: state.name,
       department: state.department,
@@ -818,8 +802,6 @@ async function submitBadge(photoPublic) {
       accessLevel: state.accessLevel,
       accessCss: ACCESS_CSS[state.accessLevel] || '',
       photo: state.photoUrl || null,
-      badgePng,
-      badgePngNoPhoto,
       photoPublic,
     };
 
