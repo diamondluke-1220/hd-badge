@@ -1,0 +1,507 @@
+/* ============================================================
+   ARCADE SELECT SCREEN — arcade.css
+   Badge App / Help Desk
+   ============================================================ */
+
+/* --- Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Roboto+Condensed:wght@700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+/* ============================================================
+   CONTAINER + LAYOUT
+   ============================================================ */
+
+.arcade-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  background: #0a0a12;
+  position: relative;
+  overflow: hidden;
+}
+
+/* CRT scanline overlay */
+.arcade-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 1px,
+    rgba(0, 0, 0, 0.03) 1px,
+    rgba(0, 0, 0, 0.03) 2px
+  );
+  z-index: 100;
+}
+
+.arcade-grid-panel {
+  width: 60%;
+  overflow-y: auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.arcade-preview-panel {
+  width: 40%;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   PORTRAIT SLOTS
+   ============================================================ */
+
+.arcade-slot {
+  width: 96px;
+  height: 120px;
+  border: 2px solid #2a2a3a;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.arcade-slot:hover {
+  border-color: #4a4a6a;
+  transform: scale(1.05);
+  box-shadow: 0 0 12px rgba(74, 74, 255, 0.3);
+}
+
+.arcade-slot.selected {
+  border: 3px solid #4a4aff;
+  box-shadow:
+    0 0 8px rgba(74, 74, 255, 0.5),
+    0 0 24px rgba(74, 74, 255, 0.25);
+}
+
+.arcade-slot.locked {
+  opacity: 0.4;
+  filter: grayscale(1);
+  cursor: not-allowed;
+}
+
+.arcade-slot.new::after {
+  content: 'NEW';
+  position: absolute;
+  top: 6px;
+  right: -20px;
+  background: #ff3366;
+  color: #ffffff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  padding: 2px 24px;
+  transform: rotate(45deg);
+  animation: slotPulse 1.5s ease-in-out infinite;
+}
+
+/* Boss row — gold borders, sticky */
+.arcade-boss-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 12px 0;
+  background: #0a0a12;
+}
+
+.arcade-boss-row .arcade-slot {
+  border-color: #D4A843;
+}
+
+.arcade-boss-row .arcade-slot:hover {
+  border-color: #f0d060;
+  box-shadow: 0 0 16px rgba(212, 168, 67, 0.4);
+}
+
+.arcade-boss-row .arcade-slot.selected {
+  border-color: #D4A843;
+  box-shadow:
+    0 0 10px rgba(212, 168, 67, 0.6),
+    0 0 28px rgba(212, 168, 67, 0.3);
+}
+
+/* ============================================================
+   PHOTO WITHIN SLOT
+   ============================================================ */
+
+.arcade-slot-photo {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.arcade-slot-name {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: #1a1a2a;
+  text-align: center;
+  width: 100%;
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+   STATS PANEL
+   ============================================================ */
+
+.arcade-stat-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.arcade-stat-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #aaaacc;
+  width: 40px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.arcade-stat-track {
+  display: flex;
+  gap: 1px;
+}
+
+.arcade-stat-block {
+  width: 12px;
+  height: 14px;
+  background: #1a1a2a;
+  transition: background-color 0.2s ease;
+}
+
+.arcade-stat-block.filled {
+  background: #00ffcc;
+}
+
+.arcade-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #ffffff;
+  margin-left: 8px;
+  min-width: 24px;
+  text-align: right;
+}
+
+/* ============================================================
+   DIVISION COLOR CLASSES
+   ============================================================ */
+
+.div-color-IT .arcade-stat-block.filled {
+  background: #00d4ff;
+}
+
+.div-color-Office .arcade-stat-block.filled {
+  background: #ff3366;
+}
+
+.div-color-Corporate .arcade-stat-block.filled {
+  background: #ff6b35;
+}
+
+.div-color-Punk .arcade-stat-block.filled {
+  background: #00ff41;
+}
+
+.div-color-_exec .arcade-stat-block.filled {
+  background: #ffffff;
+}
+
+.div-color-_custom .arcade-stat-block.filled {
+  background: #ffd700;
+}
+
+/* ============================================================
+   VS SCREEN OVERLAY
+   ============================================================ */
+
+.arcade-vs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.arcade-vs-left,
+.arcade-vs-right {
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.arcade-vs-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 64px;
+  color: #ffcc00;
+  text-shadow:
+    0 0 10px #ffcc00,
+    0 0 30px #ffcc00,
+    0 0 60px #ff6600;
+  animation: vsShake 0.1s linear infinite;
+}
+
+@keyframes vsShake {
+  0% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  50% { transform: translateX(5px); }
+  75% { transform: translateX(-3px); }
+  100% { transform: translateX(0); }
+}
+
+/* ============================================================
+   PROVISIONING OVERLAY
+   ============================================================ */
+
+.arcade-provision {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 5;
+}
+
+.arcade-provision-bar {
+  height: 4px;
+  width: 0%;
+  background: #00ffcc;
+  transition: width 0.3s ease;
+}
+
+/* ============================================================
+   DIVISION TABS
+   ============================================================ */
+
+.arcade-tabs {
+  display: flex;
+  flex-direction: row;
+  border-top: 1px solid #2a2a3a;
+  gap: 0;
+}
+
+.arcade-tab {
+  padding: 8px 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  color: #aaaacc;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.arcade-tab:hover {
+  color: #ffffff;
+}
+
+.arcade-tab.active {
+  color: #00ffcc;
+  border-bottom: 2px solid #00ffcc;
+}
+
+/* ============================================================
+   IDLE ANIMATIONS
+   ============================================================ */
+
+@keyframes insertCoin {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes slotPulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(0, 255, 204, 0.3); }
+  50% { box-shadow: 0 0 16px rgba(0, 255, 204, 0.7); }
+}
+
+@keyframes neonFlicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
+  20%, 24%, 55% { opacity: 0.6; }
+}
+
+/* ============================================================
+   ANNOUNCER BAR
+   ============================================================ */
+
+.arcade-announcer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  text-align: center;
+  color: #ffcc00;
+  background: #0a0a12;
+  border-top: 1px solid #2a2a3a;
+  text-shadow:
+    0 0 6px #ffcc00,
+    0 0 20px rgba(255, 204, 0, 0.4);
+  z-index: 50;
+}
+
+/* ============================================================
+   REDUCED MOTION + FX OFF
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .arcade-slot {
+    transition: none;
+  }
+
+  .arcade-slot:hover {
+    transform: none;
+  }
+
+  .arcade-container::after {
+    display: none;
+  }
+
+  .arcade-vs-text {
+    animation: none;
+  }
+
+  .arcade-slot.new::after {
+    animation: none;
+  }
+
+  .arcade-provision-bar {
+    transition: none;
+  }
+
+  .arcade-stat-block {
+    transition: none;
+  }
+}
+
+.fx-off .arcade-slot {
+  transition: none;
+}
+
+.fx-off .arcade-slot:hover {
+  transform: none;
+}
+
+.fx-off .arcade-container::after {
+  display: none;
+}
+
+.fx-off .arcade-vs-text {
+  animation: none;
+}
+
+.fx-off .arcade-slot.new::after {
+  animation: none;
+}
+
+.fx-off .arcade-provision-bar {
+  transition: none;
+}
+
+.fx-off .arcade-stat-block {
+  transition: none;
+}
+
+/* ============================================================
+   RESPONSIVE (<768px)
+   ============================================================ */
+
+@media (max-width: 767px) {
+  .arcade-container {
+    flex-direction: column;
+  }
+
+  .arcade-grid-panel {
+    width: 100%;
+    overflow-y: visible;
+  }
+
+  .arcade-preview-panel {
+    width: 100%;
+    position: relative;
+    height: auto;
+    padding: 16px;
+  }
+
+  .arcade-slot {
+    width: 72px;
+    height: 96px;
+  }
+
+  .arcade-slot-photo {
+    width: 60px;
+    height: 60px;
+  }
+
+  .arcade-slot-name {
+    font-size: 10px;
+  }
+
+  .arcade-grid-panel {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    justify-items: center;
+  }
+
+  .arcade-boss-row {
+    grid-column: 1 / -1;
+  }
+
+  /* Mini stat bars */
+  .arcade-stat-block {
+    width: 8px;
+    height: 10px;
+  }
+
+  .arcade-stat-label {
+    font-size: 8px;
+    width: 32px;
+  }
+
+  .arcade-stat-value {
+    font-size: 10px;
+  }
+
+  .arcade-vs-text {
+    font-size: 36px;
+  }
+
+  .arcade-announcer {
+    font-size: 8px;
+    padding: 8px 12px;
+  }
+}

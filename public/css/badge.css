@@ -404,7 +404,9 @@
   border-radius: 999px;
 }
 
-/* Fine print — vertical along right edge */
+/* Fine print — vertical along right edge
+   CSS uses writing-mode for live preview; html2canvas renders via canvas post-processing
+   (see captureBadgePng / renderBadge for the canvas draw) */
 .badge .fine-print {
   position: absolute;
   right: 48px;

@@ -576,6 +576,51 @@ function applyCrop() {
 
 // ─── Badge Capture (shared) ───────────────────────────────
 
+// Post-process canvas: draw fine-print text + clip rounded corners
+// (html2canvas can't handle writing-mode or large rotated transforms)
+function postProcessBadgeCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  const W = 1276, H = 2026, R = 75;
+
+  // 1. Draw fine-print text rotated along right edge
+  const fp = document.querySelector('#badge .fine-print');
+  if (fp) {
+    const text = fp.textContent.trim().toUpperCase();
+    // Center of text area: from y=350 (below header+photo top) to y=1950 (above bottom bar)
+    const centerY = 180 + (H - 180 - 76) / 2;
+    ctx.save();
+    ctx.translate(W - 48, centerY);
+    ctx.rotate(Math.PI / 2);
+    ctx.font = '600 26px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#C0CAD4';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+
+  // 2. Clip to rounded rectangle (removes white corner artifacts)
+  const clipped = document.createElement('canvas');
+  clipped.width = W;
+  clipped.height = H;
+  const cctx = clipped.getContext('2d');
+  cctx.beginPath();
+  cctx.moveTo(R, 0);
+  cctx.lineTo(W - R, 0);
+  cctx.quadraticCurveTo(W, 0, W, R);
+  cctx.lineTo(W, H - R);
+  cctx.quadraticCurveTo(W, H, W - R, H);
+  cctx.lineTo(R, H);
+  cctx.quadraticCurveTo(0, H, 0, H - R);
+  cctx.lineTo(0, R);
+  cctx.quadraticCurveTo(0, 0, R, 0);
+  cctx.closePath();
+  cctx.clip();
+  cctx.drawImage(canvas, 0, 0);
+
+  return clipped;
+}
+
 async function captureBadgePng() {
   const captureDiv = document.getElementById('badgeCapture');
   captureDiv.style.left = '0';
@@ -584,24 +629,31 @@ async function captureBadgePng() {
   captureDiv.style.zIndex = '-1';
   captureDiv.style.opacity = '0.01';
 
+  // Hide fine-print from html2canvas (we draw it manually)
+  const fp = document.querySelector('#badge .fine-print');
+  if (fp) fp.style.visibility = 'hidden';
+
   await new Promise(r => setTimeout(r, 500));
 
   const badge = document.getElementById('badge');
-  const canvas = await html2canvas(badge, {
+  let canvas = await html2canvas(badge, {
     width: 1276,
     height: 2026,
     scale: 1,
     useCORS: true,
     allowTaint: true,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: null,
     logging: false,
   });
+
+  if (fp) fp.style.visibility = '';
 
   captureDiv.style.left = '-9999px';
   captureDiv.style.position = 'absolute';
   captureDiv.style.zIndex = '';
   captureDiv.style.opacity = '';
 
+  canvas = postProcessBadgeCanvas(canvas);
   return canvas.toDataURL('image/png');
 }
 
@@ -1162,7 +1214,9 @@ async function switchView(mode) {
   const renderers = {
     grid: window.GridRenderer,
     win98: window.Win98Renderer,
+    splitflap: window.SplitFlapRenderer,
     dendro: window.DendroRenderer,
+    arcade: window.ArcadeRenderer,
   };
 
   const renderer = renderers[mode];
@@ -1215,11 +1269,13 @@ async function initOrgChart() {
   const available = {
     grid: !!window.GridRenderer,
     win98: !!window.Win98Renderer,
+    splitflap: !!window.SplitFlapRenderer,
     dendro: !!window.DendroRenderer,
+    arcade: !!window.ArcadeRenderer,
   };
   const mode = available[savedMode] ? savedMode : 'grid';
 
-  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, dendro: window.DendroRenderer }[mode];
+  currentRenderer = { grid: window.GridRenderer, win98: window.Win98Renderer, splitflap: window.SplitFlapRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
   if (!currentRenderer) {
     orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
     return;
@@ -1243,11 +1299,14 @@ function buildViewSwitcher() {
     <button class="view-switch-btn active" data-mode="grid">
       <span class="view-switch-icon">&#9638;</span> Grid <kbd>1</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="win98">
-      <span class="view-switch-icon">&#128187;</span> Desktop <kbd>2</kbd>
+    <button class="view-switch-btn" data-mode="splitflap">
+      <span class="view-switch-icon">&#9201;</span> Lobby <kbd>2</kbd>
     </button>
     <button class="view-switch-btn" data-mode="dendro">
       <span class="view-switch-icon">&#9776;</span> Tree <kbd>3</kbd>
+    </button>
+    <button class="view-switch-btn" data-mode="arcade">
+      <span class="view-switch-icon">&#127918;</span> Arcade <kbd>4</kbd>
     </button>
     <span class="view-switch-divider"></span>
     <button class="view-switch-btn" id="replayToggleBtn" title="Start Replay (R)">
@@ -1278,8 +1337,9 @@ function buildViewSwitcher() {
     // Don't trigger in inputs/textareas
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === '1') switchView('grid');
-    else if (e.key === '2') switchView('win98');
+    else if (e.key === '2') switchView('splitflap');
     else if (e.key === '3') switchView('dendro');
+    else if (e.key === '4') switchView('arcade');
     else if (e.key === 'r' || e.key === 'R') toggleReplay();
     else if (e.key === 'a' || e.key === 'A') toggleAnimations();
   });
@@ -1353,7 +1413,9 @@ function queueLiveAnimation(badge, isReplay = false) {
 
 function getCurrentViewMode() {
   if (currentRenderer === window.Win98Renderer) return 'win98';
+  if (currentRenderer === window.SplitFlapRenderer) return 'splitflap';
   if (currentRenderer === window.DendroRenderer) return 'dendro';
+  if (currentRenderer === window.ArcadeRenderer) return 'arcade';
   return 'grid';
 }
 
@@ -1389,9 +1451,13 @@ async function processLiveQueue() {
       if (card) await playSpotlight(card);
     } else if (mode === 'win98') {
       if (currentRenderer) await currentRenderer.addBadge(badge);
+    } else if (mode === 'splitflap') {
+      if (currentRenderer) await currentRenderer.addBadge(badge);
     } else if (mode === 'dendro') {
       const nodeEl = currentRenderer ? currentRenderer.addBadge(badge) : null;
       if (nodeEl) await playPingTrace(nodeEl);
+    } else if (mode === 'arcade') {
+      if (currentRenderer) await currentRenderer.addBadge(badge);
     } else {
       const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
     }

@@ -499,7 +499,26 @@ app.get('/api/badge/:id/image', (c) => {
 
   const file = Bun.file(imagePath);
   return new Response(file, {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' },
+    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },
+  });
+});
+
+// Serve badge photo (admin only — for re-rendering)
+app.get('/api/badge/:id/photo', (c) => {
+  const id = c.req.param('id');
+  const badge = getBadge(id);
+  if (!badge || !badge.has_photo) {
+    return c.json({ error: 'Photo not found.' }, 404);
+  }
+
+  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
+  if (!existsSync(photoPath)) {
+    return c.json({ error: 'Photo file not found.' }, 404);
+  }
+
+  const file = Bun.file(photoPath);
+  return new Response(file, {
+    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache' },
   });
 });
 
@@ -547,7 +566,7 @@ app.get('/api/badge/:id/thumb', async (c) => {
       // Fall back to full-size image
       const file = Bun.file(sourcePath);
       return new Response(file, {
-        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=3600' },
+        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },
       });
     }
   }
@@ -794,6 +813,128 @@ app.post('/api/admin/badge/:id/photo', async (c) => {
   } catch (err: any) {
     log('error', 'admin', `Photo upload failed for ${id}: ${err.message}`);
     return c.json({ error: 'Photo upload failed.' }, 500);
+  }
+});
+
+// Admin: server-side badge render using Playwright (captures CSS perfectly)
+app.post('/api/admin/badge/:id/render', async (c) => {
+  const id = c.req.param('id');
+  const badge = getBadge(id);
+  if (!badge) {
+    return c.json({ error: 'Badge not found.' }, 404);
+  }
+
+  try {
+    const { chromium } = await import('playwright');
+    const browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
+
+    // Load the badge creation page on our own server
+    await page.goto(`http://localhost:${port}/`, { waitUntil: 'networkidle' });
+
+    // Populate badge fields via the app's own updateBadge function
+    const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
+    const hasPhoto = badge.has_photo && existsSync(photoPath);
+    let photoDataUrl: string | null = null;
+    if (hasPhoto) {
+      const photoBuffer = await Bun.file(photoPath).arrayBuffer();
+      photoDataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuffer).toString('base64')}`;
+    }
+
+    await page.evaluate(({ badge, photoDataUrl }) => {
+      // Clear preview clone so getElementById hits the original capture element
+      const previewArea = document.getElementById('badgePreviewArea');
+      if (previewArea) previewArea.innerHTML = '';
+
+      // Set the employee ID and issued date (mark as set to prevent regeneration)
+      const idEl = document.getElementById('idField');
+      if (idEl) { idEl.textContent = badge.employee_id; idEl.dataset.set = '1'; }
+      const issuedEl = document.getElementById('issuedField');
+      if (issuedEl) {
+        const d = new Date(badge.created_at);
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(2);
+        issuedEl.textContent = `ISSUED ${mm}.${dd}.${yy}`;
+        issuedEl.dataset.set = '1';
+      }
+
+      // Reset photo frame: remove any stale img from initial page load
+      const frame = document.querySelector('#badge .photo-frame') as HTMLElement;
+      if (frame) {
+        const staleImg = frame.querySelector('img');
+        if (staleImg) staleImg.remove();
+        frame.classList.remove('has-photo');
+        const placeholder = frame.querySelector('.photo-placeholder-text') as HTMLElement;
+        if (placeholder) placeholder.style.display = '';
+      }
+
+      // Use the app's own updateBadge to populate the capture element
+      (window as any).updateBadge({
+        name: badge.name,
+        department: badge.department,
+        title: badge.title,
+        song: badge.song,
+        accessLevel: badge.access_level,
+        accessCss: badge.access_css,
+        photoUrl: photoDataUrl,
+        waveStyle: 'barcode',
+        caption: 'SCAN TO FILE COMPLAINT',
+      });
+    }, { badge, photoDataUrl });
+
+    // Wait for photo to render if present
+    if (hasPhoto) {
+      await page.waitForTimeout(300);
+    }
+
+    // Hide all page content except the badge capture, then move badge into viewport
+    await page.evaluate(() => {
+      // Remove everything except badgeCapture from the DOM entirely
+      document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
+        el.remove();
+      });
+      document.body.style.background = 'white';
+      document.body.style.margin = '0';
+      document.body.style.padding = '0';
+
+      const captureDiv = document.getElementById('badgeCapture');
+      if (captureDiv) {
+        captureDiv.style.left = '0';
+        captureDiv.style.top = '0';
+        captureDiv.style.position = 'fixed';
+        captureDiv.style.zIndex = '9999';
+      }
+
+      // clip-path ensures Playwright screenshot respects border-radius
+      const badgeDiv = document.getElementById('badge');
+      if (badgeDiv) {
+        badgeDiv.style.clipPath = 'inset(0 round 75px)';
+      }
+    });
+
+    const badgeEl = await page.$('#badge');
+    if (!badgeEl) {
+      await browser.close();
+      return c.json({ error: 'Badge element not found on page.' }, 500);
+    }
+
+    const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: true });
+    await browser.close();
+
+    writeFileSync(join(BADGES_DIR, `${id}.png`), screenshot);
+
+    // Invalidate thumbnail
+    const thumbPath = join(THUMBS_DIR, `${id}.png`);
+    if (existsSync(thumbPath)) {
+      unlinkSync(thumbPath);
+    }
+
+    log('info', 'admin', `Badge rendered (Playwright) for ${id} (${badge.name})`);
+    return c.json({ success: true, message: `Badge rendered for ${badge.name}.` });
+  } catch (err: any) {
+    log('error', 'admin', `Badge render failed for ${id}: ${err.message}`);
+    return c.json({ error: 'Badge render failed: ' + err.message }, 500);
   }
 });
 

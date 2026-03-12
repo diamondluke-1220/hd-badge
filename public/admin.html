@@ -228,6 +228,7 @@
       object-fit: cover;
       border-radius: 4px;
       background: #3A3A44;
+      cursor: pointer;
     }
     .badge-id {
       font-family: 'JetBrains Mono', monospace;
@@ -790,7 +791,7 @@ function renderTable(badges) {
   }
 
   tbody.innerHTML = badges.map(b => {
-    const imgSrc = `/api/badge/${b.employeeId}/thumb`;
+    const imgSrc = `/api/badge/${b.employeeId}/thumb?t=${Date.now()}`;
     const statusClass = b.isVisible ? 'status-visible' : 'status-hidden';
     const statusText = b.isVisible ? 'Visible' : 'Hidden';
     const bandTag = b.isBandMember ? ' <span class="status-band">BAND</span>' : '';
@@ -812,7 +813,7 @@ function renderTable(badges) {
     const flagBtnLabel = b.isFlagged ? 'Unflag' : 'Flag';
 
     return `<tr>
-      <td><img class="badge-thumb" src="${imgSrc}" alt="Badge" loading="lazy"></td>
+      <td><a href="/api/badge/${b.employeeId}/image?t=${Date.now()}" target="_blank"><img class="badge-thumb" src="${imgSrc}" alt="Badge" loading="lazy"></a></td>
       <td><span class="badge-id">${b.employeeId}</span></td>
       <td><span class="badge-name">${esc(b.name)}</span>${flagTag}</td>
       <td><span class="badge-dept">${esc(b.department)}</span></td>
@@ -823,6 +824,7 @@ function renderTable(badges) {
       <td>${date}</td>
       <td>
         <button class="btn-action" onclick="uploadPhoto('${b.employeeId}')" title="Upload photo">&#128247; Photo</button>
+        <button class="btn-action" onclick="renderBadge('${b.employeeId}')" title="Render badge PNG">&#127912; Render</button>
         <button class="${flagBtnClass}" onclick="toggleFlag('${b.employeeId}')">${flagBtnLabel}</button>
         <button class="${paidBtnClass}" onclick="togglePaid('${b.employeeId}')">${paidBtnLabel}</button>
         <button class="${printedBtnClass}" onclick="togglePrinted('${b.employeeId}')">${printedBtnLabel}</button>
@@ -1222,6 +1224,31 @@ async function loadLogs() {
   }
 }
 
+// ─── Badge Render (server-side via Playwright) ───────────
+async function renderBadge(id) {
+  if (!confirm(`Render badge PNG for ${id}? This uses server-side rendering for pixel-perfect output.`)) return;
+
+  try {
+    const res = await fetch(`/api/admin/badge/${id}/render`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sessionStorage.getItem('admin-token')}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    });
+    const result = await res.json();
+    if (result.success) {
+      alert(result.message);
+      loadBadges();
+    } else {
+      alert('Render failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Render failed: ' + err.message);
+  }
+}
+
 // ─── Init ───────────────────────────────────────────────
 if (token) {
   apiFetch('/api/admin/stats')
@@ -1235,5 +1262,6 @@ if (token) {
     });
 }
 </script>
+
 </body>
 </html>
