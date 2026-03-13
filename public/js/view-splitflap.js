@@ -7,9 +7,11 @@ window.SplitFlapRenderer = {
   _stats: null,
   _allBadges: [],
   _floorSections: {},
+  _floorBadges: {},       // floor -> { all: Badge[], visibleSet: Set<index> }
   _clockInterval: null,
   _idleInterval: null,
   _intercomInterval: null,
+  _rotationInterval: null,
   _intercomIndex: 0,
   _packetOverlay: null,
   _packetPanel: null,
@@ -92,11 +94,45 @@ window.SplitFlapRenderer = {
     'good luck', 'see HR', 'not applicable', 'still pending', 'they know what they did',
   ],
 
+  FUN_SKILLS: [
+    'EXCEL (CLAIMS)', 'OUTLOOK (DEPENDENT)', 'LOOKING BUSY (EXPERT)', 'REPLY ALL (CERTIFIED)',
+    'MOSH PIT SURVIVAL', 'POWERPOINT (WEAPONIZED)', 'CABLE MANAGEMENT (CHAOTIC)',
+    'PASSIVE AGGRESSION (SENIOR)', 'GUITAR HERO (EXPERT)', 'FIREWALL EVASION',
+    'MEETING AVOIDANCE', 'TICKET DEFLECTION (BLACK BELT)', 'SLAM DANCING (INTERMEDIATE)',
+    'CTRL+Z (PROFESSIONAL)', 'BLAME REDIRECTION',
+  ],
+
+  FUN_LAST_SEEN: [
+    'SUPPLY CLOSET 3:47PM', 'TAKING A LONG LUNCH', 'NOWHERE NEAR THE INCIDENT',
+    'LEAVING EARLY (AGAIN)', 'SERVER ROOM (NAPPING)', 'LOADING DOCK (SMOKING)',
+    'BACKSTAGE', 'MOSH PIT (COMPANY TIME)', 'HIDING FROM STANDUP', 'BATHROOM (45 MIN)',
+    'OTHER BUILDING (UNVERIFIED)', 'PARKING LOT (SCREAMING)', 'BREAK ROOM (CRYING)',
+    'GREEN ROOM', 'ROOF (DON\'T ASK)',
+  ],
+
+  FUN_HR_VIOLATIONS: [
+    'EXCESSIVE SIGHING', 'UNAPPROVED SNACKING', 'AGGRESSIVE STAPLING',
+    'MICROWAVED FISH (TWICE)', 'REPLIED ALL TO CEO', 'AIR GUITAR IN ELEVATOR',
+    'SLAM DANCED IN BREAKROOM', 'UNPLUGGED THE FIREWALL', 'STAGE DOVE OFF COPIER',
+    'DRESS CODE (BATTLE VEST)', 'INSTALLED LINUX ON PRINTER', 'CROWD SURFED AT TOWNHALL',
+    'PLAYED DRUMS ON DESK (3HRS)', 'CHANGED HOLD MUSIC TO PUNK', 'STARTED PIT IN PARKING LOT',
+  ],
+
+  FUN_SPIRIT_ANIMAL: [
+    'BROKEN PRINTER', 'STALE COFFEE', 'THAT ONE MEETING', 'MONDAY', 'BASS DROP',
+    'UNPLUGGED ROUTER', 'ENCORE', '404 PAGE', 'FEEDBACK LOOP', 'DEAD BATTERY',
+    'MOSH PIT', 'SPINNING WHEEL OF DEATH', 'POWER CHORD', 'UNREAD EMAIL',
+    'BLINKING CURSOR', 'PATCH CABLE (UNLABELED)', 'FIRE ALARM (FALSE)',
+  ],
+
+  // Row cap per floor
+  MAX_VISIBLE_ROWS: 8,
+
   // Column char limits
-  COL_NAME: 16,
-  COL_DEPT: 12,
-  COL_SUITE: 8,
-  COL_STATUS: 14,
+  COL_NAME: 18,
+  COL_TITLE: 18,
+  COL_DEPT: 16,
+  COL_STATUS: 12,
 
   // ─── Hash ────────────────────────────────────────────────
 
@@ -249,7 +285,7 @@ window.SplitFlapRenderer = {
     header.innerHTML =
       '<div class="sf-floor-accent"></div>' +
       '<span class="sf-floor-label">' + esc(this.FLOOR_LABELS[floor] || ('FLOOR ' + floor)) + '</span>' +
-      '<span class="sf-floor-count" style="font-size:11px;color:#666;margin-left:8px;"></span>' +
+      '<span class="sf-floor-count" style="font-size:12px;color:#999;margin-left:8px;"></span>' +
       '<span class="sf-floor-chevron">\u25BC</span>';
 
     header.addEventListener('click', () => {
@@ -259,9 +295,10 @@ window.SplitFlapRenderer = {
     const colLabels = document.createElement('div');
     colLabels.className = 'sf-col-labels';
     colLabels.innerHTML =
+      '<span class="sf-col-accent"></span>' +
       '<span class="sf-col-name">NAME</span>' +
+      '<span class="sf-col-title">TITLE</span>' +
       '<span class="sf-col-dept">DEPT</span>' +
-      '<span class="sf-col-suite">SUITE</span>' +
       '<span class="sf-col-status">STATUS</span>';
 
     const body = document.createElement('div');
@@ -275,10 +312,17 @@ window.SplitFlapRenderer = {
   },
 
   _updateFloorCount(section) {
-    const body = section.querySelector('.sf-floor-body');
-    const rows = body ? body.querySelectorAll('.sf-row') : [];
+    const floor = parseInt(section.dataset.floor, 10);
+    const floorData = this._floorBadges[floor];
     const countEl = section.querySelector('.sf-floor-count');
-    if (countEl) countEl.textContent = '(' + rows.length + ')';
+    if (countEl && floorData) {
+      const visible = section.querySelectorAll('.sf-floor-body .sf-row').length;
+      const total = floorData.all.length;
+      countEl.textContent = '(' + visible + ' of ' + total + ')';
+    } else if (countEl) {
+      const rows = section.querySelectorAll('.sf-floor-body .sf-row');
+      countEl.textContent = '(' + rows.length + ')';
+    }
   },
 
   // ─── Row Builder ─────────────────────────────────────────
@@ -287,6 +331,7 @@ window.SplitFlapRenderer = {
     const div = this._getDivision(badge);
     const floor = this._getFloor(div);
     const name = (badge.name || '').toUpperCase().substring(0, this.COL_NAME);
+    const title = (badge.title || '').toUpperCase().substring(0, this.COL_TITLE);
     const dept = (badge.department || '').toUpperCase().substring(0, this.COL_DEPT);
     const suite = this._getSuite(badge.name || '', floor);
     const status = this._getStatus(badge.name || '');
@@ -298,22 +343,38 @@ window.SplitFlapRenderer = {
     row.dataset.floor = floor;
     row.style.cursor = 'pointer';
 
+    // Division accent tile (Vestaboard-style solid color tile)
+    const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
+    const accentCell = document.createElement('div');
+    accentCell.className = 'sf-cell sf-cell-accent';
+    const accentTile = this._createCharCell();
+    const accentFlaps = accentTile.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    accentFlaps.forEach(el => { el.style.background = divColor; });
+    accentCell.appendChild(accentTile);
+
     // Create cells
     const nameCell = this._buildCell('sf-cell-name', this.COL_NAME);
+    const titleCell = this._buildCell('sf-cell-title', this.COL_TITLE);
     const deptCell = this._buildCell('sf-cell-dept', this.COL_DEPT);
-    const suiteCell = this._buildCell('sf-cell-suite', this.COL_SUITE);
     const statusCell = this._buildCell('sf-cell-status', this.COL_STATUS);
 
+    // Status prefix: colored tile indicator before status text
+    const statusPrefix = document.createElement('div');
+    statusPrefix.className = 'sf-status-prefix';
+    statusPrefix.style.background = divColor;
+    statusCell.insertBefore(statusPrefix, statusCell.firstChild);
+
+    row.appendChild(accentCell);
     row.appendChild(nameCell);
+    row.appendChild(titleCell);
     row.appendChild(deptCell);
-    row.appendChild(suiteCell);
     row.appendChild(statusCell);
 
     // Set chars immediately if not animated
     if (!animated) {
       this._setFieldText(nameCell, name, this.COL_NAME);
+      this._setFieldText(titleCell, title, this.COL_TITLE);
       this._setFieldText(deptCell, dept, this.COL_DEPT);
-      this._setFieldText(suiteCell, suite, this.COL_SUITE);
       this._setFieldText(statusCell, status, this.COL_STATUS);
     }
 
@@ -322,7 +383,7 @@ window.SplitFlapRenderer = {
       this._openPacket(badge, suite, status);
     });
 
-    return { row, nameCell, deptCell, suiteCell, statusCell, name, dept, suite, status };
+    return { row, nameCell, titleCell, deptCell, statusCell, name, title, dept, suite, status };
   },
 
   _buildCell(cls, charCount) {
@@ -375,90 +436,66 @@ window.SplitFlapRenderer = {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
 
-  // ─── Onboarding Packet ──────────────────────────────────
+  // ─── Floating Badge Card ────────────────────────────────
 
   _openPacket(badge, suite, status) {
-    // Close existing packet
     this._closePacket();
 
     const name = badge.name || 'UNKNOWN';
     const h = this._sfHash(name);
-    const wifiPass = this.WIFI_PASSWORDS[h % this.WIFI_PASSWORDS.length];
-    const parking = 'LOT B, SPACE ' + (h % 50 + 1);
-    const emergency = this.EMERGENCY_CONTACTS[h % this.EMERGENCY_CONTACTS.length];
     const dept = badge.department || 'UNASSIGNED';
     const title = badge.title || 'EMPLOYEE';
-    const photoUrl = badge.photoUrl || null;
+    const song = badge.song || '';
+    const accessLevel = badge.accessLevel || 'STANDARD';
 
-    // Overlay
+    // Hash-assigned fun details
+    const skill = this.FUN_SKILLS[h % this.FUN_SKILLS.length];
+    const lastSeen = this.FUN_LAST_SEEN[(h * 7) % this.FUN_LAST_SEEN.length];
+    const hrViolation = this.FUN_HR_VIOLATIONS[(h * 13) % this.FUN_HR_VIOLATIONS.length];
+    const spiritAnimal = this.FUN_SPIRIT_ANIMAL[(h * 17) % this.FUN_SPIRIT_ANIMAL.length];
+
+    // Overlay (click-outside-to-close)
     const overlay = document.createElement('div');
-    overlay.className = 'sf-packet-overlay';
+    overlay.className = 'sf-badge-card-overlay';
 
-    // Panel
-    const panel = document.createElement('div');
-    panel.className = 'sf-packet';
+    // Card panel
+    const card = document.createElement('div');
+    card.className = 'sf-badge-card';
 
-    const photoHtml = photoUrl
-      ? '<img src="' + esc(photoUrl) + '" alt="' + esc(name) + '" style="width:80px;height:80px;border-radius:4px;object-fit:cover;margin-bottom:12px;">'
-      : '<div style="width:80px;height:80px;border-radius:4px;background:#b8916a;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#3a2a1a;margin-bottom:12px;">' + esc(name.charAt(0)) + '</div>';
+    // Badge image from server render endpoint
+    const badgeImgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/image';
 
-    panel.innerHTML =
-      '<button class="sf-packet-close">&times;</button>' +
-      '<div class="sf-packet-header">' +
-        '<h2>ONBOARDING PACKET</h2>' +
-        '<p>HELP DESK INC. \u2014 NEW HIRE ORIENTATION</p>' +
+    card.innerHTML =
+      '<button class="sf-badge-card-close">&times;</button>' +
+      '<div class="sf-badge-card-header">PERSONNEL FILE</div>' +
+      '<div class="sf-badge-card-img">' +
+        '<img src="' + esc(badgeImgSrc) + '" alt="Badge: ' + esc(name) + '" />' +
       '</div>' +
-      '<div class="sf-packet-body">' +
-        '<div class="sf-packet-section" style="text-align:center;">' +
-          photoHtml +
-          '<div style="font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">' + esc(name) + '</div>' +
-          '<div style="font-size:12px;color:#5a4a3a;margin-top:4px;">' + esc(title) + ' \u2014 ' + esc(dept) + '</div>' +
-          '<div style="font-size:11px;color:#5a4a3a;margin-top:4px;">Suite: ' + esc(suite) + ' \u2022 Status: ' + esc(status) + '</div>' +
-        '</div>' +
-        '<div class="sf-packet-section">' +
-          '<h3>WIFI ACCESS</h3>' +
-          '<p>Network: <strong>HELPDESK-GUEST</strong></p>' +
-          '<p>Password: <span class="sf-wifi-pass">' + esc(wifiPass) + '</span></p>' +
-        '</div>' +
-        '<div class="sf-packet-section">' +
-          '<h3>PARKING</h3>' +
-          '<p>' + esc(parking) + '</p>' +
-        '</div>' +
-        '<div class="sf-packet-section">' +
-          '<h3>EMERGENCY CONTACT</h3>' +
-          '<p>' + esc(emergency) + '</p>' +
-        '</div>' +
-        '<div class="sf-packet-section">' +
-          '<h3>FIRST DAY CHECKLIST</h3>' +
-          '<ul>' +
-            '<li>Pick up badge from front desk</li>' +
-            '<li>Sign acceptable use policy</li>' +
-            '<li>Complete mandatory fun orientation</li>' +
-            '<li>Set up voicemail (you will never check it)</li>' +
-            '<li>Find the good coffee maker (hint: not in the break room)</li>' +
-            '<li>Memorize fire exit locations (you won\'t)</li>' +
-          '</ul>' +
-        '</div>' +
+      '<div class="sf-badge-card-details">' +
+        '<div class="sf-badge-card-detail" data-label="SKILLS" data-value="' + esc(skill) + '"></div>' +
+        '<div class="sf-badge-card-detail" data-label="LAST SEEN" data-value="' + esc(lastSeen) + '"></div>' +
+        '<div class="sf-badge-card-detail" data-label="HR VIOLATION" data-value="' + esc(hrViolation) + '"></div>' +
+        '<div class="sf-badge-card-detail" data-label="SPIRIT ANIMAL" data-value="' + esc(spiritAnimal) + '"></div>' +
+      '</div>' +
+      '<div class="sf-badge-card-meta">' +
+        (song ? '<div class="sf-badge-card-meta-row"><span class="sf-badge-card-meta-label">SONG:</span> ' + esc(song) + '</div>' : '') +
+        '<div class="sf-badge-card-meta-row"><span class="sf-badge-card-meta-label">ACCESS:</span> ' + esc(accessLevel) + '</div>' +
+        '<div class="sf-badge-card-meta-row"><span class="sf-badge-card-meta-label">SUITE:</span> ' + esc(suite) + '</div>' +
+        '<div class="sf-badge-card-meta-row"><span class="sf-badge-card-meta-label">STATUS:</span> ' + esc(status) + '</div>' +
       '</div>';
 
     document.body.appendChild(overlay);
-    document.body.appendChild(panel);
-
-    // WiFi password reveal on click
-    const wifiEl = panel.querySelector('.sf-wifi-pass');
-    if (wifiEl) {
-      wifiEl.addEventListener('click', () => wifiEl.classList.toggle('revealed'));
-    }
+    document.body.appendChild(card);
 
     // Close handlers
-    const closePacket = () => this._closePacket();
-    overlay.addEventListener('click', closePacket);
-    panel.querySelector('.sf-packet-close').addEventListener('click', closePacket);
+    const close = () => this._closePacket();
+    overlay.addEventListener('click', close);
+    card.querySelector('.sf-badge-card-close').addEventListener('click', close);
 
     this._packetOverlay = overlay;
-    this._packetPanel = panel;
+    this._packetPanel = card;
 
-    // Escape key handler
+    // Escape key
     this._escHandler = (e) => {
       if (e.key === 'Escape') this._closePacket();
     };
@@ -468,42 +505,61 @@ window.SplitFlapRenderer = {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         overlay.classList.add('open');
-        panel.classList.add('open');
+        card.classList.add('open');
       });
     });
+
+    // Animate fun detail lines with split-flap cascade
+    setTimeout(() => {
+      const details = card.querySelectorAll('.sf-badge-card-detail');
+      details.forEach((el, idx) => {
+        const label = el.dataset.label;
+        const value = el.dataset.value;
+        const maxLen = 28;
+        // Build flap chars for the line
+        const lineText = (label + ': ' + value).toUpperCase().substring(0, maxLen);
+        const container = document.createElement('div');
+        container.className = 'sf-badge-card-flap-line';
+        for (let i = 0; i < maxLen; i++) {
+          container.appendChild(this._createCharCell());
+        }
+        el.innerHTML = '';
+        el.appendChild(container);
+        // Stagger each detail line
+        setTimeout(() => {
+          this._animateField(container, lineText, maxLen, 20);
+        }, idx * 400);
+      });
+    }, 300);
+
+    // Auto-dismiss after 10 seconds
+    this._autoDismissTimer = setTimeout(() => {
+      this._closePacket();
+    }, 10000);
   },
 
   _closePacket() {
+    if (this._autoDismissTimer) {
+      clearTimeout(this._autoDismissTimer);
+      this._autoDismissTimer = null;
+    }
     if (this._packetOverlay) {
       this._packetOverlay.classList.remove('open');
-      this._packetOverlay.addEventListener('transitionend', () => {
-        if (this._packetOverlay && this._packetOverlay.parentNode) {
-          this._packetOverlay.parentNode.removeChild(this._packetOverlay);
-        }
-        this._packetOverlay = null;
-      }, { once: true });
-      // Fallback removal if transition doesn't fire
       setTimeout(() => {
         if (this._packetOverlay && this._packetOverlay.parentNode) {
           this._packetOverlay.parentNode.removeChild(this._packetOverlay);
         }
         this._packetOverlay = null;
-      }, 400);
+      }, 300);
     }
     if (this._packetPanel) {
       this._packetPanel.classList.remove('open');
-      this._packetPanel.addEventListener('transitionend', () => {
-        if (this._packetPanel && this._packetPanel.parentNode) {
-          this._packetPanel.parentNode.removeChild(this._packetPanel);
-        }
-        this._packetPanel = null;
-      }, { once: true });
       setTimeout(() => {
         if (this._packetPanel && this._packetPanel.parentNode) {
           this._packetPanel.parentNode.removeChild(this._packetPanel);
         }
         this._packetPanel = null;
-      }, 400);
+      }, 300);
     }
     if (this._escHandler) {
       document.removeEventListener('keydown', this._escHandler);
@@ -518,6 +574,7 @@ window.SplitFlapRenderer = {
     this._stats = stats;
     this._allBadges = [];
     this._floorSections = {};
+    this._floorBadges = {};
     this._intercomIndex = 0;
 
     // Fetch all badges (paginated)
@@ -585,15 +642,16 @@ window.SplitFlapRenderer = {
       // Sort badges alphabetically within floor
       badges.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-      badges.forEach(badge => {
-        const { row } = this._createRow(badge, false);
-        body.appendChild(row);
+      // Track all badges for this floor (for rotation)
+      const visibleSet = new Set();
+      badges.forEach((badge, idx) => {
+        if (idx < this.MAX_VISIBLE_ROWS) {
+          const { row } = this._createRow(badge, false);
+          body.appendChild(row);
+          visibleSet.add(idx);
+        }
       });
-
-      // Auto-collapse floors with 50+ employees
-      if (badges.length >= 50) {
-        section.classList.add('collapsed');
-      }
+      this._floorBadges[floor] = { all: badges, visibleSet };
 
       this._updateFloorCount(section);
       this._floorSections[floor] = section;
@@ -619,6 +677,7 @@ window.SplitFlapRenderer = {
     this._startClock();
     this._startIdleSettle();
     this._startIntercom();
+    this._startRotation();
   },
 
   // ─── Intervals ───────────────────────────────────────────
@@ -679,6 +738,73 @@ window.SplitFlapRenderer = {
     }, 30000);
   },
 
+  _startRotation() {
+    this._rotationInterval = setInterval(() => {
+      if (!animationsEnabled()) return;
+      // Rotate each floor that has more badges than MAX_VISIBLE_ROWS
+      for (const [floorStr, floorData] of Object.entries(this._floorBadges)) {
+        const floor = parseInt(floorStr, 10);
+        if (floorData.all.length <= this.MAX_VISIBLE_ROWS) continue;
+        const section = this._floorSections[floor];
+        if (!section || section.classList.contains('collapsed')) continue;
+
+        const body = section.querySelector('.sf-floor-body');
+        if (!body) continue;
+
+        // Pick 2-3 visible indices to swap out
+        const swapCount = 2 + Math.floor(Math.random() * 2); // 2 or 3
+        const visibleArr = Array.from(floorData.visibleSet);
+        const hiddenArr = [];
+        for (let i = 0; i < floorData.all.length; i++) {
+          if (!floorData.visibleSet.has(i)) hiddenArr.push(i);
+        }
+        if (hiddenArr.length === 0) continue;
+
+        // Shuffle and pick
+        const toRemove = [];
+        const shuffledVisible = visibleArr.sort(() => Math.random() - 0.5);
+        const shuffledHidden = hiddenArr.sort(() => Math.random() - 0.5);
+        const actualSwaps = Math.min(swapCount, shuffledVisible.length, shuffledHidden.length);
+
+        for (let i = 0; i < actualSwaps; i++) {
+          toRemove.push({ outIdx: shuffledVisible[i], inIdx: shuffledHidden[i] });
+        }
+
+        // Execute swaps
+        toRemove.forEach(({ outIdx, inIdx }) => {
+          // Find and remove the outgoing row
+          const rows = body.querySelectorAll('.sf-row');
+          const outRow = Array.from(rows).find(r =>
+            r.dataset.name === (floorData.all[outIdx].name || '').toUpperCase()
+          );
+          if (outRow) outRow.remove();
+
+          // Create incoming row with animation
+          const inBadge = floorData.all[inIdx];
+          const { row, nameCell, titleCell, deptCell, statusCell, name, title, dept, status } =
+            this._createRow(inBadge, true);
+          body.appendChild(row);
+
+          // Animate the new row in
+          const stagger = 25;
+          this._animateField(nameCell, name, this.COL_NAME, stagger).then(() => {
+            return this._animateField(titleCell, title, this.COL_TITLE, stagger);
+          }).then(() => {
+            return this._animateField(deptCell, dept, this.COL_DEPT, stagger);
+          }).then(() => {
+            return this._animateField(statusCell, status, this.COL_STATUS, stagger);
+          });
+
+          // Update tracking
+          floorData.visibleSet.delete(outIdx);
+          floorData.visibleSet.add(inIdx);
+        });
+
+        this._updateFloorCount(section);
+      }
+    }, 12000);
+  },
+
   // ─── addBadge ────────────────────────────────────────────
 
   async addBadge(badge) {
@@ -730,7 +856,7 @@ window.SplitFlapRenderer = {
     }
 
     // Create row with blank cells for animation
-    const { row, nameCell, deptCell, suiteCell, statusCell, name, dept, suite, status } =
+    const { row, nameCell, titleCell, deptCell, statusCell, name, title, dept, suite, status } =
       this._createRow(badge, true);
 
     // Insert alphabetically
@@ -746,28 +872,92 @@ window.SplitFlapRenderer = {
     }
     if (!inserted) body.appendChild(row);
 
+    // Track in floor badges
+    if (!this._floorBadges[floor]) {
+      this._floorBadges[floor] = { all: [], visibleSet: new Set() };
+    }
+    const floorData = this._floorBadges[floor];
+    const newIdx = floorData.all.length;
+    floorData.all.push(badge);
+    floorData.visibleSet.add(newIdx);
+
     this._updateFloorCount(section);
 
     // Scroll into view
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-    // Stagger: 25ms per char for snappy cascade
+    // --- 3-State Color Animation: ARRIVAL → SETTLING → NORMAL ---
+    // Vestaboard-style: color tile BACKGROUNDS with staggered cascade left-to-right
+    const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
+    const allTiles = row.querySelectorAll('.sf-cell-name .flap-char, .sf-cell-title .flap-char, .sf-cell-dept .flap-char, .sf-cell-status .flap-char');
+
+    // STATE 1: ARRIVAL — staggered tile-by-tile color cascade
+    const colorStagger = 15; // ms per tile for dramatic left-to-right wave
+    allTiles.forEach((tile, i) => {
+      setTimeout(() => {
+        const flaps = tile.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+        flaps.forEach(el => {
+          el.style.background = divColor;
+          el.style.color = '#111';
+          el.style.transition = 'background 200ms ease';
+        });
+      }, i * colorStagger);
+    });
+
+    // Wait for color cascade to sweep across before text animation
+    await this._delay(allTiles.length * colorStagger + 100);
+
+    // Stagger: 25ms per char for snappy text cascade
     const stagger = 25;
 
     // Cascade NAME
     await this._animateField(nameCell, name, this.COL_NAME, stagger);
     await this._delay(100);
 
+    // Cascade TITLE
+    await this._animateField(titleCell, title, this.COL_TITLE, stagger);
+    await this._delay(100);
+
     // Cascade DEPT
     await this._animateField(deptCell, dept, this.COL_DEPT, stagger);
     await this._delay(100);
 
-    // Cascade SUITE
-    await this._animateField(suiteCell, suite, this.COL_SUITE, stagger);
-    await this._delay(100);
+    // STATUS: "NOW ARRIVING" then "CHECKING IN" then joke status
+    await this._animateField(statusCell, 'NOW ARRIVING', this.COL_STATUS, 20);
+    await this._delay(800);
 
-    // STATUS: "CHECKING IN" then joke status
-    await this._animateStatusWithCheckin(statusCell, status, this.COL_STATUS);
+    // STATE 2: SETTLING — staggered fade to muted division color
+    allTiles.forEach((tile, i) => {
+      setTimeout(() => {
+        const flaps = tile.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+        flaps.forEach(el => {
+          el.style.background = divColor + '4D'; // ~30% opacity
+          el.style.color = '#F5E6C8';
+          el.style.transition = 'background 400ms ease, color 400ms ease';
+        });
+      }, i * 10);
+    });
+
+    await this._animateField(statusCell, 'CHECKING IN', this.COL_STATUS, 20);
+    await this._delay(600);
+    await this._animateField(statusCell, status, this.COL_STATUS, 30);
+
+    // STATE 3: NORMAL — staggered return to standard dark tiles
+    setTimeout(() => {
+      allTiles.forEach((tile, i) => {
+        setTimeout(() => {
+          const flaps = tile.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+          flaps.forEach(el => {
+            el.style.background = '';
+            el.style.color = '';
+            el.style.transition = 'background 300ms ease, color 300ms ease';
+          });
+          setTimeout(() => {
+            flaps.forEach(el => { el.style.transition = ''; });
+          }, 400);
+        }, i * 8);
+      });
+    }, 3000);
 
     // Row glow
     row.classList.add('sf-row-glow');
@@ -801,6 +991,10 @@ window.SplitFlapRenderer = {
       clearInterval(this._intercomInterval);
       this._intercomInterval = null;
     }
+    if (this._rotationInterval) {
+      clearInterval(this._rotationInterval);
+      this._rotationInterval = null;
+    }
     this._closePacket();
     if (this._container) {
       this._container.innerHTML = '';
@@ -809,6 +1003,7 @@ window.SplitFlapRenderer = {
     this._stats = null;
     this._allBadges = [];
     this._floorSections = {};
+    this._floorBadges = {};
     this._intercomIndex = 0;
     this._activePacketRow = null;
   },

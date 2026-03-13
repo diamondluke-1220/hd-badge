@@ -1,0 +1,190 @@
+/* ─── Review Board — 6×44 Vestaboard Grid + Badge Panel ── */
+
+.rb-stage {
+  position: fixed;
+  top: 50px; /* below view switcher bar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #0a0a0a;
+  overflow: hidden;
+  z-index: 10;
+}
+
+/* ─── Title Above Board ─────────────────────────────────── */
+
+.rb-title {
+  text-align: center;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 24px;
+  letter-spacing: 0.35em;
+  color: #aaa;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  font-weight: bold;
+}
+
+/* ─── Board Wrapper ──────────────────────────────────────── */
+
+.rb-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ─── Text Grid ──────────────────────────────────────────── */
+
+.rb-grid {
+  --rb-tile-w: 22px;
+  --rb-tile-h: 40px;
+  --rb-font: 32px;
+  --rb-line-h: 40px;
+
+  display: grid;
+  grid-template-columns: repeat(44, var(--rb-tile-w));
+  grid-template-rows: repeat(10, var(--rb-tile-h));
+  gap: 1px;
+  background: #111;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+/* Override flap-char sizing inside Review Board */
+.rb-grid .flap-char {
+  width: var(--rb-tile-w);
+  height: var(--rb-tile-h);
+  font-size: var(--rb-font);
+}
+
+.rb-grid .flap-char .static-top,
+.rb-grid .flap-char .static-bottom,
+.rb-grid .flap-char .flap-top,
+.rb-grid .flap-char .flap-bottom {
+  font-size: var(--rb-font);
+  line-height: var(--rb-line-h);
+}
+
+/* ─── Badge Tile Panel ───────────────────────────────────── */
+
+.rb-badge-panel {
+  position: relative;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 6px;
+  cursor: pointer;
+  transition: box-shadow 300ms ease;
+  flex-shrink: 0;
+}
+
+.rb-badge-grid {
+  --rb-badge-tile-h: 40px;
+
+  display: grid;
+  grid-template-columns: repeat(12, var(--rb-badge-tile-h));
+  grid-template-rows: repeat(16, var(--rb-badge-tile-h));
+  gap: 1px;
+}
+
+.rb-badge-grid .flap-char {
+  width: var(--rb-badge-tile-h);
+  height: var(--rb-badge-tile-h);
+}
+
+.rb-badge-grid .flap-char .static-top,
+.rb-badge-grid .flap-char .static-bottom,
+.rb-badge-grid .flap-char .flap-top,
+.rb-badge-grid .flap-char .flap-bottom {
+  font-size: 1px;
+  line-height: var(--rb-badge-tile-h);
+  background: #252525;
+}
+
+/* ─── Badge Crossfade Reveal ─────────────────────────────── */
+
+.rb-badge-reveal {
+  position: absolute;
+  top: 6px;    /* match padding */
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  object-fit: cover;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 500ms ease;
+  pointer-events: none;
+}
+
+/* ─── Simplified Badge Card ──────────────────────────────── */
+
+.rb-badge-card-simple {
+  max-width: 420px;
+  padding: 20px;
+}
+
+.rb-badge-card-simple .sf-badge-card-img {
+  margin-top: 0;
+}
+
+/* ─── Hide non-essential chrome in review board view ─────── */
+
+body.view-reviewboard .app-header > h1,
+body.view-reviewboard .app-header > .app-nav,
+body.view-reviewboard #sfTicker,
+body.view-reviewboard .sf-ticker,
+body.view-reviewboard .stats-panel,
+body.view-reviewboard .ticker-bar {
+  display: none !important;
+}
+
+/* Collapse the header so only the switcher bar shows */
+body.view-reviewboard .app-header {
+  padding: 0;
+  border: none;
+  background: #0a0a0a;
+}
+
+/* Keep view switcher on top of the fixed board */
+body.view-reviewboard .view-switcher-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: rgba(10, 10, 10, 0.9);
+  border-bottom: 1px solid #222;
+}
+
+/* Override orgchart container */
+body.view-reviewboard .public-orgchart {
+  background: #0a0a0a;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+/* ─── Responsive ──────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  .rb-badge-panel {
+    display: none;
+  }
+
+  .rb-stage {
+    gap: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .rb-grid {
+    gap: 0;
+    padding: 2px;
+  }
+}

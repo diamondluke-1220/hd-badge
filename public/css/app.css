@@ -1491,6 +1491,10 @@ body {
   font-size: 13px;
   color: #e5e7eb;
 }
+/* Hide global ticker when lobby (split-flap) view is active — it has its own intercom ticker */
+body.view-splitflap .ticker-bar {
+  display: none;
+}
 .ticker-track {
   display: flex;
   align-items: center;
