@@ -13,6 +13,8 @@ window.ReviewBoardRenderer = {
   _badgeCells: [],         // [row][col] 2D array for badge tile grid
   _badgeCanvas: null,
   _badgeRevealImg: null,    // <img> overlay for crossfade reveal
+  _badgeCol: null,          // column wrapper for AI indicator + badge panel
+  _aiIndicator: null,       // AI loading indicator element
   _cells: [],             // [row][col] 2D array of .flap-char elements
   _allBadges: [],
   _shuffledBadges: [],
@@ -44,8 +46,31 @@ window.ReviewBoardRenderer = {
     '_custom': '#ffd700',
   },
 
+  SKILLS: [
+    'PASSIVE AGGRESSION . REPLY-ALL . MUTING',
+    'BLAME SHIFT . CALENDAR TETRIS . GOSSIP',
+    'COFFEE RUNS . DESK NAPPING . UNMUTING',
+    'EXCEL MACROS . CHAIR SPINNING . FEEDBACK',
+    'WIFI FIXES . CABLE MGMT . CREATIVE EXCUSES',
+    'MEETING DODGING . SNACKING . TUNING OUT',
+    'INBOX DENIAL . THERMOSTAT WARS . SOLOS',
+    'TICKET ESCALATION . JARGON . VOLUME CTRL',
+    'POWERPOINT . LUNCH THEFT DENIAL . ENCORES',
+    'STANDING DESK . VPN EXCUSES . EMOJI ABUSE',
+    'SLACK STATUS . ZOOM BACKGROUNDS . SETLISTS',
+    'BADGE SCANS . HEADPHONE ZONE . SOUNDCHECK',
+    'FONT CRIMES . DROP THE MIC . FIREWALLS',
+    'MEMO DRAFTS . CHAIR RACING . AMP TO ELEVEN',
+    'AVOIDING EYE CONTACT . SIGHS . HEADLINING',
+    'SCREEN SHARING . SIDE PROJECTS . HARMONICS',
+    'PTO REQUESTS . BACKUP VOCALS . SHORTCUTS',
+    'SYNERGY . CROWD CONTROL . MUTE BUTTON',
+    'MERCH TABLE . CABLE MGMT . PAPER TRAILS',
+    'OPENER SLOT . PARKING LOT MEETINGS . RIFFS',
+  ],
+
   REVIEW_QUOTES: [
-    // Style A — Fake review form
+    // ── Style A: Fake review form ──────────────
     ['STRENGTHS: NONE IDENTIFIED AT THIS TIME',
      'WEAKNESSES: SEE ATTACHED 47 PAGE BINDER',
      'RECOMMENDATION: KEEP AROUND FOR MORALE',
@@ -56,28 +81,23 @@ window.ReviewBoardRenderer = {
      'RECOMMENDATION: HIDE THEM DURING AUDITS',
      'NOTES: SOMEHOW PASSED PROBATION TWICE',
      'REVIEWER: WISHES TO REMAIN ANONYMOUS'],
-    ['STRENGTHS: VERY GOOD AT LEAVING EARLY',
-     'WEAKNESSES: VERY BAD AT ARRIVING FIRST',
-     'RECOMMENDATION: CONSIDER A GPS TRACKER',
-     'ESTIMATED ROI: EXTREMELY WORTHWHILE',
-     'APPROVED BY: EVERYONE IN MANAGEMENT'],
     ['STRENGTHS: WORLD CLASS CHAIR WARMING',
      'WEAKNESSES: EVERY SINGLE LISTED JOB DUTY',
      'RECOMMENDATION: PROMOTE TO CUSTOMER',
      'TIMELINE: AS SOON AS HUMANLY POSSIBLE',
      'BACKUP PLAN: QUIETLY RENAME THE ROLE'],
-    ['STRENGTHS: RELIABLE CORPORATE WIFI USE',
-     'WEAKNESSES: ANY AND ALL ASSIGNED TASKS',
-     'RECOMMENDATION: CHANGE ALL THE PASSWORDS',
-     'NETWORK BANDWIDTH RECOVERED: 40 PERCENT',
-     'MORALE IMPACT: SURPRISINGLY POSITIVE'],
+    ['STRENGTHS: TYPES VERY FAST AND LOUDLY',
+     'WEAKNESSES: NOTHING TYPED IS EVER USEFUL',
+     'RECOMMENDATION: GIVE THEM A KEYBOARD',
+     'WITH NO USB CABLE ATTACHED TO ANYTHING',
+     'PRODUCTIVITY UNCHANGED SINCE EXPERIMENT'],
+    ['STRENGTHS: EXCELLENT LEAVE APPLICATIONS',
+     'WE RECOGNIZED A HIDDEN TALENT FOR FICTION',
+     'AFTER READING SIX MONTHS OF SICK NOTES',
+     'CREATIVE WRITING DEPT HAS BEEN NOTIFIED',
+     'RECOMMENDATION: TRANSFER IMMEDIATELY'],
 
-    // Style B — Rating labels
-    ['ATTENDANCE: TECHNICALLY PRESENT MOST DAYS',
-     'INITIATIVE: ONLY DISPLAYS WHEN THREATENED',
-     'TEAMWORK: ACTIVELY PREFERS THE OPPOSITE',
-     'PUNCTUALITY: MORE OF A LOOSE GUIDELINE',
-     'OVERALL SCORE: NEEDS SIGNIFICANT WORK'],
+    // ── Style B: Rating labels ─────────────────
     ['COMMUNICATION: CONSISTS MOSTLY OF SIGHING',
      'PUNCTUALITY: RELATIVE TO THEIR TIME ZONE',
      'PROFESSIONALISM: ON A SLIDING SCALE HERE',
@@ -88,43 +108,37 @@ window.ReviewBoardRenderer = {
      'FOCUS: ENTIRELY ON THEIR PHONE SCREEN',
      'DELEGATION: EXPERT LEVEL AT RECEIVING IT',
      'LONG TERM VISION: EXTENDS TO HAPPY HOUR'],
-    ['PRODUCTIVITY: ONLY MEASURABLE VIA NAPS',
-     'ATTITUDE: CURRENTLY PENDING INVESTIGATION',
-     'PERSONAL HYGIENE: NO COMMENT WHATSOEVER',
-     'RELIABILITY: ERROR FOUR OH FOUR NOT FOUND',
-     'FUTURE POTENTIAL: A THEORETICAL MAXIMUM'],
-    ['WORK ETHIC: PURELY THEORETICAL CONSTRUCT',
-     'RELIABILITY: PLEASE SEE ABSENCE RECORDS',
-     'PERSONAL GROWTH: IN DESK SNACK STOCKPILE',
-     'AMBITION: DIRECTED COMPLETELY INWARD',
-     'PROFESSIONAL OUTLOOK: AGGRESSIVELY MEH'],
+    ['INITIATIVE: ONLY DISPLAYS WHEN THREATENED',
+     'TEAMWORK: ACTIVELY PREFERS THE OPPOSITE',
+     'EMAIL ETIQUETTE: REPLY ALL HALL OF FAME',
+     'MEETING CONDUCT: EATS FULL MEALS ON MUTE',
+     'OVERALL SCORE: UNDER ACTIVE LITIGATION'],
+    ['SELF AWARENESS: GAVE SELF TEN OUT OF TEN',
+     'MANAGER AWARENESS: CANNOT CONFIRM OR DENY',
+     'PEER FEEDBACK: UNIVERSALLY DECLINED',
+     'CUSTOMER RATING: ONE STAR BUT CONSISTENT',
+     'FLIGHT RISK SCORE: WE CAN ONLY HOPE'],
+    ['ACCOUNTABILITY: EXPERT BLAME DEFLECTION',
+     'TIME MANAGEMENT: SCHEDULES EMAILS AT 3AM',
+     'OUTLOOK CALENDAR: 98 PERCENT FOCUS TIME',
+     'ACTUAL FOCUS: ENTIRELY ON FANTASY LEAGUE',
+     'DESK DECOR: AGGRESSIVELY MOTIVATIONAL'],
 
-    // Style C — Direct roast
+    // ── Style C: Narrative roast ───────────────
     ['NOT TECHNICALLY THE WORST EMPLOYEE HERE',
      'JUST HISTORICALLY THE MOST CONSISTENT',
      'AT BEING COMPLETELY UNAVAILABLE FOR WORK',
      'WHICH TAKES A VERY SPECIAL KIND OF FOCUS',
      'THAT WE HONESTLY HAVE TO RESPECT A BIT'],
     ['SOMEHOW STILL GAINFULLY EMPLOYED HERE',
-     'DESPITE MULTIPLE YEARS OF CLEAR EVIDENCE',
-     'THAT STRONGLY SUGGESTS THE OPPOSITE CALL',
+     'DESPITE YEARS OF EVIDENCE TO THE CONTRARY',
      'HR MAINTAINS A DEDICATED FILE ON THIS',
      'THE FILE NOW HAS ITS OWN FILE CABINET'],
-    ['CONSISTENTLY MAKES OTHERS LOOK TALENTED',
-     'STRICTLY BY COMPARISON AND NEVER EVER',
-     'THROUGH ANY FORM OF REAL COLLABORATION',
-     'TEAM MVP MEASURED PURELY BY SUBTRACTION',
-     'A TRUE INSPIRATION IN REVERSE HONESTLY'],
     ['WOULD PROBABLY BE MISSED AROUND HERE',
      'IF LITERALLY ANYONE HAD EVER NOTICED',
      'THAT THEY WERE ACTUALLY IN THE BUILDING',
      'DESK HAS BEEN EMPTY FOR THREE WEEKS NOW',
      'UPDATE: THEY WERE ON VACATION APPARENTLY'],
-    ['HAS NEVER ACTUALLY BEEN FORMALLY FIRED',
-     'WHICH IS VERY HONESTLY AND GENUINELY',
-     'THE SINGLE BIGGEST SURPRISE THIS QUARTER',
-     'POSSIBLY THE MOST SHOCKING THING ALL YEAR',
-     'SEVERAL BETS WERE LOST OVER THIS FACT'],
     ['CONSISTENTLY DOES THE ABSOLUTE BARE MIN',
      'AND YET SOMEHOW STILL ALWAYS MANAGES TO',
      'FIND EVEN THAT LEVEL TOTALLY EXHAUSTING',
@@ -140,18 +154,91 @@ window.ReviewBoardRenderer = {
      'A CONVENIENT PERSON TO COMPLAIN ABOUT',
      'A TRULY UNIFYING FORCE IN THE DEPARTMENT',
      'JUST ABSOLUTELY NOT IN ANY POSITIVE WAY'],
+    ['HAS REACHED ROCK BOTTOM AND CONTINUES',
+     'TO DIG WITH IMPRESSIVE DETERMINATION',
+     'MANAGEMENT CONSIDERED INTERVENTION BUT',
+     'DECIDED THE EXCAVATION WAS TOO AMUSING',
+     'WE NOW MEASURE DEPTH INSTEAD OF OUTPUT'],
+    ['OPENED A HELP DESK TICKET ABOUT SELF',
+     'SUBJECT LINE: EMPLOYEE NOT RESPONDING',
+     'IT WAS IMMEDIATELY CLOSED AS DUPLICATE',
+     'OF FOURTEEN PREVIOUSLY FILED TICKETS',
+     'ALL MARKED WONTFIX BY THE SAME MANAGER'],
 
-    // Style D — Rating + comment
-    ['OVERALL PERFORMANCE RATING: TWO OF TEN',
-     'OFFICIAL RECOMMENDATION: WOULD NOT REHIRE',
-     'UNEXPLAINED STATUS: STILL HERE EVERY DAY',
-     'BUYOUT WAS CONSIDERED BUT TOO EXPENSIVE',
-     'CURRENT STRATEGY: SIMPLY WAIT IT OUT'],
-    ['FINAL PERFORMANCE SCORE: FULLY REDACTED',
-     'BY THE LEGAL TEAM FOR LIABILITY REASONS',
-     'SEE REFERENCE FILE NUMBERS 404 THRU 407',
-     'NOTE: WE ACTUALLY RAN OUT OF FILE NUMBERS',
-     'ADDITIONAL STORAGE HAS BEEN REQUISITIONED'],
+    // ── Style D: Corporate speak decoded ───────
+    ['MANAGER NOTES: IS UNUSUALLY LOYAL',
+     'TRANSLATION: COMPLETELY UNHIREABLE',
+     'ANYWHERE ELSE IN THE KNOWN INDUSTRY',
+     'ADDENDUM: WE CHECKED JUST TO BE SURE',
+     'EVEN LINKEDIN HAS STOPPED SUGGESTING'],
+    ['PEER REVIEW: EXCEPTIONALLY WELL QUALIFIED',
+     'WHICH IN OUR RUBRIC MEANS SPECIFICALLY',
+     'NO MAJOR MISTAKES HAVE BEEN DETECTED YET',
+     'EMPHASIS ON THE WORD YET'],
+    ['OFFICIAL STATUS: CANDIDATE FOR FAST TRACK',
+     'WHICH MEANS EVERY SINGLE MANAGER HERE',
+     'HAS VOLUNTEERED TO TRANSFER THIS PERSON',
+     'TO LITERALLY ANY OTHER TEAM OR BUILDING',
+     'SEVERAL HAVE OFFERED TO PAY FOR THE MOVE'],
+    ['CLASSIFIED INTERNALLY AS A CHANGE LEADER',
+     'WHICH THE HANDBOOK DEFINES PRECISELY AS',
+     'LOUDLY INDECISIVE AT EVERY OPPORTUNITY',
+     'HAS STRONG OPINIONS ABOUT ALL THE THINGS',
+     'THAT ARE ABSOLUTELY NONE OF THEIR CONCERN'],
+    ['DESCRIBED AS NIMBLE BY UPPER MANAGEMENT',
+     'MEANING THEY SURVIVED FOUR ROUNDS OF',
+     'LAYOFFS AND NO ONE KNOWS WHAT THEY DO',
+     'AT THIS POINT WE ARE AFRAID TO ASK'],
+    ['NOTED AS HAVING A KEEN SENSE OF HUMOR',
+     'WHICH IS THE HR APPROVED WAY OF SAYING',
+     'THEY TELL WILDLY INAPPROPRIATE STORIES',
+     'IN EVERY SINGLE ALL HANDS MEETING EVER',
+     'LEGAL HAS A TEMPLATE APOLOGY ON STANDBY'],
+
+    // ── Style E: The clueless manager ──────────
+    ['THIS REVIEW WAS CLEARLY COPY PASTED FROM',
+     'LAST YEARS REVIEW WHICH WAS COPY PASTED',
+     'FROM THE YEAR BEFORE THAT AND SO ON BACK',
+     'TO A PERSON WHO NO LONGER WORKS HERE',
+     'ORIGINAL SUBJECT: UNCLEAR AT THIS POINT'],
+    ['MANAGER STATED AND I QUOTE DIRECTLY HERE',
+     'I AM NOT ENTIRELY SURE WHAT YOU DO EVERY',
+     'DAY BUT WHATEVER IT IS PLEASE KEEP AT IT',
+     'BECAUSE NOTHING HAS CAUGHT FIRE RECENTLY',
+     'AND THAT IS GENUINELY THE BEST WE CAN DO'],
+    ['REVIEWER DOCKED POINTS FOR NOT ARRIVING',
+     'AT SEVEN AM INSTEAD OF SEVEN THIRTY AM',
+     'THE EMPLOYEES SHIFT STARTS AT SEVEN THIRTY',
+     'THIS WAS NOTED AND COMPLETELY IGNORED',
+     'THE DEDUCTION STANDS PER MANAGEMENT'],
+    ['DURING THIS REVIEW THE MANAGERS SCREEN',
+     'SHARE ACCIDENTALLY REVEALED TWO TABS',
+     'WHY DO MY EMPLOYEES HATE ME AND ALSO',
+     'HOW TO LOOK CONFIDENT IN MEETINGS',
+     'THE REVIEW WAS ADJOURNED INDEFINITELY'],
+
+    // ── Style F: Observed behavior ─────────────
+    ['ARRIVES EACH MORNING AND SPENDS THE FIRST',
+     'THIRTY MINUTES LOOKING INCREDIBLY BUSY AT',
+     'THEIR COMPUTER WHEN OUR MONITORING SHOWS',
+     'THEY ARE IN FACT READING THE SAME FOUR',
+     'WEBSITES ON A CONTINUOUS ROTATING LOOP'],
+    ['APPEARS TO HAVE SET A PERSONAL GOAL OF',
+     'SECURING A RAISE WITHOUT ANY ADDITIONAL',
+     'EFFORT WHATSOEVER THIS QUARTER',
+     'IT IS NOT GOING UNNOTICED'],
+    ['AREAS FOR IMPROVEMENT: ESSENTIALLY ALL',
+     'AREAS OF ACTUAL EXCELLENCE: HAS PERFECTED',
+     'THE ART OF SLEEPING AT THEIR DESK WITHOUT',
+     'GETTING CAUGHT BY ANYONE IN MANAGEMENT',
+     'CURRENT UNDETECTED RECORD: FORTY FIVE MIN'],
+    ['ACCOMPLISHES MOST TASKS BY TYPING RAPIDLY',
+     'AND THEN PAUSING TO SAY HMMM INTERESTING',
+     'OUT LOUD TO NO ONE IN PARTICULAR NEARBY',
+     'NO ONE HAS QUESTIONED THIS IN FOUR YEARS',
+     'WE CONSIDER THIS THEIR GREATEST STRENGTH'],
+
+    // ── Style G: Review process comedy ─────────
     ['THIS ANNUAL REVIEW HAS BEEN POSTPONED',
      'THE ASSIGNED REVIEWER REQUIRED THERAPY',
      'AFTER THE PREVIOUS QUARTERLY ATTEMPT',
@@ -162,38 +249,178 @@ window.ReviewBoardRenderer = {
      'STATUS OF GOAL EIGHT: ALSO NOT MET YET',
      'GOAL NINE: SUCCESSFULLY MEET ANY GOAL',
      'STATUS OF GOAL NINE: PENDING FOREVER'],
+    ['FINAL PERFORMANCE SCORE: FULLY REDACTED',
+     'BY THE LEGAL TEAM FOR LIABILITY REASONS',
+     'SEE REFERENCE FILE NUMBERS 404 THRU 407',
+     'NOTE: WE RAN OUT OF FILE NUMBERS ENTIRELY',
+     'ADDITIONAL STORAGE HAS BEEN REQUISITIONED'],
     ['SELF ASSESSMENT SCORE: TEN OUT OF TEN',
      'DIRECT MANAGER REVIEW: PLEASE SEE ME',
      'HUMAN RESOURCES REVIEW: PLEASE SEE LAWYER',
      'PEER FEEDBACK SUMMARY: DECLINED COMMENT',
      'CUSTOMER SATISFACTION RATING: ONE STAR'],
+    ['MEETS EXPECTATIONS IS THE OFFICIAL SCORE',
+     'WHICH SOUNDS FINE UNTIL YOU REALIZE THAT',
+     'EXPECTATIONS WERE SET CATASTROPHICALLY LOW',
+     'AFTER THE INCIDENT WE DO NOT DISCUSS',
+     'AND THEY STILL ONLY BARELY SQUEAKED BY'],
+    ['THE THREE SIXTY REVIEW RESULTS ARE IN',
+     'DIRECT REPORTS SAY: NEVER MET THIS PERSON',
+     'PEERS SAY: CANNOT CONFIRM THEY EXIST',
+     'MANAGER SAYS: I THOUGHT THEY WERE YOURS',
+     'BUILDING SECURITY: BADGE WORKS APPARENTLY'],
 
-    // Style E — Extended narrative
-    ['HAS EXTREMELY STRONG PERSONAL OPINIONS',
-     'ABOUT A WIDE RANGE OF UNRELATED TOPICS',
-     'THAT ABSOLUTELY DO NOT CONCERN THEM HERE',
-     'AND SUSPICIOUSLY WEAK OPINIONS ON THINGS',
-     'THAT ARE LITERALLY PART OF THEIR JOB'],
+    // ── Style H: Email & communication habits ──
+    ['HAS BEEN SENT PER MY LAST EMAIL FOURTEEN',
+     'TIMES THIS QUARTER BY THE SAME COWORKER',
+     'EACH ONE INCREASINGLY BOLD AND UNDERLINED',
+     'THE FINAL MESSAGE WAS ENTIRELY IN RED CAPS',
+     'AND CC D THE ENTIRE EXECUTIVE TEAM TWICE'],
+    ['RESPONDS TO EVERY EMAIL WITH NOTED PERIOD',
+     'REGARDLESS OF CONTENT OR LEVEL OF URGENCY',
+     'FIRE DRILL EVACUATION NOTICE: NOTED PERIOD',
+     'MANDATORY SALARY REVIEW INVITE: NOTED',
+     'THEIR OWN TERMINATION LETTER: NOTED THX'],
+    ['HAS MASTERED THE ART OF LOOKING CONCERNED',
+     'WHILE UNDERSTANDING ABSOLUTELY NOTHING',
+     'SIGNATURE MOVE IS NODDING AND THEN SAYING',
+     'LETS TAKE THIS OFFLINE ABOUT EVERYTHING',
+     'EVEN THINGS THAT WERE ALREADY OFFLINE'],
+
+    // ── Style I: Reply-all & meeting chaos ─────
     ['UNDISPUTED COMPANY REPLY ALL CHAMPION',
      'THREE CONSECUTIVE YEARS AND STILL GOING',
      'WE HAVE FORMALLY ASKED THEM TO STOP THIS',
      'THE REQUEST WAS POLITELY MADE FOUR TIMES',
      'THEY REPLIED ALL TO ACKNOWLEDGE RECEIPT'],
-    ['ONCE PUBLICLY DESCRIBED AS ESSENTIAL STAFF',
-     'BY A PERSON WHO WAS IMMEDIATELY AND VERY',
-     'FIRMLY CORRECTED BY MULTIPLE WITNESSES',
-     'THAT PERSON HAS SINCE BEEN TRANSFERRED',
+    ['WAS ONCE DESCRIBED AS ESSENTIAL BY A PEER',
+     'WHO WAS IMMEDIATELY CORRECTED BY SEVERAL',
+     'WITNESSES AND THEN FORMALLY WRITTEN UP',
+     'THAT PEER HAS SINCE BEEN TRANSFERRED OUT',
      'AND THEN INEXPLICABLY PROMOTED SOMEHOW'],
     ['TAKES CREDIT ABSOLUTELY BEAUTIFULLY HERE',
      'DEFLECTS ALL BLAME WITH GENUINE ARTISTRY',
      'DOES NEITHER ACTUAL JOB PARTICULARLY WELL',
      'BUT TRULY EXCELS AT LEAVING THE BUILDING',
-     'RIGHT BEFORE ANY REAL CLEANUP HAS TO START'],
-    ['FORMALLY SUBMITTED A REQUEST FOR A RAISE',
-     'MANAGEMENT RESPONDED ASKING FOR RESULTS',
-     'THE RESULTING STALEMATE CONTINUES TODAY',
-     'WE ARE NOW ENTERING THE FOURTH QUARTER',
-     'OF THIS PARTICULAR SALARY NEGOTIATION'],
+     'RIGHT BEFORE ANY REAL CLEANUP MUST START'],
+    ['THOUGHT THEY WERE ON MUTE DURING REVIEW',
+     'SAID I WOULD RATHER BE AT THE DENTIST',
+     'THEY WERE NOT IN FACT ON MUTE'],
+    ['WAS CAUGHT EATING A FULL MEAL WITH SIDES',
+     'DURING THEIR OWN PERFORMANCE REVIEW HERE',
+     'SANDWICH CHIPS SOUP AND A FULL DRINK SET',
+     'OFFERED THE REVIEWER HALF A GRANOLA BAR',
+     'REVIEW PAUSED FOR TWENTY MINUTES TO EAT'],
+    ['SCHEDULED A MEETING TO DISCUSS WHY THERE',
+     'ARE TOO MANY MEETINGS THEN INVITED THE',
+     'ENTIRE DEPARTMENT TO ATTEND FOR AN HOUR',
+     'FOLLOW UP MEETING SCHEDULED FOR NEXT WEEK',
+     'TO REVIEW THE MINUTES FROM THIS MEETING'],
+
+    // ── Style J: Backhanded compliments ────────
+    ['SETS VERY LOW PERSONAL STANDARDS FOR SELF',
+     'AND THEN CONSISTENTLY FINDS A WAY TO FAIL',
+     'TO ACHIEVE EVEN THOSE MODEST BENCHMARKS',
+     'WHICH REQUIRES A SPECIAL KIND OF TALENT',
+     'THAT FRANKLY SCIENCE CANNOT YET EXPLAIN'],
+    ['DESCRIBED BY PEERS AS A GO GETTER WHICH',
+     'AFTER INVESTIGATION MEANS THEY WANDER',
+     'THE HALLS WITH A CLIPBOARD ONCE AN HOUR',
+     'THE CLIPBOARD HAS BEEN VERIFIED AS BLANK',
+     'THEY HAVE DONE THIS FOR THREE FULL YEARS'],
+    ['IF THIS EMPLOYEE WERE ANY MORE RELAXED',
+     'THEY WOULD TECHNICALLY BE IN A COMA STATE',
+     'VITAL SIGNS ARE PRESENT BUT PRODUCTIVITY',
+     'METRICS SUGGEST OTHERWISE AND HONESTLY',
+     'THE CHAIR IS DOING MOST OF THE WORK HERE'],
+    ['HAS A PHOTOGRAPHIC MEMORY WHICH IS GREAT',
+     'EXCEPT THE LENS CAP APPEARS TO BE GLUED',
+     'PERMANENTLY SHUT SINCE ORIENTATION DAY'],
+    ['WORKS WELL WHEN CORNERED AND SUPERVISED',
+     'REMOVE EITHER CONDITION AND PERFORMANCE',
+     'DROPS TO LEVELS WE CANNOT LEGALLY PRINT'],
+    ['STRONG UNDERSTANDING OF COMPANY CULTURE',
+     'WHICH IS THE POLITE WAY OF NOTING THAT',
+     'THIS PERSON KNOWS WHERE ALL THE BODIES',
+     'ARE BURIED AND HAS MADE THAT FACT KNOWN',
+     'PROMOTION WAS APPROVED WITHOUT DEBATE'],
+
+    // ── Style K: IT / Help Desk specific ──────
+    ['RESOLVED ZERO TICKETS THIS ENTIRE QUARTER',
+     'BUT DID CLOSE FORTY SEVEN AS DUPLICATE',
+     'AND TWELVE MORE AS CANNOT REPRODUCE',
+     'TECHNICALLY THE FASTEST RESOLUTION TIME',
+     'ON THE TEAM BY A SIGNIFICANT MARGIN'],
+    ['ANSWER TO EVERY SINGLE REPORTED PROBLEM',
+     'IS AND ALWAYS HAS BEEN WITHOUT EXCEPTION',
+     'HAVE YOU TRIED TURNING IT OFF AND BACK ON',
+     'THIS HAS WORKED EXACTLY TWICE IN FIVE YRS',
+     'BOTH TIMES WERE THE SAME PRINTER IN MARCH'],
+    ['CHANGED THEIR PASSWORD TO INCORRECT SO',
+     'THAT WHEN THEY FORGET THE COMPUTER SAYS',
+     'YOUR PASSWORD IS INCORRECT AS A REMINDER',
+     'THIS WAS DESCRIBED AS INNOVATIVE BY NO ONE',
+     'IT BROKE SINGLE SIGN ON FOR THE BUILDING'],
+    ['ENTIRE JOB IS TELLING PEOPLE THE PROBLEM',
+     'IS NOT THE NETWORK AND HAS GOTTEN SO GOOD',
+     'AT IT THAT THEY NOW DO IT PREEMPTIVELY',
+     'BEFORE ANYONE HAS EVEN REPORTED AN ISSUE',
+     'THE NETWORK IS IN FACT SOMETIMES THE ISSUE'],
+    ['SUBMITTED A TICKET ABOUT THEMSELVES',
+     'SUBJECT: EMPLOYEE UNRESPONSIVE PLS FIX',
+     'PRIORITY: LOW',
+     'STATUS: CLOSED AS KNOWN ISSUE WONT PATCH'],
+
+    // ── Style L: Music / band crossover ───────
+    ['PERFORMANCE REVIEW READS LIKE A SETLIST',
+     'OPENER: SHOWED UP TWENTY MINUTES LATE',
+     'DEEP CUT: BLAMED IT ON CONSTRUCTION',
+     'ENCORE: LEFT THIRTY MINUTES EARLY ALSO',
+     'THE CROWD WHICH WAS NOBODY DID NOT CARE'],
+    ['TREATS EVERY MEETING LIKE A SOLO PROJECT',
+     'STARTS QUIET THEN BUILDS TO A CRESCENDO',
+     'OF OPINIONS NO ONE ASKED FOR AT ANY POINT',
+     'REFUSES TO HARMONIZE WITH THE REST OF US',
+     'HAS BEEN ASKED TO TURN DOWN MANY TIMES'],
+    ['ONLY EMPLOYEE TO REQUEST A RIDER FOR THE',
+     'QUARTERLY ALL HANDS MEETING SPECIFICALLY',
+     'ROOM TEMPERATURE WATER AND GREEN SKITTLES',
+     'NO BROWN M AND MS IN THE BREAK ROOM EVER',
+     'REQUEST WAS DENIED BUT RESPECTED SLIGHTLY'],
+    ['THIS EMPLOYEES WORKFLOW HAS A DISTINCT',
+     'VERSE CHORUS VERSE STRUCTURE TO IT WHERE',
+     'THE VERSE IS NOT WORKING AND THE CHORUS',
+     'IS COMPLAINING ABOUT IT TO EVERYONE NEAR',
+     'THE BRIDGE IS A TEN MINUTE BATHROOM BREAK'],
+    ['GIVES CONSISTENT FEEDBACK IN THE FORM OF',
+     'A HEAVY SIGH FOLLOWED BY DIRECT EYE ROLL',
+     'OCCASIONALLY ACCOMPANIED BY A QUIET WOW',
+     'THIS THREE PIECE ARRANGEMENT OF CONTEMPT',
+     'HAS BECOME THEIR SIGNATURE OFFICE TRACK'],
+
+    // ── Style M: Short form / deadpan ─────────
+    ['MEH'],
+    ['ADEQUATE'],
+    ['NO COMMENT'],
+    ['FILE NOT FOUND'],
+    ['SEE PREVIOUS REVIEW'],
+    ['REVIEW DECLINED BY REVIEWER'],
+    ['PENDING'],
+    ['THIS SPACE INTENTIONALLY LEFT BLANK'],
+    ['FURTHER REVIEW DEEMED UNNECESSARY'],
+    ['RESULTS INCONCLUSIVE',
+     'RECOMMEND CONTINUED OBSERVATION'],
+    ['NOT THE WORST',
+     'NOT THE BEST EITHER',
+     'JUST SORT OF HERE'],
+    ['PERFORMANCE: YES TECHNICALLY'],
+    ['SHOWS UP',
+     'THAT IS THE COMPLETE REVIEW'],
+    ['NO FURTHER QUESTIONS AT THIS TIME',
+     'OR HONESTLY EVER'],
+    ['EMPLOYEE EXISTS',
+     'VERIFICATION: CONFIRMED',
+     'ADDITIONAL NOTES: NONE'],
   ],
 
   // ─── Hash ──────────────────────────────────────────────
@@ -225,6 +452,7 @@ window.ReviewBoardRenderer = {
     cell.querySelector('.static-bottom').textContent = char;
     cell.querySelector('.flap-top').textContent = char;
     cell.querySelector('.flap-bottom').textContent = char;
+    cell.dataset.char = char;
   },
 
   _flipChar(cell, fromChar, toChar) {
@@ -234,6 +462,7 @@ window.ReviewBoardRenderer = {
         resolve();
         return;
       }
+      cell.dataset.char = toChar;
       cell.querySelector('.static-top').textContent = toChar;
       cell.querySelector('.static-bottom').textContent = toChar;
       cell.querySelector('.flap-top').textContent = fromChar;
@@ -281,6 +510,68 @@ window.ReviewBoardRenderer = {
     return this.REVIEW_QUOTES[h % this.REVIEW_QUOTES.length];
   },
 
+  _getSkills(name) {
+    const h = this._sfHash(name + 'skills');
+    return this.SKILLS[h % this.SKILLS.length];
+  },
+
+  // Returns [line1, line2] for skills rows (centered, with SKILLS: header)
+  // line2 is empty string if it fits on one row
+  _formatSkillsLines(skills) {
+    const full = 'SKILLS: ' + skills;
+    if (full.length <= this.COLS) {
+      // Fits on one line — center it
+      const pad = Math.max(0, Math.floor((this.COLS - full.length) / 2));
+      return [
+        (' '.repeat(pad) + full).padEnd(this.COLS, ' ').substring(0, this.COLS),
+        ' '.repeat(this.COLS),
+      ];
+    }
+    // Split at a separator — try to balance line lengths
+    const header = 'SKILLS: ';
+    const maxFirst = this.COLS - header.length;
+    // Collect all valid split points
+    const splits = [];
+    let searchFrom = 0;
+    while (true) {
+      const next = skills.indexOf(' . ', searchFrom);
+      if (next === -1 || next > maxFirst) break;
+      splits.push(next);
+      searchFrom = next + 3;
+    }
+    let splitIdx = -1;
+    if (splits.length > 0) {
+      // Pick the split that best balances line lengths
+      // (avoids single-word overflow like just "CLOCKS" on line 2)
+      let bestBalance = Infinity;
+      for (const idx of splits) {
+        const l1Len = header.length + idx;
+        const l2Len = skills.length - idx - 3;
+        const balance = Math.abs(l1Len - l2Len);
+        if (balance < bestBalance) {
+          bestBalance = balance;
+          splitIdx = idx;
+        }
+      }
+    }
+    let line1, line2;
+    if (splitIdx > 0) {
+      line1 = header + skills.substring(0, splitIdx);
+      line2 = skills.substring(splitIdx + 3); // skip ' . '
+    } else {
+      // No good split point — hard truncate
+      line1 = full.substring(0, this.COLS);
+      line2 = '';
+    }
+    // Center both lines
+    const pad1 = Math.max(0, Math.floor((this.COLS - line1.length) / 2));
+    const pad2 = Math.max(0, Math.floor((this.COLS - line2.length) / 2));
+    return [
+      (' '.repeat(pad1) + line1).padEnd(this.COLS, ' ').substring(0, this.COLS),
+      (' '.repeat(pad2) + line2).padEnd(this.COLS, ' ').substring(0, this.COLS),
+    ];
+  },
+
   // ─── Grid Construction ─────────────────────────────────
 
   _buildGrid() {
@@ -291,6 +582,8 @@ window.ReviewBoardRenderer = {
       const row = [];
       for (let c = 0; c < this.COLS; c++) {
         const cell = this._createCharCell();
+        if (r === 2 || r === 3) cell.classList.add('rb-skills-row');
+        if (r === 4) cell.classList.add('rb-review-start');
         this._grid.appendChild(cell);
         row.push(cell);
       }
@@ -302,6 +595,10 @@ window.ReviewBoardRenderer = {
   // ─── Badge Tile Panel ──────────────────────────────────
 
   _buildBadgePanel() {
+    // Column wrapper for badge panel
+    this._badgeCol = document.createElement('div');
+    this._badgeCol.className = 'rb-badge-col';
+
     this._badgePanel = document.createElement('div');
     this._badgePanel.className = 'rb-badge-panel';
 
@@ -329,7 +626,8 @@ window.ReviewBoardRenderer = {
       }
     });
 
-    return this._badgePanel;
+    this._badgeCol.appendChild(this._badgePanel);
+    return this._badgeCol;
   },
 
   // ─── Canvas Color Sampling ─────────────────────────────
@@ -362,7 +660,7 @@ window.ReviewBoardRenderer = {
             // Luminance check — dark pixels become default tile dark
             const luminance = 0.299 * red + 0.587 * green + 0.114 * blue;
             if (luminance < 15) {
-              row.push('#252525');
+              row.push('#1e1e1e');
             } else {
               row.push('#' +
                 red.toString(16).padStart(2, '0') +
@@ -380,7 +678,7 @@ window.ReviewBoardRenderer = {
         for (let r = 0; r < rows; r++) {
           const row = [];
           for (let c = 0; c < cols; c++) {
-            row.push('#252525');
+            row.push('#1e1e1e');
           }
           colors.push(row);
         }
@@ -417,7 +715,7 @@ window.ReviewBoardRenderer = {
         const delay = idx * 5;
         promises.push(new Promise(resolve => {
           setTimeout(() => {
-            this._setTileColor(cell, '#252525');
+            this._setTileColor(cell, '#1e1e1e');
             resolve();
           }, delay);
         }));
@@ -484,7 +782,7 @@ window.ReviewBoardRenderer = {
   _sizeTiles() {
     if (!this._grid) return;
     const vw = window.innerWidth;
-    const vh = window.innerHeight - 50; // account for view switcher bar
+    const vh = window.innerHeight - 50 - 60; // view switcher bar + header row
     const gap = 1;
     const pad = 40;
     const hasBadgePanel = vw >= 1024;
@@ -547,6 +845,54 @@ window.ReviewBoardRenderer = {
     }
   },
 
+  // Color "SKILLS:" label in division color, skills text in white
+  _colorSkillsLabel(rowIdx, lineText, color) {
+    // Find where "SKILLS:" starts in the centered line
+    const idx = lineText.indexOf('SKILLS:');
+    if (idx === -1) return;
+    const labelLen = 7; // "SKILLS:"
+    this._setRowDivisionColor(rowIdx, color, idx, labelLen);
+    // Set remaining text on this row to white (after "SKILLS: ")
+    const textStart = idx + labelLen + 1;
+    const textLen = lineText.trimEnd().length - textStart;
+    if (textLen > 0) {
+      this._setRowDivisionColor(rowIdx, '#ffffff', textStart, textLen);
+    }
+  },
+
+  // Dim review body text for visual hierarchy (rows 4-8)
+  _dimReviewRows() {
+    const dimColor = '#c8baa0';
+    for (let r = 4; r < 9; r++) {
+      for (let c = 0; c < this.COLS; c++) {
+        const cell = this._cells[r][c];
+        const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+        flaps.forEach(el => { el.style.color = dimColor; });
+      }
+    }
+  },
+
+  // Set badge panel glow to division color
+  _setBadgePanelGlow(divColor) {
+    if (!this._badgePanel) return;
+    this._badgePanel.style.borderColor = divColor + '44';
+    this._badgePanel.style.boxShadow = '0 0 16px ' + divColor + '1a';
+  },
+
+  _clearBadgePanelGlow() {
+    if (!this._badgePanel) return;
+    this._badgePanel.style.borderColor = '';
+    this._badgePanel.style.boxShadow = '';
+  },
+
+  // Color skills overflow row (row 3) white if it has content
+  _colorSkillsOverflow(rowIdx, lineText) {
+    const startIdx = lineText.search(/\S/);
+    if (startIdx === -1) return; // all spaces, no overflow
+    const endIdx = lineText.trimEnd().length;
+    this._setRowDivisionColor(rowIdx, '#ffffff', startIdx, endIdx - startIdx);
+  },
+
   _clearRowColor(rowIdx) {
     for (let c = 0; c < this.COLS; c++) {
       const cell = this._cells[rowIdx][c];
@@ -607,6 +953,7 @@ window.ReviewBoardRenderer = {
     const div = this._getDivision(badge);
     const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
     const quote = this._getReviewQuote(name);
+    const skills = this._getSkills(name);
 
     // Clear any previous row colors
     for (let r = 0; r < this.ROWS; r++) this._clearRowColor(r);
@@ -621,18 +968,26 @@ window.ReviewBoardRenderer = {
     this._setRowText(1, ' '.repeat(titleStart) + title, 0);
     this._setRowDivisionColor(1, divColor, titleStart, title.length);
 
-    // Row 2: blank spacer
-    this._setRowText(2, '', 0);
+    // Rows 2-3: skills (centered, may wrap)
+    const skillsLines = this._formatSkillsLines(skills);
+    this._setRowText(2, skillsLines[0], 0);
+    this._setRowText(3, skillsLines[1], 0);
+    // Color the "SKILLS:" label with division color
+    this._colorSkillsLabel(2, skillsLines[0], divColor);
+    this._colorSkillsOverflow(3, skillsLines[1]);
 
-    // Rows 3-8: pre-formatted review lines (up to 6)
-    const numQuoteLines = Math.min(quote.length, 6);
+    // Rows 4-8: pre-formatted review lines (up to 5)
+    const numQuoteLines = Math.min(quote.length, 5);
     for (let i = 0; i < numQuoteLines; i++) {
-      this._setRowText(3 + i, quote[i] || '', 0);
+      this._setRowText(4 + i, quote[i] || '', 0);
     }
     // Clear remaining rows
-    for (let i = numQuoteLines; i < this.ROWS - 3; i++) {
-      this._setRowText(3 + i, '', 0);
+    for (let i = numQuoteLines; i < this.ROWS - 4; i++) {
+      this._setRowText(4 + i, '', 0);
     }
+
+    // Dim review body for visual hierarchy
+    this._dimReviewRows();
 
     this._currentBadge = badge;
 
@@ -649,6 +1004,8 @@ window.ReviewBoardRenderer = {
       }
       // Crossfade: sharp PNG fades in over the tiles
       this._revealBadgeImage(imgSrc);
+      // Badge panel glow in division color
+      this._setBadgePanelGlow(divColor);
     });
   },
 
@@ -658,6 +1015,10 @@ window.ReviewBoardRenderer = {
     const div = this._getDivision(badge);
     const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
     const quote = this._getReviewQuote(name);
+    const skills = this._getSkills(name);
+
+    // Show AI indicator
+    if (this._aiIndicator) this._aiIndicator.classList.add('active');
 
     // Pre-sample badge colors before animation starts
     const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
@@ -665,67 +1026,171 @@ window.ReviewBoardRenderer = {
 
     // Hide previous reveal image before new animation
     this._hideBadgeReveal();
+    this._clearBadgePanelGlow();
 
-    // Phase A: Badge tiles flip to dark + Board text cascade start simultaneously
+    // Phase A: Badge tiles flip to dark (text colors cleared per-cell during animation)
     const badgeDarkPromise = this._animateBadgeTilesToDark();
-
-    // Clear previous row colors
-    for (let r = 0; r < this.ROWS; r++) this._clearRowColor(r);
 
     // Prepare target text for all 10 rows
     const nameStart = this._centerCol(name);
     const titleStart = this._centerCol(title);
-    const rowTexts = [];
-    rowTexts.push((' '.repeat(nameStart) + name).padEnd(this.COLS, ' ').substring(0, this.COLS));
-    rowTexts.push((' '.repeat(titleStart) + title).padEnd(this.COLS, ' ').substring(0, this.COLS));
-    rowTexts.push(' '.repeat(this.COLS)); // blank spacer
-    const numQuoteLines = Math.min(quote.length, 6);
+
+    // Row layout: 0=name, 1=title, 2-3=skills, 4-8=review, 9=blank
+    const nameText = (' '.repeat(nameStart) + name).padEnd(this.COLS, ' ').substring(0, this.COLS);
+    const titleText = (' '.repeat(titleStart) + title).padEnd(this.COLS, ' ').substring(0, this.COLS);
+    const skillsLines = this._formatSkillsLines(skills);
+
+    const reviewTexts = [];
+    const numQuoteLines = Math.min(quote.length, 5);
     for (let i = 0; i < numQuoteLines; i++) {
-      rowTexts.push((quote[i] || '').padEnd(this.COLS, ' ').substring(0, this.COLS));
+      reviewTexts.push((quote[i] || '').padEnd(this.COLS, ' ').substring(0, this.COLS));
     }
-    // Pad remaining rows blank
-    while (rowTexts.length < this.ROWS) {
-      rowTexts.push(' '.repeat(this.COLS));
+    while (reviewTexts.length < 5) {
+      reviewTexts.push(' '.repeat(this.COLS));
     }
 
-    // Phase B: Board column cascade with color flash
-    const stagger = 50;
-    const boardPromises = [];
-
+    // ── Phase B: Name + Title sweep left-to-right (rows 0-1) ──
+    // Color is set per-cell at animation start so characters flip in already colored
+    const nameRange = [nameStart, nameStart + name.length];
+    const titleRange = [titleStart, titleStart + title.length];
+    const headerStagger = 50;
+    const headerPromises = [];
     for (let c = 0; c < this.COLS; c++) {
-      for (let r = 0; r < this.ROWS; r++) {
-        const targetChar = rowTexts[r][c].toUpperCase();
+      for (let r = 0; r < 2; r++) {
+        const targetChar = (r === 0 ? nameText : titleText)[c];
         const currentChar = this._cells[r][c].querySelector('.static-top').textContent || ' ';
-        if (targetChar === currentChar) continue;
         const col = c;
         const row = r;
-        boardPromises.push(
+        const range = row === 0 ? nameRange : titleRange;
+        const inRange = col >= range[0] && col < range[1];
+        if (targetChar === currentChar) {
+          // No animation needed — just update color to match new badge
+          const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+          flaps.forEach(el => { el.style.color = inRange ? divColor : ''; });
+          continue;
+        }
+        headerPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
-              // Color flash on this tile
+              // Set color before animation so intermediate chars are already colored
+              const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+              flaps.forEach(el => { el.style.color = inRange ? divColor : ''; });
               this._flashTileColor(this._cells[row][col], divColor);
               this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(resolve);
-            }, col * stagger);
+            }, col * headerStagger);
           })
         );
       }
     }
+    await Promise.all(headerPromises);
 
-    // Phase B (badge): animate to new colors simultaneously
+    // ── Phase B2: Skills sweep left-to-right (rows 2-3) ──
+    // Pre-compute which cells get which color
+    const skillsLine0 = skillsLines[0];
+    const skillsLabelIdx = skillsLine0.indexOf('SKILLS:');
+    const skillsPromises = [];
+    for (let sr = 0; sr < 2; sr++) {
+      const rowIdx = 2 + sr;
+      const lineText = skillsLines[sr];
+      for (let c = 0; c < this.COLS; c++) {
+        const targetChar = lineText[c];
+        const currentChar = this._cells[rowIdx][c].querySelector('.static-top').textContent || ' ';
+        const col = c;
+        const row = rowIdx;
+        // Determine target color for this cell
+        const isLabel = (sr === 0 && skillsLabelIdx !== -1 && col >= skillsLabelIdx && col < skillsLabelIdx + 7);
+        const cellColor = isLabel ? divColor : (targetChar.trim() ? '#ffffff' : '');
+        if (targetChar === currentChar) {
+          // No animation needed — just update color
+          const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+          flaps.forEach(el => { el.style.color = cellColor; });
+          continue;
+        }
+        skillsPromises.push(
+          new Promise(resolve => {
+            setTimeout(() => {
+              const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+              flaps.forEach(el => { el.style.color = cellColor; });
+              this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(resolve);
+            }, col * 30);
+          })
+        );
+      }
+    }
+    await Promise.all(skillsPromises);
+
+    // ── Phase C: Progressive reveal — review rows resolve from blank ──
+    // Clear review rows to blank first
+    for (let r = 4; r <= 9; r++) {
+      this._setRowText(r, '', 0);
+    }
+
+    // Badge tiles start animating to sampled colors
     const badgeColors = await badgeColorsPromise;
     await badgeDarkPromise;
     const badgeColorPromise = this._animateBadgeTilesToColors(badgeColors);
 
-    await Promise.all(boardPromises);
+    // Reveal each row top-to-bottom with stagger between rows
+    // Each row: cells flip from blank → correct char in randomized order
+    const rowRevealDelay = 600; // ms between each row starting
+    for (let ri = 0; ri < reviewTexts.length; ri++) {
+      const rowIdx = 4 + ri;
 
-    // Set name and title division color after text lands
-    this._setRowDivisionColor(0, divColor, nameStart, name.length);
-    this._setRowDivisionColor(1, divColor, titleStart, title.length);
+      // Build shuffled cell list for this row (skip spaces at end)
+      const rowCells = [];
+      for (let c = 0; c < this.COLS; c++) {
+        rowCells.push({ c, char: reviewTexts[ri][c] });
+      }
+      // Fisher-Yates shuffle
+      for (let i = rowCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [rowCells[i], rowCells[j]] = [rowCells[j], rowCells[i]];
+      }
+
+      // Resolve cells with staggered timing (~500ms per row)
+      const dimColor = '#c8baa0';
+      const cellDelay = Math.max(2, Math.floor(500 / rowCells.length));
+      const rowPromises = [];
+      rowCells.forEach((item, idx) => {
+        rowPromises.push(new Promise(resolve => {
+          setTimeout(() => {
+            const cell = this._cells[rowIdx][item.c];
+            // Set dim color before character appears
+            const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+            flaps.forEach(el => { el.style.color = dimColor; });
+            this._setChar(cell, item.char);
+            // Flip animation on non-space characters
+            if (item.char !== ' ') {
+              const ft = cell.querySelector('.flap-top');
+              const fb = cell.querySelector('.flap-bottom');
+              if (ft && fb) {
+                ft.classList.add('flipping');
+                fb.classList.add('flipping');
+                setTimeout(() => { ft.classList.remove('flipping'); fb.classList.remove('flipping'); }, 80);
+              }
+            }
+            resolve();
+          }, idx * cellDelay);
+        }));
+      });
+      await Promise.all(rowPromises);
+
+      // Pause between rows (except after last)
+      if (ri < reviewTexts.length - 1) {
+        await this._delay(rowRevealDelay);
+      }
+    }
 
     await badgeColorPromise;
 
     // Crossfade: sharp PNG fades in over the tiles
     this._revealBadgeImage(imgSrc);
+
+    // Badge panel glow in division color
+    this._setBadgePanelGlow(divColor);
+
+    // Hide AI indicator after reveal
+    if (this._aiIndicator) this._aiIndicator.classList.remove('active');
 
     this._currentBadge = badge;
   },
@@ -749,7 +1214,8 @@ window.ReviewBoardRenderer = {
     // Display first badge instantly
     this._displayBadgeInstant(this._shuffledBadges[0]);
 
-    const holdTime = this._allBadges.length < 3 ? 20000 : 12000;
+    // Animation takes ~5-6s, then hold 6s for reading = ~12s between rotations
+    const holdTime = this._allBadges.length < 3 ? 20000 : 14000;
 
     this._rotationTimer = setInterval(() => {
       if (this._isArrivalActive) return;
@@ -758,7 +1224,11 @@ window.ReviewBoardRenderer = {
         this._shuffledBadges = this._shuffle(this._allBadges);
         this._rotationIndex = 0;
       }
-      this._displayBadgeAnimated(this._shuffledBadges[this._rotationIndex]);
+      if (animationsEnabled()) {
+        this._displayBadgeAnimated(this._shuffledBadges[this._rotationIndex]);
+      } else {
+        this._displayBadgeInstant(this._shuffledBadges[this._rotationIndex]);
+      }
     }, holdTime);
   },
 
@@ -771,7 +1241,7 @@ window.ReviewBoardRenderer = {
 
   _resumeRotation() {
     this._stopRotation();
-    const holdTime = this._allBadges.length < 3 ? 20000 : 12000;
+    const holdTime = this._allBadges.length < 3 ? 20000 : 14000;
     this._rotationTimer = setInterval(() => {
       if (this._isArrivalActive) return;
       this._rotationIndex++;
@@ -779,7 +1249,11 @@ window.ReviewBoardRenderer = {
         this._shuffledBadges = this._shuffle(this._allBadges);
         this._rotationIndex = 0;
       }
-      this._displayBadgeAnimated(this._shuffledBadges[this._rotationIndex]);
+      if (animationsEnabled()) {
+        this._displayBadgeAnimated(this._shuffledBadges[this._rotationIndex]);
+      } else {
+        this._displayBadgeInstant(this._shuffledBadges[this._rotationIndex]);
+      }
     }, holdTime);
   },
 
@@ -789,11 +1263,32 @@ window.ReviewBoardRenderer = {
     this._isArrivalActive = true;
     this._stopRotation();
 
+    // FX off: skip all animation, just show instantly
+    if (!animationsEnabled()) {
+      this._displayBadgeInstant(badge);
+      this._isArrivalActive = false;
+      if (!this._allBadges.find(b => b.employeeId === badge.employeeId)) {
+        this._allBadges.push(badge);
+        this._shuffledBadges = this._shuffle(this._allBadges);
+      }
+      if (this._arrivalQueue.length > 0) {
+        const next = this._arrivalQueue.shift();
+        this._processArrival(next);
+      } else {
+        this._resumeRotation();
+      }
+      return;
+    }
+
+    // Show AI indicator
+    if (this._aiIndicator) this._aiIndicator.classList.add('active');
+
     const div = this._getDivision(badge);
     const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
 
-    // Hide previous reveal image
+    // Hide previous reveal image + clear glow
     this._hideBadgeReveal();
+    this._clearBadgePanelGlow();
 
     // Pre-sample badge colors
     const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
@@ -832,14 +1327,17 @@ window.ReviewBoardRenderer = {
     const name = (badge.name || 'UNKNOWN').toUpperCase();
     const title = (badge.title || 'EMPLOYEE').toUpperCase();
     const quote = this._getReviewQuote(name);
+    const skills = this._getSkills(name);
 
     const nameStart = this._centerCol(name);
+    const titleStart = this._centerCol(title);
+    const skillsLines = this._formatSkillsLines(skills);
     const rowTexts = [];
     rowTexts.push((' '.repeat(nameStart) + name).padEnd(this.COLS, ' ').substring(0, this.COLS));
-    const titleStart = this._centerCol(title);
     rowTexts.push((' '.repeat(titleStart) + title).padEnd(this.COLS, ' ').substring(0, this.COLS));
-    rowTexts.push(' '.repeat(this.COLS));
-    const numQuoteLines = Math.min(quote.length, 6);
+    rowTexts.push(skillsLines[0]);
+    rowTexts.push(skillsLines[1]);
+    const numQuoteLines = Math.min(quote.length, 5);
     for (let i = 0; i < numQuoteLines; i++) {
       rowTexts.push((quote[i] || '').padEnd(this.COLS, ' ').substring(0, this.COLS));
     }
@@ -893,6 +1391,17 @@ window.ReviewBoardRenderer = {
 
     // Crossfade: sharp PNG fades in over the tiles
     this._revealBadgeImage(imgSrc);
+
+    // Dim review body + badge panel glow
+    this._dimReviewRows();
+    this._setBadgePanelGlow(divColor);
+
+    // Color skills after color wave clears
+    this._colorSkillsLabel(2, skillsLines[0], divColor);
+    this._colorSkillsOverflow(3, skillsLines[1]);
+
+    // Hide AI indicator after reveal
+    if (this._aiIndicator) this._aiIndicator.classList.remove('active');
 
     this._currentBadge = badge;
 
@@ -997,20 +1506,39 @@ window.ReviewBoardRenderer = {
     this._container = container;
     this._stats = stats;
 
-    // Build stage (flex row: board + badge panel)
+    // Build stage (column: header row + content row)
     this._stage = document.createElement('div');
     this._stage.className = 'rb-stage';
 
-    // Title above board
+    // Header row: title (centered) + AI indicator (right-aligned)
+    const headerRow = document.createElement('div');
+    headerRow.className = 'rb-header-row';
+
     const titleDiv = document.createElement('div');
     titleDiv.className = 'rb-title';
     titleDiv.textContent = 'AI PERFORMANCE REVIEW';
+    headerRow.appendChild(titleDiv);
+
+    // AI indicator (right side of header)
+    this._aiIndicator = document.createElement('div');
+    this._aiIndicator.className = 'rb-ai-indicator';
+    this._aiIndicator.innerHTML =
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-label">AI ANALYZING</span>';
+    headerRow.appendChild(this._aiIndicator);
+
+    this._stage.appendChild(headerRow);
+
+    // Content row: board + badge panel
+    const contentRow = document.createElement('div');
+    contentRow.className = 'rb-content-row';
 
     // Board wrapper
     const board = document.createElement('div');
     board.className = 'rb-board';
 
-    board.appendChild(titleDiv);
     const grid = this._buildGrid();
     board.appendChild(grid);
 
@@ -1021,11 +1549,13 @@ window.ReviewBoardRenderer = {
       }
     });
 
-    this._stage.appendChild(board);
+    contentRow.appendChild(board);
 
     // Badge tile panel
     const badgePanel = this._buildBadgePanel();
-    this._stage.appendChild(badgePanel);
+    contentRow.appendChild(badgePanel);
+
+    this._stage.appendChild(contentRow);
 
     container.appendChild(this._stage);
 
@@ -1086,6 +1616,8 @@ window.ReviewBoardRenderer = {
     this._grid = null;
     this._badgePanel = null;
     this._badgeGrid = null;
+    this._badgeCol = null;
+    this._aiIndicator = null;
     this._badgeCells = [];
     this._badgeCanvas = null;
     this._cells = [];

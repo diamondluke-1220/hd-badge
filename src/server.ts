@@ -588,7 +588,7 @@ app.post('/api/badge', async (c) => {
       success: true,
       employeeId: result.employeeId,
       deleteToken: result.deleteToken,
-      message: 'Welcome to Help Desk Inc.',
+      message: 'Welcome to Help Desk LLC.',
     });
   } catch (err: any) {
     log('error', 'badge', `Creation failed: ${err.message}`);

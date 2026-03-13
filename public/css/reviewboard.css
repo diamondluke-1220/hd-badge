@@ -7,33 +7,53 @@
   right: 0;
   bottom: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: 0;
+  padding: 16px 24px 24px;
   background: #0a0a0a;
   overflow: hidden;
   z-index: 10;
 }
 
+/* ─── Header Row (title + AI indicator) ──────────────── */
+
+.rb-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  width: 100%;
+  margin-bottom: 12px;
+  position: relative;
+}
+
+/* ─── Content Row (board + badge panel) ──────────────── */
+
+.rb-content-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 24px;
+}
+
 /* ─── Title Above Board ─────────────────────────────────── */
 
 .rb-title {
-  text-align: center;
   font-family: 'Courier New', 'Consolas', monospace;
   font-size: 24px;
   letter-spacing: 0.35em;
-  color: #aaa;
+  color: #bbb;
+  text-shadow: 0 0 12px rgba(200, 200, 200, 0.15);
   text-transform: uppercase;
-  margin-bottom: 16px;
   font-weight: bold;
+  flex: 1;
+  text-align: center;
 }
 
 /* ─── Board Wrapper ──────────────────────────────────────── */
 
 .rb-board {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   cursor: pointer;
 }
 
@@ -69,6 +89,76 @@
   line-height: var(--rb-line-h);
 }
 
+/* Separator gap between skills and review body */
+.rb-grid .rb-review-start {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Skills rows — slightly smaller font */
+.rb-grid .rb-skills-row .static-top,
+.rb-grid .rb-skills-row .static-bottom,
+.rb-grid .rb-skills-row .flap-top,
+.rb-grid .rb-skills-row .flap-bottom {
+  font-size: calc(var(--rb-font) * 0.8);
+}
+
+/* ─── Badge Column (AI indicator + tile panel) ──────────── */
+
+.rb-badge-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* ─── AI Indicator ──────────────────────────────────────── */
+
+.rb-ai-indicator {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  color: #777;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  position: absolute;
+  right: 10%;
+  white-space: nowrap;
+}
+
+.rb-ai-indicator.active {
+  opacity: 1;
+}
+
+.rb-ai-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+}
+
+.rb-ai-indicator.active .rb-ai-indicator-dot {
+  animation: rbAiPulse 1.2s ease-in-out infinite;
+}
+
+.rb-ai-indicator.active .rb-ai-indicator-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.rb-ai-indicator.active .rb-ai-indicator-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes rbAiPulse {
+  0%, 100% { background: #444; }
+  50% { background: #00d4ff; box-shadow: 0 0 8px rgba(0, 212, 255, 0.5); }
+}
+
 /* ─── Badge Tile Panel ───────────────────────────────────── */
 
 .rb-badge-panel {
@@ -78,7 +168,7 @@
   border-radius: 8px;
   padding: 6px;
   cursor: pointer;
-  transition: box-shadow 300ms ease;
+  transition: box-shadow 500ms ease, border-color 500ms ease;
   flex-shrink: 0;
 }
 
@@ -102,7 +192,8 @@
 .rb-badge-grid .flap-char .flap-bottom {
   font-size: 1px;
   line-height: var(--rb-badge-tile-h);
-  background: #252525;
+  background: #1e1e1e;
+  border-color: #2a2a2a;
 }
 
 /* ─── Badge Crossfade Reveal ─────────────────────────────── */
@@ -173,12 +264,16 @@ body.view-reviewboard .public-orgchart {
 /* ─── Responsive ──────────────────────────────────────── */
 
 @media (max-width: 1023px) {
-  .rb-badge-panel {
+  .rb-badge-col {
     display: none;
   }
 
-  .rb-stage {
+  .rb-content-row {
     gap: 0;
+  }
+
+  .rb-ai-indicator {
+    display: none;
   }
 }
 
@@ -187,4 +282,18 @@ body.view-reviewboard .public-orgchart {
     gap: 0;
     padding: 2px;
   }
+}
+
+/* ─── FX Off ───────────────────────────────────────────── */
+
+.fx-off .rb-ai-indicator {
+  display: none;
+}
+
+.fx-off .rb-badge-reveal {
+  transition: none;
+}
+
+.fx-off .rb-badge-panel {
+  transition: none;
 }

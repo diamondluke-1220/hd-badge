@@ -13,14 +13,18 @@ window.GridRenderer = {
     // Org chart header
     container.innerHTML = `
       <div class="org-header">
-        <div class="org-header-title">Help Desk <span class="org-header-accent">Inc.</span></div>
-        <div class="org-header-sub">Employee Directory &bull; ${stats.visible} on payroll</div>
+        <div class="org-header-title">Help Desk <span class="org-header-accent">LLC.</span></div>
+        <div class="org-header-sub">Employee Directory &bull; <span class="odometer" id="payrollOdometer">${this._buildOdometerDigits(stats.visible)}</span> on payroll</div>
       </div>
       <div class="dept-filter-bar" id="deptFilterBar"></div>
       <div class="active-dept-heading" id="activeDeptHeading"></div>
       <div id="publicBadgeContent"></div>
       <div id="loadMoreArea"></div>
     `;
+
+    // Set initial odometer value
+    const odo = document.getElementById('payrollOdometer');
+    if (odo) odo.dataset.value = stats.visible;
 
     // Initialize donut chart with current stats
     window._tickerTotalHires = stats.visible || 0;
@@ -113,14 +117,11 @@ window.GridRenderer = {
       grid.insertBefore(card, grid.firstChild);
     }
 
-    // Update org header total count
-    const subEl = document.querySelector('.org-header-sub');
-    if (subEl) {
-      const match = subEl.textContent.match(/(\d+)/);
-      if (match) {
-        const newTotal = parseInt(match[1]) + 1;
-        subEl.innerHTML = `Employee Directory &bull; ${newTotal} on payroll`;
-      }
+    // Animate odometer count
+    const odo = document.getElementById('payrollOdometer');
+    if (odo) {
+      const current = parseInt(odo.dataset.value || '0');
+      this._animateOdometer(odo, current + 1);
     }
 
     return card;
@@ -136,6 +137,36 @@ window.GridRenderer = {
   },
 
   // ─── Private helpers ────────────────────────────────────
+
+  _buildOdometerDigits(num) {
+    const digits = String(num).split('');
+    return digits.map(d =>
+      `<span class="odometer-digit"><span class="odometer-digit-inner" style="transform:translateY(-${d * 1.3}em)">` +
+      [0,1,2,3,4,5,6,7,8,9].map(n => `<span>${n}</span>`).join('') +
+      `</span></span>`
+    ).join('');
+  },
+
+  _animateOdometer(el, newValue) {
+    const newDigits = String(newValue).split('');
+    const oldDigits = String(el.dataset.value || '0').split('');
+    el.dataset.value = newValue;
+
+    // If digit count changed (e.g. 9→10), rebuild the HTML
+    if (newDigits.length !== oldDigits.length) {
+      el.innerHTML = this._buildOdometerDigits(0);
+      // Force reflow so the initial position renders before we animate
+      el.offsetHeight;
+    }
+
+    const digitEls = el.querySelectorAll('.odometer-digit-inner');
+    newDigits.forEach((d, i) => {
+      const offset = i - (newDigits.length - digitEls.length);
+      if (offset >= 0 && digitEls[offset]) {
+        digitEls[offset].style.transform = `translateY(-${d * 1.3}em)`;
+      }
+    });
+  },
 
   _updateDeptHeading(dept, stats) {
     const heading = document.getElementById('activeDeptHeading');

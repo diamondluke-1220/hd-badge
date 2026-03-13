@@ -1195,7 +1195,6 @@ async function switchView(mode) {
   // Select new renderer
   const renderers = {
     grid: window.GridRenderer,
-    splitflap: window.SplitFlapRenderer,
     reviewboard: window.ReviewBoardRenderer,
     dendro: window.DendroRenderer,
     arcade: window.ArcadeRenderer,
@@ -1210,7 +1209,7 @@ async function switchView(mode) {
   currentRenderer = renderer;
 
   // Toggle body class for view-specific CSS (e.g., hiding global ticker in lobby)
-  document.body.classList.remove('view-grid', 'view-splitflap', 'view-reviewboard', 'view-dendro', 'view-arcade');
+  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade');
   document.body.classList.add('view-' + mode);
 
   // Save preference
@@ -1254,21 +1253,20 @@ async function initOrgChart() {
   const savedMode = localStorage.getItem('hd-view-mode') || 'grid';
   const available = {
     grid: !!window.GridRenderer,
-    splitflap: !!window.SplitFlapRenderer,
     reviewboard: !!window.ReviewBoardRenderer,
     dendro: !!window.DendroRenderer,
     arcade: !!window.ArcadeRenderer,
   };
   const mode = available[savedMode] ? savedMode : 'grid';
 
-  currentRenderer = { grid: window.GridRenderer, splitflap: window.SplitFlapRenderer, reviewboard: window.ReviewBoardRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
+  currentRenderer = { grid: window.GridRenderer, reviewboard: window.ReviewBoardRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
   if (!currentRenderer) {
     orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
     return;
   }
 
   // Set body class for view-specific CSS (e.g., hiding global ticker in lobby)
-  document.body.classList.remove('view-grid', 'view-splitflap', 'view-reviewboard', 'view-dendro', 'view-arcade');
+  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade');
   document.body.classList.add('view-' + mode);
 
   // Mark active button
@@ -1289,17 +1287,14 @@ function buildViewSwitcher() {
     <button class="view-switch-btn active" data-mode="grid">
       <span class="view-switch-icon">&#9638;</span> Grid <kbd>1</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="splitflap">
-      <span class="view-switch-icon">&#9201;</span> Lobby <kbd>2</kbd>
-    </button>
     <button class="view-switch-btn" data-mode="reviewboard">
-      <span class="view-switch-icon">&#9733;</span> AI Review <kbd>3</kbd>
+      <span class="view-switch-icon">&#9733;</span> AI Review <kbd>2</kbd>
     </button>
     <button class="view-switch-btn" data-mode="dendro">
-      <span class="view-switch-icon">&#9776;</span> Tree <kbd>4</kbd>
+      <span class="view-switch-icon">&#9776;</span> Tree <kbd>3</kbd>
     </button>
     <button class="view-switch-btn" data-mode="arcade">
-      <span class="view-switch-icon">&#127918;</span> Arcade <kbd>5</kbd>
+      <span class="view-switch-icon">&#127918;</span> Arcade <kbd>4</kbd>
     </button>
     <span class="view-switch-divider"></span>
     <button class="view-switch-btn ${animationsEnabled() ? 'anim-on' : ''}" id="animToggleBtn" title="${animationsEnabled() ? 'Animations On (A)' : 'Animations Off (A)'}">
@@ -1323,10 +1318,9 @@ function buildViewSwitcher() {
     // Don't trigger in inputs/textareas
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === '1') switchView('grid');
-    else if (e.key === '2') switchView('splitflap');
-    else if (e.key === '3') switchView('reviewboard');
-    else if (e.key === '4') switchView('dendro');
-    else if (e.key === '5') switchView('arcade');
+    else if (e.key === '2') switchView('reviewboard');
+    else if (e.key === '3') switchView('dendro');
+    else if (e.key === '4') switchView('arcade');
     else if (e.key === 'a' || e.key === 'A') toggleAnimations();
   });
 }
@@ -1393,7 +1387,7 @@ function queueLiveAnimation(badge) {
 }
 
 function getCurrentViewMode() {
-  if (currentRenderer === window.SplitFlapRenderer) return 'splitflap';
+  if (currentRenderer === window.ReviewBoardRenderer) return 'reviewboard';
   if (currentRenderer === window.DendroRenderer) return 'dendro';
   if (currentRenderer === window.ArcadeRenderer) return 'arcade';
   return 'grid';
@@ -1414,8 +1408,6 @@ async function processLiveQueue() {
       await playTerminalAnimation(badge);
       const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
       if (card) await playSpotlight(card);
-    } else if (mode === 'splitflap') {
-      if (currentRenderer) await currentRenderer.addBadge(badge);
     } else if (mode === 'dendro') {
       const nodeEl = currentRenderer ? currentRenderer.addBadge(badge) : null;
       if (nodeEl) await playPingTrace(nodeEl);
@@ -2115,18 +2107,7 @@ function playBranchRipple(g, sourceNode, color) {
   });
 }
 
-// --- Stats Panel (Donut + Newest Hire + Sparkline) ---
-
-function loadD3() {
-  return new Promise((resolve) => {
-    if (typeof d3 !== 'undefined') { resolve(true); return; }
-    const script = document.createElement('script');
-    script.src = '/lib/d3.min.js';
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.head.appendChild(script);
-  });
-}
+// --- Stats Panel (Donut + Newest Hire) ---
 
 const DIVISION_COLORS = {
   '_exec':    '#4ADE80',
@@ -2141,8 +2122,6 @@ let donutCounts = {}; // { divisionTheme: count }
 let donutTotal = 0;
 let _donutAnimated = false;
 let _currentNewestHire = null;
-let _currentSparkline = [];
-
 function initStatsPanel(stats) {
   // Build initial donut counts
   donutTotal = stats.visible || 0;
@@ -2161,7 +2140,7 @@ function initStatsPanel(stats) {
   }
 
   _currentNewestHire = stats.newestHire || null;
-  _currentSparkline = stats.sparkline || [];
+
   _donutAnimated = false;
 
   renderStatsPanel();
@@ -2239,17 +2218,6 @@ function renderStatsPanel() {
     `;
   }
 
-  // --- Sparkline section ---
-  const hasSparkData = _currentSparkline.length > 0;
-  const sparkHtml = `
-    <div class="stats-card sparkline-card">
-      <div class="stats-card-label">HIRE ACTIVITY</div>
-      <div class="sparkline-container" id="sparklineChart">
-        ${hasSparkData ? '' : '<div class="sparkline-empty">No recent activity</div>'}
-      </div>
-    </div>
-  `;
-
   panel.innerHTML = `
     <div class="stats-donut-section${animClass}">
       <div class="orgchart-donut" style="background: ${gradient}" data-total="${donutTotal}"></div>
@@ -2258,7 +2226,6 @@ function renderStatsPanel() {
       </div>
     </div>
     ${newestHtml}
-    ${sparkHtml}
   `;
 
   header.after(panel);
@@ -2268,11 +2235,6 @@ function renderStatsPanel() {
   const donutEl = panel.querySelector('.orgchart-donut');
   if (donutEl && donutTotal > 0) {
     animateCountUp(donutEl, donutTotal);
-  }
-
-  // Render sparkline with D3 (lazy-load if needed)
-  if (hasSparkData) {
-    loadD3().then(ok => { if (ok) renderSparkline(_currentSparkline); });
   }
 }
 
@@ -2290,83 +2252,6 @@ function animateCountUp(el, target) {
   requestAnimationFrame(step);
 }
 
-function renderSparkline(data) {
-  const container = document.getElementById('sparklineChart');
-  if (!container) return;
-
-  const width = 200;
-  const height = 52;
-  const margin = { top: 4, right: 4, bottom: 4, left: 4 };
-  const w = width - margin.left - margin.right;
-  const h = height - margin.top - margin.bottom;
-
-  // Fill in missing days in the 30-day range
-  const today = new Date();
-  const points = [];
-  const dataMap = {};
-  data.forEach(d => { dataMap[d.date] = d.count; });
-
-  for (let i = 29; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const key = date.toISOString().split('T')[0];
-    points.push({ date: key, count: dataMap[key] || 0 });
-  }
-
-  const svg = d3.select(container)
-    .append('svg')
-    .attr('width', width)
-    .attr('height', height)
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`);
-
-  const x = d3.scaleLinear().domain([0, points.length - 1]).range([0, w]);
-  const y = d3.scaleLinear().domain([0, d3.max(points, d => d.count) || 1]).range([h, 0]);
-
-  const area = d3.area()
-    .x((d, i) => x(i))
-    .y0(h)
-    .y1(d => y(d.count))
-    .curve(d3.curveMonotoneX);
-
-  const line = d3.line()
-    .x((d, i) => x(i))
-    .y(d => y(d.count))
-    .curve(d3.curveMonotoneX);
-
-  // Gradient fill
-  const defs = svg.append('defs');
-  const grad = defs.append('linearGradient')
-    .attr('id', 'sparkGrad')
-    .attr('x1', '0').attr('y1', '0')
-    .attr('x2', '0').attr('y2', '1');
-  grad.append('stop').attr('offset', '0%').attr('stop-color', '#2E7DFF').attr('stop-opacity', 0.4);
-  grad.append('stop').attr('offset', '100%').attr('stop-color', '#2E7DFF').attr('stop-opacity', 0.05);
-
-  svg.append('path')
-    .datum(points)
-    .attr('d', area)
-    .attr('fill', 'url(#sparkGrad)');
-
-  svg.append('path')
-    .datum(points)
-    .attr('d', line)
-    .attr('fill', 'none')
-    .attr('stroke', '#2E7DFF')
-    .attr('stroke-width', 1.5);
-
-  // Dot on latest point
-  const last = points[points.length - 1];
-  if (last.count > 0) {
-    svg.append('circle')
-      .attr('cx', x(points.length - 1))
-      .attr('cy', y(last.count))
-      .attr('r', 3)
-      .attr('fill', '#2E7DFF')
-      .attr('class', 'sparkline-dot');
-  }
-}
-
 // Backward-compat wrapper
 function initDonut(stats) {
   initStatsPanel(stats);
@@ -2378,10 +2263,6 @@ function updateDonut(badge) {
   donutTotal++;
   // Update newest hire to this badge
   _currentNewestHire = { name: badge.name, department: badge.department, createdAt: new Date().toISOString() };
-  // Add to sparkline (today)
-  const todayKey = new Date().toISOString().split('T')[0];
-  const existing = _currentSparkline.find(d => d.date === todayKey);
-  if (existing) { existing.count++; } else { _currentSparkline.push({ date: todayKey, count: 1 }); }
   renderStatsPanel();
 }
 

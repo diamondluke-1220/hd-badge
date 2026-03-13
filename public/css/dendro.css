@@ -1,9 +1,54 @@
 /* ─── Dendrogram (Org Tree) View ────────────────────────── */
 
+/* ─── Hide non-essential chrome in tree view ─────────────── */
+
+body.view-dendro .app-header > h1,
+body.view-dendro .app-header > .app-nav,
+body.view-dendro #sfTicker,
+body.view-dendro .sf-ticker,
+body.view-dendro .stats-panel,
+body.view-dendro .ticker-bar {
+  display: none !important;
+}
+
+body.view-dendro .app-header {
+  padding: 0;
+  border: none;
+  background: #0a0a0a;
+}
+
+body.view-dendro .view-switcher-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: rgba(10, 10, 10, 0.9);
+  border-bottom: 1px solid #222;
+}
+
+body.view-dendro .public-orgchart {
+  background: #0a0a0a;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+body.view-dendro .dendro-container {
+  position: fixed;
+  top: 50px; /* below view switcher bar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: unset;
+  border-radius: 0;
+}
+
+/* ─── Layout ─────────────────────────────────────────────── */
+
 .dendro-container {
   position: relative;
   width: 100%;
-  min-height: 80vh;
   background: radial-gradient(ellipse at 30% 40%, #141420 0%, #0a0a0f 50%, #060608 100%);
   border-radius: 8px;
   overflow: hidden;
