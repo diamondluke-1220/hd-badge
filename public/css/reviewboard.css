@@ -19,14 +19,7 @@
 
 /* ─── Header Row (title + AI indicator) ──────────────── */
 
-.rb-header-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  width: 100%;
-  margin-bottom: 12px;
-  position: relative;
-}
+/* Header row removed — title now inside .rb-board, AI indicator inside .rb-badge-col */
 
 /* ─── Content Row (board + badge panel) ──────────────── */
 
@@ -47,8 +40,8 @@
   text-shadow: 0 0 12px rgba(200, 200, 200, 0.15);
   text-transform: uppercase;
   font-weight: bold;
-  flex: 1;
   text-align: center;
+  margin-bottom: 12px;
 }
 
 /* ─── Board Wrapper ──────────────────────────────────────── */
@@ -126,9 +119,10 @@
   gap: 8px;
   opacity: 0;
   transition: opacity 300ms ease;
-  position: absolute;
-  right: 10%;
   white-space: nowrap;
+  /* Match title height so badge panel top-aligns with board grid */
+  padding-top: 10px;
+  margin-bottom: 12px;
 }
 
 .rb-ai-indicator.active {
@@ -294,10 +288,6 @@ body.view-reviewboard .public-orgchart {
     align-items: center;
     gap: 12px;
     width: 100%;
-  }
-
-  .rb-header-row {
-    margin-bottom: 4px;
   }
 
   .rb-title {

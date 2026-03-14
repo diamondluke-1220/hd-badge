@@ -885,7 +885,7 @@ window.ReviewBoardRenderer = {
     }
   },
 
-  // Color "SKILLS:" label in division color, skills text in white
+  // Color "SKILLS:" label and skills text in white
   _colorSkillsLabel(rowIdx, lineText, color) {
     // Find where "SKILLS:" starts in the centered line
     const idx = lineText.indexOf('SKILLS:');
@@ -900,10 +900,10 @@ window.ReviewBoardRenderer = {
     }
   },
 
-  // Dim review body text for visual hierarchy (rows 4-8)
+  // Dim review body text for visual hierarchy (rows 5-9)
   _dimReviewRows() {
     const dimColor = '#c8baa0';
-    for (let r = 4; r < 9; r++) {
+    for (let r = 5; r < 10; r++) {
       for (let c = 0; c < this.COLS; c++) {
         const cell = this._cells[r][c];
         const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
@@ -1013,17 +1013,19 @@ window.ReviewBoardRenderer = {
     this._setRowText(2, skillsLines[0], 0);
     this._setRowText(3, skillsLines[1], 0);
     // Color the "SKILLS:" label with division color
-    this._colorSkillsLabel(2, skillsLines[0], divColor);
+    this._colorSkillsLabel(2, skillsLines[0], '#ffffff');
     this._colorSkillsOverflow(3, skillsLines[1]);
 
-    // Rows 4-8: pre-formatted review lines (up to 5)
+    // Row 4: blank spacer
+    this._setRowText(4, '', 0);
+    // Rows 5-9: pre-formatted review lines (up to 5)
     const numQuoteLines = Math.min(quote.length, 5);
     for (let i = 0; i < numQuoteLines; i++) {
-      this._setRowText(4 + i, quote[i] || '', 0);
+      this._setRowText(5 + i, quote[i] || '', 0);
     }
     // Clear remaining rows
-    for (let i = numQuoteLines; i < this.ROWS - 4; i++) {
-      this._setRowText(4 + i, '', 0);
+    for (let i = numQuoteLines; i < this.ROWS - 5; i++) {
+      this._setRowText(5 + i, '', 0);
     }
 
     // Dim review body for visual hierarchy
@@ -1075,7 +1077,7 @@ window.ReviewBoardRenderer = {
     const nameStart = this._centerCol(name);
     const titleStart = this._centerCol(title);
 
-    // Row layout: 0=name, 1=title, 2-3=skills, 4-8=review, 9=blank
+    // Row layout: 0=name, 1=title, 2-3=skills, 4=blank, 5-9=review
     const nameText = (' '.repeat(nameStart) + name).padEnd(this.COLS, ' ').substring(0, this.COLS);
     const titleText = (' '.repeat(titleStart) + title).padEnd(this.COLS, ' ').substring(0, this.COLS);
     const skillsLines = this._formatSkillsLines(skills);
@@ -1088,6 +1090,7 @@ window.ReviewBoardRenderer = {
     while (reviewTexts.length < 5) {
       reviewTexts.push(' '.repeat(this.COLS));
     }
+    // Row 4 is blank spacer between skills and review
 
     // ── Phase B: Name + Title sweep left-to-right (rows 0-1) ──
     // Color is set per-cell at animation start so characters flip in already colored
@@ -1106,17 +1109,21 @@ window.ReviewBoardRenderer = {
         if (targetChar === currentChar) {
           // No animation needed — just update color to match new badge
           const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
-          flaps.forEach(el => { el.style.color = inRange ? divColor : ''; });
+          flaps.forEach(el => { el.style.color = inRange ? divColor : '#ffffff'; });
           continue;
         }
         headerPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
-              // Set color before animation so intermediate chars are already colored
               const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
-              flaps.forEach(el => { el.style.color = inRange ? divColor : ''; });
-              this._flashTileColor(this._cells[row][col], divColor);
-              this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(resolve);
+              // Intermediate chars cycle in white; division color applied after landing
+              flaps.forEach(el => { el.style.color = '#ffffff'; });
+              if (inRange) this._flashTileColor(this._cells[row][col], divColor);
+              this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(() => {
+                // Name/title chars get division color, others stay white
+                flaps.forEach(el => { el.style.color = inRange ? divColor : '#ffffff'; });
+                resolve();
+              });
             }, col * headerStagger);
           })
         );
@@ -1125,9 +1132,6 @@ window.ReviewBoardRenderer = {
     await Promise.all(headerPromises);
 
     // ── Phase B2: Skills sweep left-to-right (rows 2-3) ──
-    // Pre-compute which cells get which color
-    const skillsLine0 = skillsLines[0];
-    const skillsLabelIdx = skillsLine0.indexOf('SKILLS:');
     const skillsPromises = [];
     for (let sr = 0; sr < 2; sr++) {
       const rowIdx = 2 + sr;
@@ -1138,8 +1142,7 @@ window.ReviewBoardRenderer = {
         const col = c;
         const row = rowIdx;
         // Determine target color for this cell
-        const isLabel = (sr === 0 && skillsLabelIdx !== -1 && col >= skillsLabelIdx && col < skillsLabelIdx + 7);
-        const cellColor = isLabel ? divColor : (targetChar.trim() ? '#ffffff' : '');
+        const cellColor = targetChar.trim() ? '#ffffff' : '';
         if (targetChar === currentChar) {
           // No animation needed — just update color
           const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
@@ -1150,8 +1153,12 @@ window.ReviewBoardRenderer = {
           new Promise(resolve => {
             setTimeout(() => {
               const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
-              flaps.forEach(el => { el.style.color = cellColor; });
-              this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(resolve);
+              // Cycle in white, apply target color after landing
+              flaps.forEach(el => { el.style.color = '#ffffff'; });
+              this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(() => {
+                flaps.forEach(el => { el.style.color = cellColor; });
+                resolve();
+              });
             }, col * 30);
           })
         );
@@ -1160,7 +1167,7 @@ window.ReviewBoardRenderer = {
     await Promise.all(skillsPromises);
 
     // ── Phase C: Progressive reveal — review rows resolve from blank ──
-    // Clear review rows to blank first
+    // Clear spacer + review rows to blank first
     for (let r = 4; r <= 9; r++) {
       this._setRowText(r, '', 0);
     }
@@ -1174,7 +1181,7 @@ window.ReviewBoardRenderer = {
     // Each row: cells flip from blank → correct char in randomized order
     const rowRevealDelay = 600; // ms between each row starting
     for (let ri = 0; ri < reviewTexts.length; ri++) {
-      const rowIdx = 4 + ri;
+      const rowIdx = 5 + ri;
 
       // Build shuffled cell list for this row (skip spaces at end)
       const rowCells = [];
@@ -1377,6 +1384,7 @@ window.ReviewBoardRenderer = {
     rowTexts.push((' '.repeat(titleStart) + title).padEnd(this.COLS, ' ').substring(0, this.COLS));
     rowTexts.push(skillsLines[0]);
     rowTexts.push(skillsLines[1]);
+    rowTexts.push(' '.repeat(this.COLS)); // Row 4: blank spacer
     const numQuoteLines = Math.min(quote.length, 5);
     for (let i = 0; i < numQuoteLines; i++) {
       rowTexts.push((quote[i] || '').padEnd(this.COLS, ' ').substring(0, this.COLS));
@@ -1437,7 +1445,7 @@ window.ReviewBoardRenderer = {
     this._setBadgePanelGlow(divColor);
 
     // Color skills after color wave clears
-    this._colorSkillsLabel(2, skillsLines[0], divColor);
+    this._colorSkillsLabel(2, skillsLines[0], '#ffffff');
     this._colorSkillsOverflow(3, skillsLines[1]);
 
     // Hide AI indicator after reveal
@@ -1550,27 +1558,6 @@ window.ReviewBoardRenderer = {
     this._stage = document.createElement('div');
     this._stage.className = 'rb-stage';
 
-    // Header row: title (centered) + AI indicator (right-aligned)
-    const headerRow = document.createElement('div');
-    headerRow.className = 'rb-header-row';
-
-    const titleDiv = document.createElement('div');
-    titleDiv.className = 'rb-title';
-    titleDiv.textContent = 'AI PERFORMANCE REVIEW';
-    headerRow.appendChild(titleDiv);
-
-    // AI indicator (right side of header)
-    this._aiIndicator = document.createElement('div');
-    this._aiIndicator.className = 'rb-ai-indicator';
-    this._aiIndicator.innerHTML =
-      '<span class="rb-ai-indicator-dot"></span>' +
-      '<span class="rb-ai-indicator-dot"></span>' +
-      '<span class="rb-ai-indicator-dot"></span>' +
-      '<span class="rb-ai-indicator-label">AI ANALYZING</span>';
-    headerRow.appendChild(this._aiIndicator);
-
-    this._stage.appendChild(headerRow);
-
     // Content row: board + badge panel
     const contentRow = document.createElement('div');
     contentRow.className = 'rb-content-row';
@@ -1579,6 +1566,12 @@ window.ReviewBoardRenderer = {
     const board = document.createElement('div');
     board.className = 'rb-board';
     this._boardEl = board;
+
+    // Title centered above the board
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'rb-title';
+    titleDiv.textContent = 'AI PERFORMANCE REVIEW';
+    board.appendChild(titleDiv);
 
     const grid = this._buildGrid();
     board.appendChild(grid);
@@ -1594,6 +1587,17 @@ window.ReviewBoardRenderer = {
 
     // Badge tile panel
     const badgePanel = this._buildBadgePanel();
+
+    // AI indicator (above badge panel)
+    this._aiIndicator = document.createElement('div');
+    this._aiIndicator.className = 'rb-ai-indicator';
+    this._aiIndicator.innerHTML =
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-dot"></span>' +
+      '<span class="rb-ai-indicator-label">AI ANALYZING</span>';
+    this._badgeCol.insertBefore(this._aiIndicator, this._badgePanel);
+
     contentRow.appendChild(badgePanel);
 
     this._stage.appendChild(contentRow);
