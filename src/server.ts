@@ -272,7 +272,7 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
 }
 
 /** Server-side badge render via Playwright + Sharp corner clipping */
-async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean }): Promise<Buffer> {
+async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean }): Promise<Buffer> {
   const serverPort = Number(process.env.PORT) || 3000;
   const browser = await getBrowser();
   const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
@@ -337,7 +337,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       await page.waitForTimeout(300);
     }
 
-    await page.evaluate(() => {
+    await page.evaluate(({ isPrint }) => {
       document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
         el.remove();
       });
@@ -355,13 +355,25 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
 
       const badgeDiv = document.getElementById('badge');
       if (badgeDiv) {
-        badgeDiv.style.clipPath = 'inset(0 round 75px)';
+        if (!isPrint) {
+          badgeDiv.style.clipPath = 'inset(0 round 75px)';
+        } else {
+          // Print mode: square corners, white background — physical card handles rounding
+          badgeDiv.style.clipPath = 'none';
+          badgeDiv.style.borderRadius = '0';
+        }
       }
-    });
+    }, { isPrint: !!options?.print });
 
     const badgeEl = await page.$('#badge');
     if (!badgeEl) {
       throw new Error('Badge element not found on page.');
+    }
+
+    if (options?.print) {
+      // Print mode: white background, no transparency, no rounded corners
+      const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: false });
+      return await sharp(screenshot).flatten({ background: '#FFFFFF' }).png().toBuffer();
     }
 
     const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: true });
@@ -647,6 +659,24 @@ app.get('/api/badge/:id/image', (c) => {
   const file = Bun.file(imagePath);
   return new Response(file, {
     headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },
+  });
+});
+
+// Print-ready badge PNG — white background, square corners, 600 DPI CR80
+app.get('/api/badge/:id/print', async (c) => {
+  const id = c.req.param('id');
+  const badge = getBadge(id);
+  if (!badge) {
+    return c.json({ error: 'Badge not found.' }, 404);
+  }
+
+  const printBuffer = await renderBadgePlaywright(badge, { print: true });
+  return new Response(printBuffer, {
+    headers: {
+      'Content-Type': 'image/png',
+      'Content-Disposition': `attachment; filename="${id}-print.png"`,
+      'Cache-Control': 'no-cache',
+    },
   });
 });
 
