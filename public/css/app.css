@@ -1295,10 +1295,10 @@ body {
   }
 
   .preview-wrapper {
-    height: 580px;
+    height: 540px;
   }
   .badge-preview-scaled {
-    transform: scale(0.28);
+    transform: scale(0.26);
     margin-left: -638px;
   }
 
@@ -1330,12 +1330,23 @@ body {
     transform: translateY(-2px);
   }
 
+  /* "Click" → "Tap" on touch devices */
+  .edit-hint {
+    font-size: 0;
+  }
+  .edit-hint::after {
+    content: 'TAP ANY ELEMENT ON THE BADGE TO CUSTOMIZE';
+    font-size: 12px;
+  }
+
   .badge-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 10px;
+    padding: 0 4px;
   }
   .badge-grid-card {
     padding: 0;
+    border-radius: 10px;
   }
   .badge-grid-name {
     font-size: 11px;
@@ -1359,7 +1370,7 @@ body {
   }
 
   .public-orgchart {
-    padding-bottom: 40px;
+    padding: 0 24px 40px;
   }
 
   .join-prompt {
@@ -1955,17 +1966,24 @@ body {
   background: rgba(74, 222, 128, 0.1);
 }
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   .view-switcher-bar {
     gap: 4px;
-    padding: 8px 8px;
+    padding: 6px 8px;
   }
   .view-switch-btn {
-    padding: 10px 14px;
-    font-size: 12px;
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+  /* Hide text labels — icon only on mobile */
+  .view-switch-btn .view-switch-label {
+    display: none;
   }
   .view-switch-btn kbd {
     display: none;
+  }
+  .view-switch-icon {
+    font-size: 16px;
   }
   .view-switch-divider {
     height: 16px;

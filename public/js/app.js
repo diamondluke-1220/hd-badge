@@ -1284,21 +1284,21 @@ function buildViewSwitcher() {
   const switcher = document.createElement('div');
   switcher.className = 'view-switcher-bar';
   switcher.innerHTML = `
-    <button class="view-switch-btn active" data-mode="grid">
-      <span class="view-switch-icon">&#9638;</span> Grid <kbd>1</kbd>
+    <button class="view-switch-btn active" data-mode="grid" title="Grid View (1)">
+      <span class="view-switch-icon">&#9638;</span><span class="view-switch-label"> Grid</span> <kbd>1</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="reviewboard">
-      <span class="view-switch-icon">&#9733;</span> AI Review <kbd>2</kbd>
+    <button class="view-switch-btn" data-mode="reviewboard" title="AI Review (2)">
+      <span class="view-switch-icon">&#9733;</span><span class="view-switch-label"> AI Review</span> <kbd>2</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="dendro">
-      <span class="view-switch-icon">&#9776;</span> Tree <kbd>3</kbd>
+    <button class="view-switch-btn" data-mode="dendro" title="Tree View (3)">
+      <span class="view-switch-icon">&#9776;</span><span class="view-switch-label"> Tree</span> <kbd>3</kbd>
     </button>
-    <button class="view-switch-btn" data-mode="arcade">
-      <span class="view-switch-icon">&#127918;</span> Arcade <kbd>4</kbd>
+    <button class="view-switch-btn" data-mode="arcade" title="Arcade View (4)">
+      <span class="view-switch-icon">&#127918;</span><span class="view-switch-label"> Arcade</span> <kbd>4</kbd>
     </button>
     <span class="view-switch-divider"></span>
     <button class="view-switch-btn ${animationsEnabled() ? 'anim-on' : ''}" id="animToggleBtn" title="${animationsEnabled() ? 'Animations On (A)' : 'Animations Off (A)'}">
-      <span class="view-switch-icon">&#10024;</span> FX <kbd>A</kbd>
+      <span class="view-switch-icon">&#10024;</span><span class="view-switch-label"> FX</span> <kbd>A</kbd>
     </button>
   `;
 

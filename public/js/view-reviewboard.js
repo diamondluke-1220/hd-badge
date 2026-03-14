@@ -28,6 +28,7 @@ window.ReviewBoardRenderer = {
   _escHandler: null,
   _autoDismissTimer: null,
   _resizeHandler: null,
+  _boardEl: null,
 
   // ─── Constants ───────────────────────────────────────────
 
@@ -784,36 +785,75 @@ window.ReviewBoardRenderer = {
     const vw = window.innerWidth;
     const vh = window.innerHeight - 50 - 60; // view switcher bar + header row
     const gap = 1;
-    const pad = 40;
+    const isMobile = vw < 768;
+    const pad = isMobile ? 4 : 40;
     const hasBadgePanel = vw >= 1024;
 
-    // Board takes ~72% of width when badge panel is visible
-    const availW = hasBadgePanel ? Math.floor(vw * 0.72) : vw;
-    const maxTileW = Math.floor((availW - pad * 2 - gap * (this.COLS - 1)) / this.COLS);
-    const maxTileH = Math.floor((vh - pad * 2 - gap * (this.ROWS - 1)) / this.ROWS);
-    // Maintain 1:1.82 aspect ratio
-    let tileW = maxTileW;
-    let tileH = Math.round(tileW * 1.82);
-    if (tileH > maxTileH) {
-      tileH = maxTileH;
-      tileW = Math.round(tileH / 1.82);
+    let tileW, tileH, fontSize;
+
+    if (isMobile) {
+      // Mobile: use fixed reference tiles for good text proportions,
+      // then scale the whole board to fit viewport width
+      tileW = 18;
+      tileH = 33;
+      fontSize = 26;
+    } else {
+      // Desktop/tablet: calculate from viewport
+      const availW = hasBadgePanel ? Math.floor(vw * 0.72) : vw;
+      const maxTileW = Math.floor((availW - pad * 2 - gap * (this.COLS - 1)) / this.COLS);
+      const maxTileH = Math.floor((vh - pad * 2 - gap * (this.ROWS - 1)) / this.ROWS);
+      tileW = maxTileW;
+      tileH = Math.round(tileW * 1.82);
+      if (tileH > maxTileH) {
+        tileH = maxTileH;
+        tileW = Math.round(tileH / 1.82);
+      }
+      tileW = Math.max(tileW, 10);
+      tileH = Math.max(tileH, 18);
+      fontSize = Math.max(12, Math.round(tileW * 1.45));
     }
-    // Minimum size
-    tileW = Math.max(tileW, 10);
-    tileH = Math.max(tileH, 18);
-    // Font size ~145% of tile width
-    const fontSize = Math.max(12, Math.round(tileW * 1.45));
-    // Line height matches tile height for vertical centering
+
     this._grid.style.setProperty('--rb-line-h', tileH + 'px');
     this._grid.style.setProperty('--rb-tile-w', tileW + 'px');
     this._grid.style.setProperty('--rb-tile-h', tileH + 'px');
     this._grid.style.setProperty('--rb-font', fontSize + 'px');
 
+    // Scale board to fit viewport if it overflows
+    if (this._boardEl) {
+      const gridPad = 12; // .rb-grid padding (6px each side)
+      const gridWidth = tileW * this.COLS + gap * (this.COLS - 1) + gridPad;
+      const gridHeight = tileH * this.ROWS + gap * (this.ROWS - 1) + gridPad;
+      const availW = vw - pad * 2;
+      if (gridWidth > availW) {
+        const scale = availW / gridWidth;
+        this._boardEl.style.transform = 'scale(' + scale + ')';
+        this._boardEl.style.transformOrigin = 'top center';
+        // Collapse layout height to match scaled visual height (prevents gap)
+        this._boardEl.style.height = Math.ceil(gridHeight * scale) + 'px';
+        this._boardEl.style.overflow = 'visible';
+      } else {
+        this._boardEl.style.transform = '';
+        this._boardEl.style.height = '';
+        this._boardEl.style.overflow = '';
+      }
+    }
+
     // Size badge tiles so panel height matches board height
-    // Square tiles — 12:16 grid ratio (0.75:1) matches headshot aspect (0.749:1)
     if (this._badgeGrid) {
       const boardGridH = this.ROWS * tileH + (this.ROWS - 1);
-      const badgeTileH = Math.max(10, Math.floor(boardGridH / this.BADGE_ROWS));
+      let badgeTileH = Math.max(10, Math.floor(boardGridH / this.BADGE_ROWS));
+      if (isMobile) {
+        // On mobile, size badge to fill remaining space after scaled board
+        const boardScaledH = this._boardEl ? parseInt(this._boardEl.style.height) || 160 : 160;
+        const headerH = 30; // title row
+        const gapH = 12;
+        const remainingH = vh - headerH - boardScaledH - gapH - 16;
+        const badgeTileFromH = Math.floor(Math.max(remainingH, 200) / this.BADGE_ROWS);
+        // Also cap to viewport width
+        const badgeTileFromW = Math.floor((vw - pad * 2 - 12 - (this.BADGE_COLS - 1)) / this.BADGE_COLS);
+        badgeTileH = Math.min(badgeTileFromH, badgeTileFromW);
+        badgeTileH = Math.max(badgeTileH, 14);
+      }
       this._badgeGrid.style.setProperty('--rb-badge-tile-h', badgeTileH + 'px');
     }
   },
@@ -1538,6 +1578,7 @@ window.ReviewBoardRenderer = {
     // Board wrapper
     const board = document.createElement('div');
     board.className = 'rb-board';
+    this._boardEl = board;
 
     const grid = this._buildGrid();
     board.appendChild(grid);
@@ -1617,6 +1658,7 @@ window.ReviewBoardRenderer = {
     this._badgePanel = null;
     this._badgeGrid = null;
     this._badgeCol = null;
+    this._boardEl = null;
     this._aiIndicator = null;
     this._badgeCells = [];
     this._badgeCanvas = null;
