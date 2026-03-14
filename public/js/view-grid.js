@@ -18,7 +18,7 @@ window.GridRenderer = {
       </div>
       <div class="dept-filter-bar" id="deptFilterBar"></div>
       <div class="active-dept-heading" id="activeDeptHeading"></div>
-      <div id="publicBadgeContent"></div>
+      <div id="publicBadgeContent" aria-live="polite" aria-relevant="additions"></div>
       <div id="loadMoreArea"></div>
     `;
 
@@ -231,7 +231,11 @@ window.GridRenderer = {
     if (skeleton) skeleton.remove();
 
     if (data.badges.length === 0 && window._publicOrgPage === 1) {
-      content.innerHTML = '<div class="no-badges-msg">No employees found. The hiring freeze continues.</div>';
+      if (window._publicOrgDept) {
+        content.innerHTML = '<div class="no-badges-msg">No employees in this department. Try another filter.</div>';
+      } else {
+        content.innerHTML = '<div class="no-badges-msg">No employees found. The hiring freeze continues.<br><a href="/" style="color:#5B8DEF;margin-top:8px;display:inline-block;">Be the first employee &rarr;</a></div>';
+      }
       return;
     }
 

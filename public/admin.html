@@ -100,7 +100,7 @@
     }
     .dash-header h1 {
       font-family: 'Barlow', sans-serif;
-      font-size: 16px;
+      font-size: clamp(14px, 3vw, 16px);
       font-weight: 800;
       letter-spacing: 4px;
       text-transform: uppercase;
@@ -352,7 +352,7 @@
     .analytics-header h2 {
       font-family: 'Barlow', sans-serif;
       font-weight: 800;
-      font-size: 13px;
+      font-size: clamp(12px, 2.5vw, 13px);
       letter-spacing: 3px;
       text-transform: uppercase;
       color: #8899AA;
@@ -571,9 +571,16 @@
     @media (max-width: 768px) {
       .stats-bar { flex-direction: column; }
       .stat-card { min-width: auto; }
-      .badge-table { font-size: 12px; }
+      .badge-table { font-size: 14px; }
       .badge-table th, .badge-table td { padding: 8px 6px; }
       .badge-thumb { width: 30px; height: 48px; }
+      /* Prevent iOS auto-zoom on input focus */
+      input, select, textarea { font-size: 16px; }
+      /* Bump small label text for mobile readability */
+      .stat-card .stat-label { font-size: 11px; }
+      .analytics-header h2 { font-size: 16px; }
+      .btn-action { font-size: 13px; padding: 6px 12px; }
+      .filter-input, .filter-select { font-size: 14px; }
     }
   </style>
 </head>
@@ -591,21 +598,21 @@
 </div>
 
 <!-- Dashboard -->
-<div class="dashboard" id="dashboard">
-  <div class="dash-header">
+<main class="dashboard" id="dashboard" role="main">
+  <header class="dash-header" role="banner">
     <div>
       <h1>HR Dashboard</h1>
       <div class="subtitle">Authorized Personnel Only</div>
     </div>
-    <div style="display:flex;gap:8px;">
+    <nav style="display:flex;gap:8px;" role="navigation" aria-label="Dashboard actions">
       <button onclick="toggleAnalytics()">Analytics</button>
       <button onclick="toggleDemo()">Demo Mode</button>
       <button onclick="togglePresentation()">Presentation</button>
       <button onclick="toggleLogs()">System Log</button>
       <button onclick="exportCSV()">Export CSV</button>
       <button onclick="doLogout()">Sign Out</button>
-    </div>
-  </div>
+    </nav>
+  </header>
 
   <div class="stats-bar" id="statsBar"></div>
 
@@ -715,19 +722,19 @@
   </div>
 
   <div class="badge-table-wrap">
-    <table class="badge-table">
+    <table class="badge-table" aria-label="Employee badges">
       <thead>
         <tr>
-          <th>Badge</th>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Department</th>
-          <th>Title</th>
-          <th>Status</th>
-          <th>Paid</th>
-          <th>Printed</th>
-          <th>Created</th>
-          <th>Actions</th>
+          <th scope="col">Badge</th>
+          <th scope="col">ID</th>
+          <th scope="col">Name</th>
+          <th scope="col">Department</th>
+          <th scope="col">Title</th>
+          <th scope="col">Status</th>
+          <th scope="col">Paid</th>
+          <th scope="col">Printed</th>
+          <th scope="col">Created</th>
+          <th scope="col">Actions</th>
         </tr>
       </thead>
       <tbody id="badgeTableBody"></tbody>
@@ -735,10 +742,10 @@
   </div>
 
   <div class="pagination" id="pagination"></div>
-</div>
+</main>
 
 <!-- Crop Modal -->
-<div class="admin-crop-modal" id="adminCropModal">
+<div class="admin-crop-modal" id="adminCropModal" role="dialog" aria-modal="true" aria-label="Crop employee photo">
   <div class="admin-crop-container">
     <img id="adminCropImage" alt="Crop photo">
   </div>
@@ -982,11 +989,24 @@ function uploadPhoto(id) {
   input.click();
 }
 
+let _adminCropEscHandler = null;
+
 function openAdminCropModal(imgSrc) {
   const modal = document.getElementById('adminCropModal');
   const img = document.getElementById('adminCropImage');
   img.src = imgSrc;
   modal.classList.add('active');
+
+  // Escape key closes crop modal
+  if (_adminCropEscHandler) document.removeEventListener('keydown', _adminCropEscHandler);
+  _adminCropEscHandler = (e) => { if (e.key === 'Escape') cancelAdminCrop(); };
+  document.addEventListener('keydown', _adminCropEscHandler);
+
+  // Focus the confirm button
+  requestAnimationFrame(() => {
+    const confirmBtn = modal.querySelector('.btn-crop-confirm');
+    if (confirmBtn) confirmBtn.focus();
+  });
 
   if (adminCropper) adminCropper.destroy();
 
@@ -1008,6 +1028,7 @@ function openAdminCropModal(imgSrc) {
 function cancelAdminCrop() {
   document.getElementById('adminCropModal').classList.remove('active');
   if (adminCropper) { adminCropper.destroy(); adminCropper = null; }
+  if (_adminCropEscHandler) { document.removeEventListener('keydown', _adminCropEscHandler); _adminCropEscHandler = null; }
   adminCropTargetId = null;
 }
 

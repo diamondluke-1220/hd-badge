@@ -217,6 +217,9 @@ window.ArcadeRenderer = {
     slot.className = 'arcade-slot';
     slot.dataset.employeeId = badge.employeeId;
     slot.dataset.division = div;
+    slot.setAttribute('role', 'button');
+    slot.setAttribute('tabindex', '0');
+    slot.setAttribute('aria-label', `${badge.name}, ${badge.title}${badge.isBandMember ? ' (Boss)' : ''}`);
     if (badge.isBandMember) slot.classList.add('boss');
 
     const color = this._DIV_COLORS[div] || '#ffd700';
@@ -241,20 +244,43 @@ window.ArcadeRenderer = {
     });
 
     // Click → lock/unlock selection
-    slot.addEventListener('click', () => {
+    const selectSlot = () => {
       if (this._locked && this._selectedBadge && this._selectedBadge.employeeId === badge.employeeId) {
-        // Unlock
         this._locked = false;
         slot.classList.remove('selected');
         return;
       }
-      // Lock on this badge
       this._container.querySelectorAll('.arcade-slot.selected').forEach(s => s.classList.remove('selected'));
       slot.classList.add('selected');
       this._locked = true;
       this._selectedBadge = badge;
       this._updatePreview(badge);
       showBadgeDetail(badge.employeeId, badge.name);
+    };
+    slot.addEventListener('click', selectSlot);
+
+    // Keyboard: Enter/Space to select, arrow keys to navigate
+    slot.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        selectSlot();
+        return;
+      }
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+      e.preventDefault();
+      const slots = [...this._container.querySelectorAll('.arcade-slot:not([style*="display: none"])')];
+      const idx = slots.indexOf(slot);
+      if (idx === -1) return;
+      let next = idx;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = Math.min(idx + 1, slots.length - 1);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = Math.max(idx - 1, 0);
+      slots[next].focus();
+      if (!this._locked) {
+        this._highlightSlot(slots[next]);
+        // Find the badge for the focused slot
+        const focusedBadge = this._allBadges.find(b => b.employeeId === slots[next].dataset.employeeId);
+        if (focusedBadge) this._updatePreview(focusedBadge);
+      }
     });
 
     return slot;

@@ -602,6 +602,8 @@ window.ReviewBoardRenderer = {
 
     this._badgePanel = document.createElement('div');
     this._badgePanel.className = 'rb-badge-panel';
+    this._badgePanel.setAttribute('role', 'img');
+    this._badgePanel.setAttribute('aria-label', 'Employee headshot mosaic');
 
     this._badgeGrid = document.createElement('div');
     this._badgeGrid.className = 'rb-badge-grid';
@@ -1032,6 +1034,12 @@ window.ReviewBoardRenderer = {
     this._dimReviewRows();
 
     this._currentBadge = badge;
+    if (this._badgePanel) this._badgePanel.setAttribute('aria-label', `Headshot mosaic of ${badge.name}`);
+
+    // Update screen reader text with readable review content
+    if (this._srText) {
+      this._srText.textContent = `Performance review for ${name}, ${title}. Skills: ${skills.join(', ')}. Review: ${quote.join(' ')}`;
+    }
 
     // Load badge tile colors then reveal
     const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
@@ -1554,6 +1562,12 @@ window.ReviewBoardRenderer = {
     this._container = container;
     this._stats = stats;
 
+    // Screen reader text for split-flap board content
+    this._srText = document.createElement('div');
+    this._srText.className = 'sr-only';
+    this._srText.setAttribute('aria-live', 'polite');
+    this._srText.setAttribute('role', 'status');
+
     // Build stage (column: header row + content row)
     this._stage = document.createElement('div');
     this._stage.className = 'rb-stage';
@@ -1565,6 +1579,8 @@ window.ReviewBoardRenderer = {
     // Board wrapper
     const board = document.createElement('div');
     board.className = 'rb-board';
+    board.setAttribute('aria-live', 'polite');
+    board.setAttribute('aria-label', 'AI Performance Review Board');
     this._boardEl = board;
 
     // Title centered above the board
@@ -1601,6 +1617,7 @@ window.ReviewBoardRenderer = {
     contentRow.appendChild(badgePanel);
 
     this._stage.appendChild(contentRow);
+    this._stage.appendChild(this._srText);
 
     container.appendChild(this._stage);
 
@@ -1664,6 +1681,7 @@ window.ReviewBoardRenderer = {
     this._badgeCol = null;
     this._boardEl = null;
     this._aiIndicator = null;
+    this._srText = null;
     this._badgeCells = [];
     this._badgeCanvas = null;
     this._cells = [];

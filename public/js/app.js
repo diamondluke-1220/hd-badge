@@ -1,5 +1,50 @@
 // Help Desk Badge Generator — Canva-Style Click-to-Edit
 
+// ─── Focus Trap Utility ──────────────────────────────────
+// Traps Tab focus within a container and closes on Escape.
+// Returns a cleanup function to remove the trap.
+function trapFocus(container, onClose) {
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function handler(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (onClose) onClose();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+
+    const focusable = [...container.querySelectorAll(FOCUSABLE)];
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  document.addEventListener('keydown', handler);
+  // Focus first focusable element
+  requestAnimationFrame(() => {
+    const first = container.querySelector(FOCUSABLE);
+    if (first) first.focus();
+  });
+
+  return () => document.removeEventListener('keydown', handler);
+}
+
+let _activeFocusTrap = null;
+
 let state = {
   name: 'YOUR NAME',
   photoUrl: null,
@@ -80,6 +125,8 @@ function showPopover(targetEl, fieldName) {
 
   const popover = document.createElement('div');
   popover.className = 'popover';
+  popover.setAttribute('role', 'dialog');
+  popover.setAttribute('aria-modal', 'true');
   popover.innerHTML = buildPopoverContent(fieldName);
   container.appendChild(popover);
 
@@ -95,6 +142,10 @@ function showPopover(targetEl, fieldName) {
 
   attachPopoverEvents(fieldName, popover);
 
+  // Focus trap for popover (Escape closes, Tab cycles within)
+  if (_activeFocusTrap) _activeFocusTrap();
+  _activeFocusTrap = trapFocus(popover, hidePopover);
+
   // Close button
   const closeBtn = popover.querySelector('.popover-close');
   if (closeBtn) closeBtn.addEventListener('click', hidePopover);
@@ -105,6 +156,7 @@ function showPopover(targetEl, fieldName) {
 }
 
 function hidePopover() {
+  if (_activeFocusTrap) { _activeFocusTrap(); _activeFocusTrap = null; }
   const container = document.getElementById('popoverContainer');
   const popover = container.querySelector('.popover');
   if (popover) {
@@ -537,6 +589,13 @@ function openCropModal(imgSrc) {
   const img = document.getElementById('cropImage');
   img.src = imgSrc;
   modal.classList.add('active');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', 'Crop photo');
+
+  // Trap focus inside crop modal
+  if (_activeFocusTrap) _activeFocusTrap();
+  _activeFocusTrap = trapFocus(modal, cancelCrop);
 
   if (cropper) cropper.destroy();
 
@@ -558,6 +617,7 @@ function openCropModal(imgSrc) {
 function cancelCrop() {
   document.getElementById('cropModal').classList.remove('active');
   if (cropper) { cropper.destroy(); cropper = null; }
+  if (_activeFocusTrap) { _activeFocusTrap(); _activeFocusTrap = null; }
 }
 
 function applyCrop() {

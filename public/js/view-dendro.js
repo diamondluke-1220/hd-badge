@@ -79,6 +79,12 @@ window.DendroRenderer = {
     }
     initDonut(stats);
 
+    // Empty state — no badges yet
+    if (allBadges.length === 0) {
+      container.innerHTML = '<div class="dendro-fallback">No employees on the org chart yet.<br><a href="/" style="color:#5B8DEF;margin-top:8px;display:inline-block;">Be the first employee &rarr;</a></div>';
+      return;
+    }
+
     // Build tree hierarchy and render
     this._buildTree(allBadges);
     this._render();
@@ -372,7 +378,9 @@ window.DendroRenderer = {
     this._svg = d3.select(wrapper)
       .append('svg')
       .attr('width', this._width)
-      .attr('height', this._height);
+      .attr('height', this._height)
+      .attr('role', 'img')
+      .attr('aria-label', 'Help Desk organizational tree');
 
     // Glow filter
     this._defs = this._svg.append('defs');
@@ -551,6 +559,13 @@ window.DendroRenderer = {
       .data(root.descendants())
       .join('g')
       .attr('class', d => `dendro-node dendro-node-${d.data._type}`)
+      .attr('role', d => d.data._type === 'employee' ? 'img' : null)
+      .attr('aria-label', d => {
+        if (d.data._type === 'employee' && d.data._badge) return `${d.data._badge.name}, ${d.data._badge.title}`;
+        if (d.data._type === 'department') return `${d.data.name} department`;
+        if (d.data._type === 'division') return `${d.data.name} division`;
+        return null;
+      })
       .attr('data-emp-id', d => d.data._badge ? d.data._badge.employeeId : null)
       .attr('data-dept-key', d => d.data._type === 'department' ? this._deptKey(d.data._divTheme, d.data._deptName) : null)
       .attr('transform', d => `translate(${d.y},${d.x})`);
