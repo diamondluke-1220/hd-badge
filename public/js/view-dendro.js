@@ -23,6 +23,10 @@ window.DendroRenderer = {
   _debounceTimer: null,       // debounce timer for batch SSE renders
   _DEBOUNCE_MS: 2000,         // batch window for SSE re-renders
   _OTHER_THRESHOLD: 2,        // custom depts with ≤ this many employees → "OTHER" bucket
+  _packetTimer: null,          // interval for spawning packet animations
+  _cliTimer: null,             // interval for spawning CLI popup windows
+  _isUserInteracting: false,   // tracks if user is actively panning/zooming
+  _interactionTimeout: null,   // debounce for interaction end detection
 
   // Division accent colors — from shared.js DIVISION_ACCENT_COLORS
 
@@ -178,6 +182,9 @@ window.DendroRenderer = {
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._debounceTimer) { clearTimeout(this._debounceTimer); this._debounceTimer = null; }
+    if (this._packetTimer) { clearInterval(this._packetTimer); this._packetTimer = null; }
+    if (this._cliTimer) { clearInterval(this._cliTimer); this._cliTimer = null; }
+    if (this._interactionTimeout) { clearTimeout(this._interactionTimeout); this._interactionTimeout = null; }
     if (this._container) { this._container.innerHTML = ''; }
     this._container = null;
     this._stats = null;
@@ -381,6 +388,13 @@ window.DendroRenderer = {
       .on('zoom', (event) => {
         this._g.attr('transform', event.transform);
         if (this._animLayer) this._animLayer.attr('transform', event.transform);
+
+        // Pause packet animations during interaction
+        this._isUserInteracting = true;
+        clearTimeout(this._interactionTimeout);
+        this._interactionTimeout = setTimeout(() => {
+          this._isUserInteracting = false;
+        }, 500);
       });
     this._svg.call(this._zoom);
 
@@ -391,6 +405,10 @@ window.DendroRenderer = {
 
     // Auto-fit after initial render
     this._autoFit(wrapper);
+
+    // Start idle animations
+    this._startPacketAnimation();
+    this._startCLIPopups();
 
     // Resize
     this._resizeObserver = new ResizeObserver(entries => {
@@ -531,19 +549,65 @@ window.DendroRenderer = {
       .attr('data-dept-key', d => d.data._type === 'department' ? this._deptKey(d.data._divTheme, d.data._deptName) : null)
       .attr('transform', d => `translate(${d.y},${d.x})`);
 
-    // ─── Root node ───
-    nodes.filter(d => d.data._type === 'root')
-      .append('circle')
-      .attr('r', 24)
+    // ─── Root node — Router/Switch icon ───
+    const rootNodes = nodes.filter(d => d.data._type === 'root');
+
+    // Router body
+    rootNodes.append('rect')
+      .attr('x', -28)
+      .attr('y', -14)
+      .attr('width', 56)
+      .attr('height', 28)
+      .attr('rx', 4)
+      .attr('ry', 4)
       .attr('fill', '#0a0a0f')
       .attr('stroke', '#D4A843')
-      .attr('stroke-width', 3)
+      .attr('stroke-width', 2.5)
       .attr('filter', 'url(#dendro-glow)');
 
-    nodes.filter(d => d.data._type === 'root')
-      .append('text')
+    // Port indicators (4 ethernet ports across front)
+    [-18, -6, 6, 18].forEach(px => {
+      rootNodes.append('rect')
+        .attr('x', px - 3)
+        .attr('y', -4)
+        .attr('width', 6)
+        .attr('height', 8)
+        .attr('rx', 1)
+        .attr('fill', 'none')
+        .attr('stroke', '#D4A843')
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.7);
+    });
+
+    // Status LEDs (2 small dots on top)
+    rootNodes.append('circle')
+      .attr('cx', -10).attr('cy', -8)
+      .attr('r', 2)
+      .attr('fill', '#00ff41')
+      .attr('class', 'dendro-router-led');
+    rootNodes.append('circle')
+      .attr('cx', -4).attr('cy', -8)
+      .attr('r', 2)
+      .attr('fill', '#D4A843')
+      .attr('class', 'dendro-router-led');
+
+    // Antenna nubs (top edges)
+    rootNodes.append('line')
+      .attr('x1', -22).attr('y1', -14)
+      .attr('x2', -22).attr('y2', -20)
+      .attr('stroke', '#D4A843')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-linecap', 'round');
+    rootNodes.append('line')
+      .attr('x1', 22).attr('y1', -14)
+      .attr('x2', 22).attr('y2', -20)
+      .attr('stroke', '#D4A843')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-linecap', 'round');
+
+    rootNodes.append('text')
       .attr('class', 'dendro-label dendro-label-root')
-      .attr('dy', -28)
+      .attr('dy', -26)
       .text(d => d.data.name);
 
     // ─── Division nodes ───
@@ -751,5 +815,159 @@ window.DendroRenderer = {
       this._zoom.transform,
       d3.zoomIdentity.translate(translateX, translateY).scale(scale)
     );
+  },
+
+  // ─── Packet Animation — dots traveling along links ──────
+  _startPacketAnimation() {
+    if (this._packetTimer) clearInterval(this._packetTimer);
+
+    const spawnPacket = () => {
+      if (this._isUserInteracting || !this._animLayer) return;
+
+      // Pick a random visible link
+      const links = this._g.selectAll('path.dendro-link').nodes();
+      if (links.length === 0) return;
+
+      // Limit concurrent packets
+      const existing = this._animLayer.selectAll('.dendro-packet').nodes();
+      if (existing.length >= 6) return;
+
+      const link = links[Math.floor(Math.random() * links.length)];
+      const color = link.getAttribute('stroke') || '#D4A843';
+      const pathData = link.getAttribute('d');
+      if (!pathData) return;
+
+      // Create packet dot
+      const packet = this._animLayer.append('circle')
+        .attr('class', 'dendro-packet')
+        .attr('r', 3)
+        .attr('fill', color)
+        .attr('filter', 'url(#dendro-glow)')
+        .attr('opacity', 0.8);
+
+      // Animate along path using SVG animateMotion
+      const pathLen = link.getTotalLength();
+      const duration = 1500 + Math.random() * 1500; // 1.5-3s
+      const startTime = performance.now();
+
+      const animate = (now) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        if (progress >= 1) {
+          packet.remove();
+          return;
+        }
+
+        const point = link.getPointAtLength(progress * pathLen);
+        packet.attr('cx', point.x).attr('cy', point.y);
+        packet.attr('opacity', progress < 0.1 ? progress * 8 : progress > 0.9 ? (1 - progress) * 8 : 0.8);
+        requestAnimationFrame(animate);
+      };
+
+      requestAnimationFrame(animate);
+    };
+
+    // Spawn a packet every 800-1200ms
+    this._packetTimer = setInterval(spawnPacket, 900);
+    // Spawn one immediately
+    spawnPacket();
+  },
+
+  // ─── CLI Popup Windows — network log messages on nodes ──
+  _CLI_MESSAGES: [
+    'arp who-has 10.0.1.1 tell 10.0.1.254',
+    'arp reply 10.0.1.1 is-at aa:bb:cc:dd:ee:ff',
+    '%LINK-3-UPDOWN: Interface Gi0/1, changed state to up',
+    '%LINEPROTO-5-UPDOWN: Line protocol on Gi0/2, changed state to up',
+    '%SYS-5-CONFIG_I: Configured from console',
+    'Neighbor 10.0.0.2 Up on GigabitEthernet0/1',
+    '%OSPF-5-ADJCHG: Nbr 10.0.0.1 on Gi0/1: Full',
+    'show mac address-table | inc 0050.56b3',
+    '%CDP-4-DUPLEX_MISMATCH: duplex mismatch Gi0/3',
+    'ping 10.0.1.1 !!!!! Success rate is 100 percent',
+    '%DHCPD: assigned 10.0.1.42 to 00:50:56:b3:01:01',
+    'traceroute 10.0.2.1\n 1 10.0.1.1 1ms\n 2 10.0.2.1 4ms',
+    'show int status | inc connected',
+    '%STORM_CONTROL-3: rising threshold on Gi0/4',
+    '%SPANNING-TREE: Port Gi0/5 -> forwarding',
+  ],
+
+  _startCLIPopups() {
+    if (this._cliTimer) clearInterval(this._cliTimer);
+
+    const spawnPopup = () => {
+      if (this._isUserInteracting || !this._svg) return;
+
+      // Pick a random node (division or department — not employees to avoid clutter)
+      const nodeEls = this._g.selectAll('g.dendro-node-division, g.dendro-node-department').nodes();
+      if (nodeEls.length === 0) return;
+
+      // Limit concurrent popups
+      const container = this._container.querySelector('.dendro-container');
+      if (!container) return;
+      const existingPopups = container.querySelectorAll('.dendro-cli-popup');
+      if (existingPopups.length >= 2) return;
+
+      const nodeEl = nodeEls[Math.floor(Math.random() * nodeEls.length)];
+      const transform = nodeEl.getAttribute('transform');
+      if (!transform) return;
+
+      // Parse translate(x, y) from transform
+      const match = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+      if (!match) return;
+
+      const nodeX = parseFloat(match[1]);
+      const nodeY = parseFloat(match[2]);
+
+      // Get current zoom transform to position the popup correctly
+      const currentTransform = d3.zoomTransform(this._svg.node());
+      const screenX = currentTransform.applyX(nodeX);
+      const screenY = currentTransform.applyY(nodeY);
+
+      // Pick random CLI message
+      const msg = this._CLI_MESSAGES[Math.floor(Math.random() * this._CLI_MESSAGES.length)];
+
+      // Create popup HTML element
+      const popup = document.createElement('div');
+      popup.className = 'dendro-cli-popup';
+      popup.style.left = screenX + 'px';
+      popup.style.top = (screenY - 40) + 'px';
+
+      // Build CLI window content
+      popup.innerHTML = `<div class="dendro-cli-header"><span class="dendro-cli-dot red"></span><span class="dendro-cli-dot yellow"></span><span class="dendro-cli-dot green"></span><span class="dendro-cli-title">switch#</span></div><div class="dendro-cli-body"></div>`;
+      container.appendChild(popup);
+
+      // Typewriter effect for the CLI message
+      const body = popup.querySelector('.dendro-cli-body');
+      let charIdx = 0;
+      const typeInterval = setInterval(() => {
+        if (charIdx < msg.length) {
+          if (msg[charIdx] === '\n') {
+            body.appendChild(document.createElement('br'));
+          } else {
+            body.appendChild(document.createTextNode(msg[charIdx]));
+          }
+          charIdx++;
+        } else {
+          clearInterval(typeInterval);
+        }
+      }, 30);
+
+      // Auto-dismiss after 3-4 seconds
+      const dismissDelay = 3000 + Math.random() * 1000;
+      setTimeout(() => {
+        popup.classList.add('dendro-cli-fade');
+        setTimeout(() => {
+          clearInterval(typeInterval);
+          popup.remove();
+        }, 400);
+      }, dismissDelay);
+    };
+
+    // Spawn a popup every 4-6 seconds
+    this._cliTimer = setInterval(spawnPopup, 4500);
+    // First one after a short delay
+    setTimeout(spawnPopup, 2000);
   },
 };

@@ -95,6 +95,27 @@ window.ArcadeRenderer = {
   // Stage backgrounds for VS overlay only
   _BACKGROUNDS: ['server-room', 'break-room', 'network-closet', 'front-entrance', 'meeting-room', 'cubicle-farm'],
 
+  // Creature/boss → preferred background mapping
+  _CREATURE_BACKGROUNDS: {
+    'The Dirty Microwave': 'break-room',
+    'The Network Wizard': 'network-closet',
+    'The Phantom Printer': 'cubicle-farm',
+    'Watercooler Will': 'break-room',
+    'HR Nancy': 'meeting-room',
+    'The MFA Guardian': 'server-room',
+    'The Consultant': 'meeting-room',
+    'THE INTERN': 'cubicle-farm',
+  },
+
+  // Boss band member → preferred background mapping
+  _BOSS_BACKGROUNDS: {
+    'HD-00001': 'server-room',      // Luke — server room
+    'HD-00002': 'meeting-room',     // Drew — meeting room
+    'HD-00003': 'cubicle-farm',     // Henry — cubicle farm
+    'HD-00004': 'network-closet',   // Todd — network closet
+    'HD-00005': 'server-room',      // Adam — server room
+  },
+
   async init(container, stats) {
     this._container = container;
     this._stats = stats;
@@ -450,20 +471,20 @@ window.ArcadeRenderer = {
 
     this._setAnnouncer('SELECTING FIGHTER...');
 
-    // Build deceleration schedule: ~6.8s total
+    // Build deceleration schedule: ~4.5s total (snappier feel)
     const steps = [];
     let t = 0;
 
-    // Phase 1: fast cycling (100ms intervals, 10 steps = 1s)
-    for (let i = 0; i < 10; i++) { steps.push(t); t += 100; }
-    // Phase 2: medium (180ms intervals, 8 steps = 1.44s)
-    for (let i = 0; i < 8; i++) { steps.push(t); t += 180; }
-    // Phase 3: slowing (300ms intervals, 6 steps = 1.8s)
-    for (let i = 0; i < 6; i++) { steps.push(t); t += 300; }
-    // Phase 4: crawling (500ms intervals, 4 steps = 2s)
-    for (let i = 0; i < 4; i++) { steps.push(t); t += 500; }
+    // Phase 1: fast cycling (70ms intervals, 8 steps = 0.56s)
+    for (let i = 0; i < 8; i++) { steps.push(t); t += 70; }
+    // Phase 2: medium (140ms intervals, 6 steps = 0.84s)
+    for (let i = 0; i < 6; i++) { steps.push(t); t += 140; }
+    // Phase 3: slowing (250ms intervals, 5 steps = 1.25s)
+    for (let i = 0; i < 5; i++) { steps.push(t); t += 250; }
+    // Phase 4: crawling (400ms intervals, 3 steps = 1.2s)
+    for (let i = 0; i < 3; i++) { steps.push(t); t += 400; }
     // Final land
-    const landTime = t + 600;
+    const landTime = t + 400;
 
     const targetSlot = this._container.querySelector(`[data-employee-id="${targetBadge.employeeId}"]`);
     const totalSteps = steps.length;
@@ -637,6 +658,7 @@ window.ArcadeRenderer = {
       return {
         type: 'boss',
         name: boss.name,
+        _bossId: boss.employeeId,
         photoUrl: snesPortrait || fallbackUrl,
         fallbackPhotoUrl: snesPortrait ? fallbackUrl : null,
         className: boss.title || 'BOSS',
@@ -675,17 +697,39 @@ window.ArcadeRenderer = {
     return Math.random() < 0.5 ? 'employee' : 'opponent';
   },
 
+  // ─── Beat Sequence Helper ──────────────────────────────────
+  // Schedules timed callbacks and auto-tracks timeout IDs for cleanup.
+  // Returns a `beat(delay, fn)` function scoped to this renderer's _timeouts.
+
+  _createBeat() {
+    return (delay, fn) => {
+      const tid = setTimeout(fn, delay);
+      this._timeouts.push(tid);
+      return tid;
+    };
+  },
+
   // ─── VS Screen — Full Cinematic Sequence (~25s) ────────────
 
   _animateVS(badge, div, isNewHire) {
     return new Promise(resolve => {
+      const beat = this._createBeat();
       const opponent = this._pickOpponent();
       const winner = this._determineWinner(opponent);
 
       const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#888' : '#D4A843';
-      const bgName = this._BACKGROUNDS[this._bgIndex];
-      this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
+
+      // Pick background: use opponent-specific mapping if available, else cycle
+      let bgName;
+      if (opponent.type === 'boss' && opponent._bossId && this._BOSS_BACKGROUNDS[opponent._bossId]) {
+        bgName = this._BOSS_BACKGROUNDS[opponent._bossId];
+      } else if (this._CREATURE_BACKGROUNDS[opponent.name]) {
+        bgName = this._CREATURE_BACKGROUNDS[opponent.name];
+      } else {
+        bgName = this._BACKGROUNDS[this._bgIndex];
+        this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
+      }
 
       // Employee portrait src
       const empSrc = `/api/badge/${esc(badge.employeeId)}/headshot`;
@@ -773,86 +817,75 @@ window.ArcadeRenderer = {
 
       // ═══════════════════════════════════════════════════════════
       // TIMELINE — ~25s total
-      //   0.0s  Beat 1:  BG reveal (bright)
-      //   1.5s  Beat 1b: BG darkens
-      //   3.0s  Beat 2:  Employee slides in
-      //   5.0s  Beat 3:  Slash + VS slam
-      //   7.0s  Beat 4:  Opponent slides in
-      //   8.0s  Beat 4b: VS text fades
-      //   9.0s  Beat 5:  Quote typewriter
-      //  12.0s  Beat 6:  FIGHT!! flash
-      //  12.5s  Beat 7:  Fight sequence (~7.5s)
-      //  20.5s  Beat 8:  Winner reveal
-      //  23.5s  Dissolve
+      //    0ms  BG reveal (bright)
+      //  1500   BG darkens
+      //  3000   Employee slides in from left
+      //  5000   Slash wipe + VS text slam
+      //  7000   Opponent slides in from right
+      //  8000   VS text + divider line fade out
+      //  9000   Typewriter quote bubble
+      // 12000   FIGHT!! flash
+      // 12500   Fight sequence (~7.5s)
+      // 20500   Winner reveal
+      // 23500   Dissolve
       // ═══════════════════════════════════════════════════════════
 
-      // ─── Beat 1 (0s): Background fades in BRIGHT ──────────────
       requestAnimationFrame(() => {
         overlay.classList.add('bg-reveal');
         setVSAnnouncer('A CHALLENGER APPROACHES...');
       });
 
-      // ─── Beat 1b (1.5s): Background darkens ──────────────────
-      const t0 = setTimeout(() => {
+      beat(1500, () => {
         overlay.classList.add('bg-darken');
-      }, 1500);
-      this._timeouts.push(t0);
+      });
 
-      // ─── Beat 2 (3.0s): Employee slides in from left ─────────
-      const t1 = setTimeout(() => {
+      beat(3000, () => {
         overlay.classList.add('left-enter');
         setVSAnnouncer(isNewHire
           ? `NEW HIRE ${badge.name.toUpperCase()} REPORTS FOR DUTY!`
           : `${badge.name.toUpperCase()} ENTERS THE RING`);
-
-        // Fireworks burst for new hires after portrait lands
         if (isNewHire) {
-          const fwTid = setTimeout(() => {
+          beat(3900, () => {
             this._spawnFireworks(overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap'));
-          }, 900);
-          this._timeouts.push(fwTid);
+          });
         }
-      }, 3000);
-      this._timeouts.push(t1);
+      });
 
-      // ─── Beat 3 (5.0s): Slash wipe + VS text slam ────────────
-      const t2 = setTimeout(() => {
+      beat(5000, () => {
         overlay.classList.add('slash-fire');
         const vsText = overlay.querySelector('.arcade-vs-text');
         if (vsText) vsText.classList.add('slam');
-      }, 5000);
-      this._timeouts.push(t2);
+      });
 
-      // ─── Beat 4 (7.0s): Opponent slides in from right ────────
-      const t3 = setTimeout(() => {
+      beat(7000, () => {
         overlay.classList.add('right-enter');
         setVSAnnouncer(`${opponent.name.toUpperCase()} APPEARS!`);
-      }, 7000);
-      this._timeouts.push(t3);
+      });
 
-      // ─── Beat 4b (8.0s): VS text fades out ───────────────────
-      const tVSHide = setTimeout(() => {
+      beat(8000, () => {
         const vsText = overlay.querySelector('.arcade-vs-text');
         if (vsText) {
           vsText.style.animation = 'none';
           vsText.style.transition = 'opacity 0.4s ease';
           vsText.style.opacity = '0';
         }
-      }, 8000);
-      this._timeouts.push(tVSHide);
+        const slash = overlay.querySelector('.arcade-vs-slash');
+        if (slash) {
+          slash.style.animation = 'none';
+          slash.style.transition = 'opacity 0.4s ease';
+          slash.style.opacity = '0';
+        }
+      });
 
-      // ─── Beat 5 (9.0s): Typewriter quote bubble ──────────────
-      const t5 = setTimeout(() => {
+      beat(9000, () => {
         const bubble = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubble && quote) {
           bubble.classList.add('visible');
           this._typewriterEffect(bubble, `"${quote}"`, 55);
         }
-      }, 9000);
-      this._timeouts.push(t5);
+      });
 
-      // ─── Beat 6 (12.0s): FIGHT!! flash ───────────────────────
-      const tFight = setTimeout(() => {
+      beat(12000, () => {
         const fightEl = document.createElement('div');
         fightEl.className = 'arcade-vs-fight-flash';
         fightEl.textContent = 'FIGHT!!';
@@ -860,26 +893,19 @@ window.ArcadeRenderer = {
         fightEl.getBoundingClientRect();
         fightEl.classList.add('active');
         setVSAnnouncer('FIGHT!');
-        const fightRemove = setTimeout(() => fightEl.remove(), 1000);
-        this._timeouts.push(fightRemove);
-      }, 12000);
-      this._timeouts.push(tFight);
+        beat(13000, () => fightEl.remove());
+      });
 
-      // ─── Beat 7 (12.5s): Fight — HP bars + extended combat ───
-      const t6 = setTimeout(() => {
-        // Fade out quote bubble before fight
+      beat(12500, () => {
         const bubble = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubble) {
           bubble.style.transition = 'opacity 0.3s ease';
           bubble.style.opacity = '0';
         }
         this._animateFight(overlay, winner, badge, opponent, employeeColor, opponentColor, setVSAnnouncer);
-      }, 12500);
-      this._timeouts.push(t6);
+      });
 
-      // ─── Beat 8 (20.5s): Winner reveal ────────────────────────
-      const t7 = setTimeout(() => {
-        // Ensure quote bubble is gone
+      beat(20500, () => {
         const bubbleCleanup = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubbleCleanup) bubbleCleanup.style.display = 'none';
 
@@ -906,23 +932,18 @@ window.ArcadeRenderer = {
         setVSAnnouncer(winner === 'employee'
           ? `${badge.name.toUpperCase()} WINS!`
           : `${opponent.name.toUpperCase()} WINS!`);
-      }, 20500);
-      this._timeouts.push(t7);
+      });
 
-      // ─── Dissolve out at 23.5s ────────────────────────────────
-      const t8 = setTimeout(() => {
+      beat(23500, () => {
         overlay.classList.add('dissolve');
-        const t9 = setTimeout(() => {
+        beat(24100, () => {
           overlay.remove();
-          const t10 = setTimeout(() => {
+          beat(26100, () => {
             this._container.querySelectorAll('.arcade-slot.winner-glow').forEach(s => s.classList.remove('winner-glow'));
-          }, 2000);
-          this._timeouts.push(t10);
+          });
           resolve();
-        }, 600);
-        this._timeouts.push(t9);
-      }, 23500);
-      this._timeouts.push(t8);
+        });
+      });
     });
   },
 
@@ -1061,22 +1082,35 @@ window.ArcadeRenderer = {
       fill.style.boxShadow = `0 0 6px ${c}`;
     };
 
+    const beat = this._createBeat();
+    let hitColorToggle = false; // alternates between accent color and white
+
     const doHit = (spark, shakeIntensity) => {
+      // Randomize flash position within portrait bounds
+      const randX = 10 + Math.floor(Math.random() * 80); // 10-90%
+      const randY = 10 + Math.floor(Math.random() * 80); // 10-90%
+      spark.style.setProperty('--spark-x', randX + '%');
+      spark.style.setProperty('--spark-y', randY + '%');
+
+      // Alternate flash color between accent color and white
+      const isLeft = (spark === leftSpark);
+      const accentColor = isLeft ? empColor : oppColor;
+      const flashColor = hitColorToggle ? '#ffffff' : accentColor;
+      spark.style.setProperty('--spark-color', flashColor);
+      hitColorToggle = !hitColorToggle;
+
       spark.classList.add('flash');
-      const t1 = setTimeout(() => spark.classList.remove('flash'), 150);
-      this._timeouts.push(t1);
+      beat(150, () => spark.classList.remove('flash'));
 
       const track = (spark === loserSpark ? loserFill : winnerFill).parentElement;
       if (track) {
         track.classList.add('hit-flash');
-        const t2 = setTimeout(() => track.classList.remove('hit-flash'), 150);
-        this._timeouts.push(t2);
+        beat(150, () => track.classList.remove('hit-flash'));
       }
 
       if (shakeIntensity !== false) {
         overlay.classList.add('hit-shake');
-        const t3 = setTimeout(() => overlay.classList.remove('hit-shake'), 120);
-        this._timeouts.push(t3);
+        beat(120, () => overlay.classList.remove('hit-shake'));
       }
     };
 
@@ -1097,72 +1131,53 @@ window.ArcadeRenderer = {
     let loserHP = 100;
     const winnerFinalHP = 15 + Math.floor(Math.random() * 25); // 15-40%
 
-    // ─── Act 1: Even exchange (0–2.5s) ──────────────────────
-    const act1 = [
+    const allHits = [
+      // Act 1: Even exchange (0–2.5s)
       { delay: 400,  target: 'loser',  dmg: 10 },
       { delay: 900,  target: 'winner', dmg: 12 },
       { delay: 1400, target: 'loser',  dmg: 8 },
       { delay: 1800, target: 'winner', dmg: 10 },
       { delay: 2300, target: 'loser',  dmg: 7 },
-    ];
-
-    // ─── Act 2: Winner pushes, loser rallies (2.5–5.0s) ────
-    const act2 = [
+      // Act 2: Winner pushes, loser rallies (2.5–5.0s)
       { delay: 2800, target: 'loser',  dmg: 12 },
       { delay: 3200, target: 'loser',  dmg: 15 },
-      { delay: 3700, target: 'winner', dmg: 8 },  // loser fights back
-      { delay: 4100, target: 'winner', dmg: 12 },  // rally!
-      { delay: 4600, target: 'loser',  dmg: 5 },   // winner recovers
-    ];
-
-    // ─── Act 3: Finish (5.0–7.5s) ──────────────────────────
-    const act3 = [
+      { delay: 3700, target: 'winner', dmg: 8 },
+      { delay: 4100, target: 'winner', dmg: 12 },
+      { delay: 4600, target: 'loser',  dmg: 5 },
+      // Act 3: Finish (5.0–7.5s)
       { delay: 5200, target: 'loser',  dmg: 10 },
-      { delay: 5700, target: 'winner', dmg: 5 },   // last gasp
+      { delay: 5700, target: 'winner', dmg: 5 },
       { delay: 6200, target: 'loser',  dmg: 12 },
-      { delay: 6800, target: 'loser',  dmg: 999, final: true }, // K.O. hit
+      { delay: 6800, target: 'loser',  dmg: 999, final: true },
     ];
 
-    const allHits = [...act1, ...act2, ...act3];
-
-    // Pre-calculate HP targets so the final hit always lands at 0 / winnerFinalHP
-    // We'll track running totals and adjust the final hit
+    // Pre-calculate HP scaling so winner ends at winnerFinalHP and loser at 0
     let runWinnerDmg = 0;
     let runLoserDmg = 0;
-
     allHits.forEach(h => {
       if (h.final) return;
       if (h.target === 'winner') runWinnerDmg += h.dmg;
       else runLoserDmg += h.dmg;
     });
-
-    // Scale damage so winner ends at winnerFinalHP and loser ends at 0
     const winnerScale = (100 - winnerFinalHP) / (runWinnerDmg || 1);
     const loserScale = 100 / (runLoserDmg || 1);
 
     // Announcer beats
-    const announcerBeats = [
-      { delay: 500,  line: pickLine(this._FIGHT_LINES_EVEN) },
-      { delay: 2000, line: pickLine(this._FIGHT_LINES_EVEN) },
-      { delay: 3300, line: `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}` },
-      { delay: 4200, line: `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}` },
-      { delay: 5800, line: pickLine(this._FIGHT_LINES_FINISH) },
-    ];
+    [
+      [500,  pickLine(this._FIGHT_LINES_EVEN)],
+      [2000, pickLine(this._FIGHT_LINES_EVEN)],
+      [3300, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
+      [4200, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
+      [5800, pickLine(this._FIGHT_LINES_FINISH)],
+    ].forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
 
-    announcerBeats.forEach(beat => {
-      const tid = setTimeout(() => setVSAnnouncer(beat.line), beat.delay);
-      this._timeouts.push(tid);
-    });
-
+    // Schedule all hits
     allHits.forEach(hit => {
-      const tid = setTimeout(() => {
+      beat(hit.delay, () => {
         if (hit.final) {
-          // Final K.O. blow
           loserHP = 0;
           setHP(loserFill, 0);
           doHit(loserSpark, true);
-
-          // K.O. text on loser portrait
           const loserPortrait = loserSpark.parentElement;
           if (loserPortrait) {
             const koEl = document.createElement('div');
@@ -1180,22 +1195,20 @@ window.ArcadeRenderer = {
           doHit(winnerSpark, hit.dmg > 10);
         } else {
           loserHP -= hit.dmg * loserScale;
-          loserHP = Math.max(5, loserHP); // don't go below 5% until K.O.
+          loserHP = Math.max(5, loserHP);
           setHP(loserFill, loserHP);
           doHit(loserSpark, hit.dmg > 10);
         }
-      }, hit.delay);
-      this._timeouts.push(tid);
+      });
     });
 
     // Loser portrait dims after K.O.
-    const dimTid = setTimeout(() => {
+    beat(7200, () => {
       const loserSide = winner === 'employee'
         ? overlay.querySelector('.arcade-vs-right')
         : overlay.querySelector('.arcade-vs-left');
       if (loserSide) loserSide.classList.add('defeated');
-    }, 7200);
-    this._timeouts.push(dimTid);
+    });
   },
 
   // ─── Winner Badge Highlight ─────────────────────────────────

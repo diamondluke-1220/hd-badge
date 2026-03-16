@@ -60,12 +60,29 @@ body.view-dendro .dendro-container {
   display: block;
 }
 
-/* ─── Links ────────────────────────────────────────────── */
+/* ─── Links (ethernet cable style) ─────────────────────── */
 
 .dendro-link {
   fill: none;
   stroke-width: 1.5;
+  stroke-dasharray: 8 3;
+  stroke-linecap: round;
   transition: stroke-opacity 0.3s ease, stroke-width 0.3s ease;
+}
+
+/* Thicker "trunk" cables from root to divisions */
+.dendro-link[data-link-type="root-div"] {
+  stroke-dasharray: 12 4;
+}
+
+/* Medium cables from divisions to departments */
+.dendro-link[data-link-type="div-dept"] {
+  stroke-dasharray: 8 3;
+}
+
+/* Thin patch cables from departments to employees */
+.dendro-link[data-link-type="dept-emp"] {
+  stroke-dasharray: 5 3;
 }
 
 /* ─── Labels ───────────────────────────────────────────── */
@@ -177,6 +194,89 @@ body.view-dendro .dendro-container {
   pointer-events: none;
 }
 
+/* ─── Router LED blink ─────────────────────────────────── */
+
+@keyframes dendro-led-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.dendro-router-led {
+  animation: dendro-led-blink 1.5s ease-in-out infinite;
+}
+
+.dendro-router-led:nth-of-type(2) {
+  animation-delay: 0.75s;
+}
+
+/* ─── Packet dots ──────────────────────────────────────── */
+
+.dendro-packet {
+  pointer-events: none;
+}
+
+/* ─── CLI Popup Windows ────────────────────────────────── */
+
+.dendro-cli-popup {
+  position: absolute;
+  z-index: 30;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 9px;
+  color: #00ff41;
+  background: rgba(10, 10, 15, 0.92);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  border-radius: 4px;
+  min-width: 180px;
+  max-width: 280px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(4px) scale(0.95);
+  animation: dendro-cli-appear 0.3s ease-out forwards;
+  pointer-events: none;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6), 0 0 8px rgba(0, 255, 65, 0.1);
+}
+
+@keyframes dendro-cli-appear {
+  to { opacity: 0.9; transform: translateY(0) scale(1); }
+}
+
+.dendro-cli-popup.dendro-cli-fade {
+  transition: opacity 0.4s ease;
+  opacity: 0 !important;
+}
+
+.dendro-cli-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: rgba(30, 30, 40, 0.8);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.15);
+}
+
+.dendro-cli-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dendro-cli-dot.red { background: #ff5f56; }
+.dendro-cli-dot.yellow { background: #ffbd2e; }
+.dendro-cli-dot.green { background: #27c93f; }
+
+.dendro-cli-title {
+  margin-left: 4px;
+  color: #8899AA;
+  font-size: 8px;
+}
+
+.dendro-cli-body {
+  padding: 4px 6px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* ─── Reduced Motion ───────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -190,6 +290,15 @@ body.view-dendro .dendro-container {
     animation: none;
   }
   .ping-photo {
+    display: none;
+  }
+  .dendro-packet {
+    display: none;
+  }
+  .dendro-router-led {
+    animation: none;
+  }
+  .dendro-cli-popup {
     display: none;
   }
 }
