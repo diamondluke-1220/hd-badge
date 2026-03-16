@@ -156,24 +156,11 @@ window.ArcadeRenderer = {
   },
 
   async _fetchAllBadges() {
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-      try {
-        const resp = await fetch(`/api/orgchart?page=${page}&limit=100`);
-        const data = await resp.json();
-        if (data.badges && data.badges.length > 0) {
-          this._allBadges = this._allBadges.concat(data.badges);
-          data.badges.forEach(b => {
-            if (b.isBandMember) this._bossBadges.push(b);
-          });
-        }
-        hasMore = page < (data.pages || 1);
-        page++;
-      } catch {
-        hasMore = false;
-      }
-    }
+    const badges = await BadgePool.fetchAll({ limit: 100 });
+    this._allBadges = badges;
+    badges.forEach(b => {
+      if (b.isBandMember) this._bossBadges.push(b);
+    });
   },
 
   // ─── Layout (Clean Grid — no arena, no fighter portraits) ───────

@@ -54,15 +54,7 @@ window.DendroRenderer = {
     // Fetch all badges (paginated to handle 500+)
     let allBadges = [];
     try {
-      let page = 1;
-      let totalPages = 1;
-      while (page <= totalPages) {
-        const resp = await fetch(`/api/orgchart?page=${page}&limit=100`);
-        const data = await resp.json();
-        allBadges = allBadges.concat(data.badges || []);
-        totalPages = data.pages;
-        page++;
-      }
+      allBadges = await BadgePool.fetchAll({ limit: 100 });
     } catch {
       container.innerHTML = '<div class="dendro-fallback">Failed to load employee data.</div>';
       return;

@@ -265,22 +265,10 @@
   }
 
   async function staggerBadges(view) {
-    // Fetch badge pool: recent first, backfill from full org
+    // Fetch badge pool: recent first, capped at 30
     let badges = [];
     try {
-      // Get recent badges (last 24h)
-      const recentRes = await fetch('/api/orgchart?limit=50&page=1&recentFirst=1');
-      const recentData = await recentRes.json();
-      badges = recentData.badges || [];
-
-      // Sort recent first (by createdAt descending)
-      badges.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-      // If under 30, we already have the full pool (total < 50)
-      // If we need more and there are more pages, fetch them
-      if (badges.length >= 30) {
-        badges = badges.slice(0, 30);
-      }
+      badges = await BadgePool.fetchAll({ limit: 50, recentFirst: true, maxBadges: 30 });
     } catch {
       console.warn('[Presentation] Failed to fetch badges for stagger');
       return;
