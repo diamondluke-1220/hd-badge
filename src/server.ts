@@ -6,7 +6,7 @@ import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync, unlinkSync, statSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import { initDb, createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, closeDb } from './db';
 import { checkRateLimit } from './rate-limit';
@@ -18,13 +18,21 @@ import { initPresentation, startPresentation, stopPresentation, getPresentationS
 // ─── Playwright Browser Pool ─────────────────────────────
 
 let _browser: import('playwright').Browser | null = null;
+let _browserLaunching: Promise<import('playwright').Browser> | null = null;
 
 async function getBrowser() {
-  if (!_browser || !_browser.isConnected()) {
+  if (_browser?.isConnected()) return _browser;
+  // Mutex: if already launching, wait for that instead of launching again
+  if (_browserLaunching) return _browserLaunching;
+  _browser = null;
+  _browserLaunching = (async () => {
     const { chromium } = await import('playwright');
-    _browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-  }
-  return _browser;
+    const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    _browser = browser;
+    _browserLaunching = null;
+    return browser;
+  })();
+  return _browserLaunching;
 }
 
 async function closeBrowser() {
@@ -538,6 +546,14 @@ app.post('/api/badge', async (c) => {
     let photoBuffer: Buffer | null = null;
     if (photo) {
       photoBuffer = decodeBase64Image(photo);
+      // Validate decoded buffer is actually an image via sharp
+      if (photoBuffer) {
+        try {
+          await sharp(photoBuffer).metadata();
+        } catch {
+          return c.json({ success: false, error: 'Invalid image file.' }, 400);
+        }
+      }
     }
 
     // Auto-flag edgy content for admin review
@@ -566,18 +582,28 @@ app.post('/api/badge', async (c) => {
 
     // Save photo BEFORE render (Playwright needs it on disk)
     if (photoBuffer) {
-      writeFileSync(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
+      await Bun.write(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
     }
 
     // Server-side Playwright render for consistent output
-    const badge = getBadge(result.employeeId);
-    const badgeBuffer = await renderBadgePlaywright(badge);
-    writeFileSync(join(BADGES_DIR, `${result.employeeId}.png`), badgeBuffer);
+    let badge, badgeBuffer;
+    try {
+      badge = getBadge(result.employeeId);
+      badgeBuffer = await renderBadgePlaywright(badge);
+      await Bun.write(join(BADGES_DIR, `${result.employeeId}.png`), badgeBuffer);
 
-    // Render no-photo variant if fan has a photo but opted out of public display
-    if (hasPhoto && photoPublic === false) {
-      const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
-      writeFileSync(join(BADGES_DIR, `${result.employeeId}-nophoto.png`), noPhotoBuffer);
+      // Render no-photo variant if fan has a photo but opted out of public display
+      if (hasPhoto && photoPublic === false) {
+        const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
+        await Bun.write(join(BADGES_DIR, `${result.employeeId}-nophoto.png`), noPhotoBuffer);
+      }
+    } catch (renderErr: any) {
+      // Clean up orphaned DB row and files on render failure
+      log('error', 'badge', `Render failed for ${result.employeeId}, cleaning up: ${renderErr.message}`);
+      hardDeleteBadge(result.employeeId);
+      try { unlinkSync(join(PHOTOS_DIR, `${result.employeeId}.jpg`)); } catch { /* ignore */ }
+      try { unlinkSync(join(BADGES_DIR, `${result.employeeId}.png`)); } catch { /* ignore */ }
+      throw renderErr;
     }
 
     // Clear captive portal for this IP — OS will stop nagging about "no internet"
@@ -663,7 +689,18 @@ app.get('/api/badge/:id/image', (c) => {
 });
 
 // Print-ready badge PNG — white background, square corners, 600 DPI CR80
+const printRateLimit = new Map<string, number[]>();
 app.get('/api/badge/:id/print', async (c) => {
+  // Rate limit: 5 prints per minute per IP to prevent Playwright DoS
+  const ip = getClientIp(c);
+  const now = Date.now();
+  const timestamps = (printRateLimit.get(ip) || []).filter(t => t > now - 60_000);
+  if (timestamps.length >= 5) {
+    return c.json({ error: 'Too many print requests. Try again in a minute.' }, 429);
+  }
+  timestamps.push(now);
+  printRateLimit.set(ip, timestamps);
+
   const id = c.req.param('id');
   const badge = getBadge(id);
   if (!badge) {
@@ -681,7 +718,7 @@ app.get('/api/badge/:id/print', async (c) => {
 });
 
 // Serve badge photo (admin only — for re-rendering)
-app.get('/api/badge/:id/photo', (c) => {
+app.get('/api/admin/badge/:id/photo-source', (c) => {
   const id = c.req.param('id');
   const badge = getBadge(id);
   if (!badge || !badge.has_photo) {
@@ -727,8 +764,8 @@ app.get('/api/badge/:id/headshot', async (c) => {
 
   let needsGenerate = !existsSync(headshotPath);
   if (!needsGenerate) {
-    const sourceStat = statSync(photoPath);
-    const headshotStat = statSync(headshotPath);
+    const sourceStat = await Bun.file(photoPath).stat();
+    const headshotStat = await Bun.file(headshotPath).stat();
     if (sourceStat.mtimeMs > headshotStat.mtimeMs) {
       needsGenerate = true;
     }
@@ -782,8 +819,8 @@ app.get('/api/badge/:id/thumb', async (c) => {
   // Check if thumbnail needs (re)generation
   let needsGenerate = !existsSync(thumbPath);
   if (!needsGenerate) {
-    const sourceStat = statSync(sourcePath);
-    const thumbStat = statSync(thumbPath);
+    const sourceStat = await Bun.file(sourcePath).stat();
+    const thumbStat = await Bun.file(thumbPath).stat();
     if (sourceStat.mtimeMs > thumbStat.mtimeMs) {
       needsGenerate = true;
     }
@@ -937,19 +974,22 @@ app.delete('/api/admin/badge/:id', (c) => {
 
   const id = c.req.param('id');
 
-  // Delete files
+  // Delete DB row first to prevent concurrent reads from finding a badge with missing files
+  const success = hardDeleteBadge(id);
+  if (!success) {
+    return c.json({ error: 'Badge not found.' }, 404);
+  }
+
+  // Then clean up all associated files (including thumbs and headshots)
   const files = [
     join(BADGES_DIR, `${id}.png`),
     join(BADGES_DIR, `${id}-nophoto.png`),
     join(PHOTOS_DIR, `${id}.jpg`),
+    join(THUMBS_DIR, `${id}.png`),
+    join(HEADSHOTS_DIR, `${id}.jpg`),
   ];
   for (const f of files) {
-    try { if (existsSync(f)) unlinkSync(f); } catch { /* ignore */ }
-  }
-
-  const success = hardDeleteBadge(id);
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
+    try { unlinkSync(f); } catch { /* ignore — file may not exist */ }
   }
 
   return c.json({ success: true, message: 'Badge permanently deleted.' });
@@ -1047,7 +1087,7 @@ app.post('/api/admin/badge/:id/render', async (c) => {
 
   try {
     const badgeBuffer = await renderBadgePlaywright(badge);
-    writeFileSync(join(BADGES_DIR, `${id}.png`), badgeBuffer);
+    await Bun.write(join(BADGES_DIR, `${id}.png`), badgeBuffer);
 
     // Invalidate thumbnail
     const thumbPath = join(THUMBS_DIR, `${id}.png`);
@@ -1059,7 +1099,7 @@ app.post('/api/admin/badge/:id/render', async (c) => {
     return c.json({ success: true, message: `Badge rendered for ${badge.name}.` });
   } catch (err: any) {
     log('error', 'admin', `Badge render failed for ${id}: ${err.message}`);
-    return c.json({ error: 'Badge render failed: ' + err.message }, 500);
+    return c.json({ error: 'Badge render failed.' }, 500);
   }
 });
 

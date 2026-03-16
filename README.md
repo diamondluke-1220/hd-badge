@@ -113,7 +113,8 @@ public/
   admin.html         # HR Dashboard
   presentation.html  # Projector display for live shows
   table-tent.html    # Printable merch table card with QR codes
-  js/app.js            # Badge editor, SSE, ticker, terminal, view switching
+  js/app.js            # Badge editor, popover system, renderer switching, init
+  js/live-viz.js       # Live visualizations: SSE, ticker, animations, stats panel
   js/badge-render.js   # Badge DOM rendering (departments, titles, waveforms, access levels)
   js/shared.js         # Shared constants and utilities across views
   js/badge-pool.js     # Badge data pool for view renderers

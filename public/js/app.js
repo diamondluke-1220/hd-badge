@@ -901,8 +901,9 @@ function showToast(message, type = 'success', duration = 4000) {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = `
     <div class="toast-icon">${icon}</div>
-    <div class="toast-text">${message}</div>
+    <div class="toast-text"></div>
   `;
+  toast.querySelector('.toast-text').textContent = message;
   document.body.appendChild(toast);
 
   requestAnimationFrame(() => {
@@ -916,7 +917,7 @@ function showToast(message, type = 'success', duration = 4000) {
 }
 
 function showSubmitSuccess(employeeId) {
-  showToast(`Welcome aboard, <strong>${employeeId}</strong>!<br><small>Your badge is now on the org chart.</small>`, 'success', 5000);
+  showToast(`Welcome aboard, ${employeeId}! Your badge is now on the org chart.`, 'success', 5000);
 }
 
 function showBadgeStatusBar(employeeId) {

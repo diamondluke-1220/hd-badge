@@ -222,9 +222,14 @@ export function generateEmployeeId(): string {
     const exists = stmts.checkEmployeeId.get({ $id: id });
     if (!exists) return id;
   }
-  // Fallback: use timestamp-based ID
-  const ts = Date.now().toString(36).toUpperCase().slice(-4);
-  return `HD-${ts}`;
+  // Fallback: use timestamp-based ID with collision check
+  for (let i = 0; i < 10; i++) {
+    const ts = Date.now().toString(36).toUpperCase().slice(-5);
+    const id = `HD-${ts}`;
+    const exists = stmts.checkEmployeeId.get({ $id: id });
+    if (!exists) return id;
+  }
+  throw new Error('Failed to generate unique employee ID after 20 attempts');
 }
 
 export interface BadgeInput {

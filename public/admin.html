@@ -929,7 +929,7 @@ function renderTable(badges) {
         <button class="${paidBtnClass}" onclick="togglePaid('${b.employeeId}')">${paidBtnLabel}</button>
         <button class="${printedBtnClass}" onclick="togglePrinted('${b.employeeId}')">${printedBtnLabel}</button>
         <button class="btn-action" onclick="toggleHide('${b.employeeId}')">${hideLabel}</button>
-        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name)}')">Delete</button>
+        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')">Delete</button>
       </td>
     </tr>`;
   }).join('');
@@ -1070,13 +1070,15 @@ function confirmDelete(id, name) {
   overlay.innerHTML = `
     <div class="confirm-card">
       <h3>Permanent Delete</h3>
-      <p>Permanently delete badge <strong>${name}</strong> (${id})? This cannot be undone.</p>
+      <p>Permanently delete badge <strong class="delete-name"></strong> (<span class="delete-id"></span>)? This cannot be undone.</p>
       <div class="btn-row">
         <button onclick="this.closest('.confirm-overlay').remove()">Cancel</button>
         <button class="btn-confirm" onclick="doDelete('${id}', this)">Delete</button>
       </div>
     </div>
   `;
+  overlay.querySelector('.delete-name').textContent = name;
+  overlay.querySelector('.delete-id').textContent = id;
   document.body.appendChild(overlay);
 }
 
