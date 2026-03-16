@@ -238,9 +238,7 @@ function buildPopoverContent(fieldName) {
   return (builders[fieldName] || (() => ''))();
 }
 
-function esc(str) {
-  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// esc() — defined in shared.js
 
 function buildNamePopover() {
   const val = state.name === 'YOUR NAME' ? '' : state.name;
@@ -1207,39 +1205,8 @@ if (printTestBtn) printTestBtn.addEventListener('click', printTest);
 
 // ─── Public Org Chart (Employee Directory) ───────────────
 
-const PUBLIC_DIVISIONS = [
-  { name: 'EXECUTIVE TEAM',         theme: '_exec',     css: 'div-exec' },
-  { name: 'TECHNICAL FRUSTRATIONS', theme: 'IT',        css: 'div-it' },
-  { name: 'OFFICE CULTURE',         theme: 'Office',    css: 'div-office' },
-  { name: 'CORPORATE AFFAIRS',      theme: 'Corporate', css: 'div-corp' },
-  { name: 'PUNK OPERATIONS',        theme: 'Punk',      css: 'div-punk' },
-  { name: 'INDEPENDENT CONTRACTORS', theme: '_custom',  css: 'div-custom' },
-];
-
-// Known fan department names (from badge-render.js DEPARTMENTS)
-const KNOWN_DEPT_THEMES = {};
-DEPARTMENTS.forEach(d => { KNOWN_DEPT_THEMES[d.name] = d.theme; });
-
-// Band member exclusive departments (not selectable by fans)
-const BAND_DEPTS = new Set([
-  'TICKET ESCALATION BUREAU',
-  'AUDIO ENGINEERING DIVISION',
-  'DEPT. OF PERCUSSIVE MAINTENANCE',
-  'INFRASTRUCTURE & POWER CHORDS',
-  'LOW FREQUENCY OPERATIONS',
-]);
-
-function getDivisionForDept(deptName, isBandMember) {
-  if (isBandMember) return '_exec';
-  const theme = KNOWN_DEPT_THEMES[deptName];
-  return theme || '_custom';
-}
-
-// Shared orgchart state (accessed by renderers via window._)
-window._publicOrgPage = 1;
-window._publicOrgDept = '';
-window._tickerStats = {};
-window._tickerTotalHires = 0;
+// PUBLIC_DIVISIONS, KNOWN_DEPT_THEMES, BAND_DEPTS, getDivisionForDept,
+// and shared orgchart state (window._publicOrgPage, etc.) — all in shared.js
 
 // ─── Renderer System ──────────────────────────────────────
 let currentRenderer = null;
@@ -1488,11 +1455,6 @@ const TICKER_QUIPS = [
   'MEETINGS: EXCESSIVE', 'UPTIME: QUESTIONABLE', 'PRODUCTIVITY: TBD',
   'MEMO STATUS: UNREAD', 'PRINTER: JAMMED', 'REPLY-ALL: DETECTED',
 ];
-
-// tickerStats and tickerTotalHires now live on window._ (shared with renderers)
-// Alias for readability in this file
-function _getTickerStats() { return window._tickerStats; }
-function _getTickerTotal() { return window._tickerTotalHires; }
 
 function initTicker() {
   const bar = document.createElement('div');

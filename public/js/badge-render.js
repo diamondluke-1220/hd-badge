@@ -83,20 +83,7 @@ const WAVEFORM_CAPTIONS = [
   'TAKING BACK MONDAYS',
 ];
 
-// Fan departments (11 options)
-const DEPARTMENTS = [
-  { name: 'PRINTER JAMS',                  theme: 'IT' },
-  { name: 'PASSWORD RESET SERVICES',       theme: 'IT' },
-  { name: 'BLUE SCREEN RESPONSE TEAM',     theme: 'IT' },
-  { name: 'WATERCOOLER SERVICES',           theme: 'Office' },
-  { name: 'MEETING RECOVERY DEPT.',        theme: 'Office' },
-  { name: 'MANDATORY FUN COMMITTEE',       theme: 'Corporate' },
-  { name: 'MORALE SUPPRESSION UNIT',       theme: 'Corporate' },
-  { name: 'TEAM BUILDING AVOIDANCE',       theme: 'Corporate' },
-  { name: 'MOSH PIT HR',                   theme: 'Punk' },
-  { name: 'ENTERPRISE GUITAR WORSHIP',     theme: 'Punk' },
-  { name: 'STAGE DIVE RISK ASSESSMENT',    theme: 'Punk' },
-];
+// Fan departments — defined in shared.js (DEPARTMENTS)
 
 // Fan titles (17 options)
 const TITLES = [

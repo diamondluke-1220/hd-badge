@@ -26,12 +26,8 @@ window.GridRenderer = {
     const odo = document.getElementById('payrollOdometer');
     if (odo) odo.dataset.value = stats.visible;
 
-    // Initialize donut chart with current stats
-    window._tickerTotalHires = stats.visible || 0;
-    if (stats.byDepartment) {
-      window._tickerStats = Object.assign({}, stats.byDepartment);
-    }
-    initDonut(stats);
+    // Initialize shared stats (ticker, donut)
+    initRendererStats(stats);
 
     // Department filter tabs — exclude band-exclusive depts
     const filterBar = document.getElementById('deptFilterBar');

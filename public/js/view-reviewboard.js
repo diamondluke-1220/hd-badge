@@ -38,14 +38,7 @@ window.ReviewBoardRenderer = {
   BADGE_ROWS: 16,
   CHARSET: ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-./',
 
-  DIVISION_COLORS: {
-    '_exec': '#ffffff',
-    'IT': '#00d4ff',
-    'Office': '#ff3366',
-    'Corporate': '#ff6b35',
-    'Punk': '#00ff41',
-    '_custom': '#ffd700',
-  },
+  // Division accent colors — from shared.js DIVISION_ACCENT_COLORS
 
   SKILLS: [
     'PASSIVE AGGRESSION . REPLY-ALL . MUTING',
@@ -993,7 +986,7 @@ window.ReviewBoardRenderer = {
     const name = (badge.name || 'UNKNOWN').toUpperCase();
     const title = (badge.title || 'EMPLOYEE').toUpperCase();
     const div = this._getDivision(badge);
-    const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
+    const divColor = DIVISION_ACCENT_COLORS[div] || '#F5E6C8';
     const quote = this._getReviewQuote(name);
     const skills = this._getSkills(name);
 
@@ -1063,7 +1056,7 @@ window.ReviewBoardRenderer = {
     const name = (badge.name || 'UNKNOWN').toUpperCase();
     const title = (badge.title || 'EMPLOYEE').toUpperCase();
     const div = this._getDivision(badge);
-    const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
+    const divColor = DIVISION_ACCENT_COLORS[div] || '#F5E6C8';
     const quote = this._getReviewQuote(name);
     const skills = this._getSkills(name);
 
@@ -1339,7 +1332,7 @@ window.ReviewBoardRenderer = {
     if (this._aiIndicator) this._aiIndicator.classList.add('active');
 
     const div = this._getDivision(badge);
-    const divColor = this.DIVISION_COLORS[div] || '#F5E6C8';
+    const divColor = DIVISION_ACCENT_COLORS[div] || '#F5E6C8';
 
     // Hide previous reveal image + clear glow
     this._hideBadgeReveal();

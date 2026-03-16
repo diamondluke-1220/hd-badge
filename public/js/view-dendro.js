@@ -24,15 +24,7 @@ window.DendroRenderer = {
   _DEBOUNCE_MS: 2000,         // batch window for SSE re-renders
   _OTHER_THRESHOLD: 2,        // custom depts with ≤ this many employees → "OTHER" bucket
 
-  // Division → color (matches network view)
-  _COLORS: {
-    '_exec':     '#ffffff',
-    'IT':        '#00d4ff',
-    'Office':    '#ff3366',
-    'Corporate': '#ff6b35',
-    'Punk':      '#00ff41',
-    '_custom':   '#ffd700',
-  },
+  // Division accent colors — from shared.js DIVISION_ACCENT_COLORS
 
   async init(container, stats) {
     this._container = container;
@@ -72,12 +64,8 @@ window.DendroRenderer = {
       return;
     }
 
-    // Update shared stats
-    window._tickerTotalHires = stats.visible || 0;
-    if (stats.byDepartment) {
-      window._tickerStats = Object.assign({}, stats.byDepartment);
-    }
-    initDonut(stats);
+    // Initialize shared stats (ticker, donut)
+    initRendererStats(stats);
 
     // Empty state — no badges yet
     if (allBadges.length === 0) {
@@ -123,7 +111,7 @@ window.DendroRenderer = {
         name: divInfo ? divInfo.name : divTheme,
         _type: 'division',
         _divTheme: divTheme,
-        _color: this._COLORS[divTheme] || '#ffd700',
+        _color: DIVISION_ACCENT_COLORS[divTheme] || '#ffd700',
         children: [],
       };
       this._treeData.children.push(divNode);
@@ -139,7 +127,7 @@ window.DendroRenderer = {
         _type: 'department',
         _deptName: deptName,
         _divTheme: divTheme,
-        _color: this._COLORS[divTheme] || '#ffd700',
+        _color: DIVISION_ACCENT_COLORS[divTheme] || '#ffd700',
         children: [],
       };
       divNode.children.push(deptNode);
@@ -153,7 +141,7 @@ window.DendroRenderer = {
       _badge: badge,
       _divTheme: divTheme,
       _deptName: deptName,
-      _color: this._COLORS[divTheme] || '#ffd700',
+      _color: DIVISION_ACCENT_COLORS[divTheme] || '#ffd700',
     };
     if (!deptNode.children) deptNode.children = [];
     deptNode.children.push(empNode);
@@ -261,7 +249,7 @@ window.DendroRenderer = {
       const deptNames = Object.keys(deptMap);
       if (deptNames.length === 0) return; // skip empty divisions
 
-      const divColor = this._COLORS[div.theme] || '#ffd700';
+      const divColor = DIVISION_ACCENT_COLORS[div.theme] || '#ffd700';
       const divNode = {
         name: div.name,
         _type: 'division',

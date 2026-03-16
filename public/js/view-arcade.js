@@ -18,15 +18,7 @@ window.ArcadeRenderer = {
   _bgIndex: 0,
   _isVSActive: false,
 
-  // Division accent colors
-  _DIV_COLORS: {
-    '_exec': '#ffffff',
-    'IT': '#00d4ff',
-    'Office': '#ff3366',
-    'Corporate': '#ff6b35',
-    'Punk': '#00ff41',
-    '_custom': '#ffd700',
-  },
+  // Division accent colors — from shared.js DIVISION_ACCENT_COLORS
 
   _ANNOUNCER_LINES: [
     'SELECT YOUR FIGHTER',
@@ -122,12 +114,8 @@ window.ArcadeRenderer = {
     this._bgIndex = 0;
     this._isVSActive = false;
 
-    // Set ticker globals
-    window._tickerTotalHires = stats.visible || 0;
-    if (stats.byDepartment) {
-      window._tickerStats = Object.assign({}, stats.byDepartment);
-    }
-    initDonut(stats);
+    // Initialize shared stats (ticker, donut)
+    initRendererStats(stats);
 
     // Fetch all badges (paginated)
     await this._fetchAllBadges();
@@ -219,7 +207,7 @@ window.ArcadeRenderer = {
       btn.className = 'arcade-tab';
       btn.textContent = div.name;
       btn.dataset.division = div.theme;
-      btn.style.setProperty('--tab-color', this._DIV_COLORS[div.theme] || '#ffd700');
+      btn.style.setProperty('--tab-color', DIVISION_ACCENT_COLORS[div.theme] || '#ffd700');
       btn.addEventListener('click', () => this._filterByDivision(div.theme));
       tabBar.appendChild(btn);
     });
@@ -321,7 +309,7 @@ window.ArcadeRenderer = {
     slot.setAttribute('aria-label', `${badge.name}, ${badge.title}${badge.isBandMember ? ' (Boss)' : ''}`);
     if (badge.isBandMember) slot.classList.add('boss');
 
-    const color = this._DIV_COLORS[div] || '#ffd700';
+    const color = DIVISION_ACCENT_COLORS[div] || '#ffd700';
     slot.style.setProperty('--slot-color', color);
 
     slot.innerHTML = `
@@ -539,7 +527,7 @@ window.ArcadeRenderer = {
     const tabs = this._container.querySelectorAll('.arcade-tab');
     tabs.forEach(t => {
       if (t.dataset.division === division) {
-        const color = this._DIV_COLORS[division] || '#ffd700';
+        const color = DIVISION_ACCENT_COLORS[division] || '#ffd700';
         t.style.setProperty('--pulse-color', color);
         t.classList.add('division-pulse');
       } else {
@@ -553,7 +541,7 @@ window.ArcadeRenderer = {
     if (!spot) return;
 
     const div = getDivisionForDept(badge.department, badge.isBandMember);
-    const color = this._DIV_COLORS[div] || '#ffd700';
+    const color = DIVISION_ACCENT_COLORS[div] || '#ffd700';
 
     const photoWrap = spot.querySelector('.arcade-spotlight-photo-wrap');
     const nameEl = spot.querySelector('.arcade-spotlight-name');
@@ -694,7 +682,7 @@ window.ArcadeRenderer = {
       const opponent = this._pickOpponent();
       const winner = this._determineWinner(opponent);
 
-      const employeeColor = this._DIV_COLORS[div] || '#ffd700';
+      const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#888' : '#D4A843';
       const bgName = this._BACKGROUNDS[this._bgIndex];
       this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
@@ -1321,7 +1309,7 @@ window.ArcadeRenderer = {
 
   _animateProvision(slot, badge, target, div) {
     return new Promise(resolve => {
-      const color = this._DIV_COLORS[div] || '#ffd700';
+      const color = DIVISION_ACCENT_COLORS[div] || '#ffd700';
 
       slot.classList.add('provisioning');
       const photoWrap = slot.querySelector('.arcade-slot-photo-wrap');
