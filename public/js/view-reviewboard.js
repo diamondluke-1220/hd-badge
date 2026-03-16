@@ -1038,7 +1038,7 @@ window.ReviewBoardRenderer = {
 
     // Update screen reader text with readable review content
     if (this._srText) {
-      this._srText.textContent = `Performance review for ${name}, ${title}. Skills: ${skills.join(', ')}. Review: ${quote.join(' ')}`;
+      this._srText.textContent = `Performance review for ${name}, ${title}. Skills: ${skills}. Review: ${quote.join(' ')}`;
     }
 
     // Load badge tile colors then reveal

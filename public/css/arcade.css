@@ -1,6 +1,8 @@
 /* ============================================================
    ARCADE SELECT SCREEN — arcade.css
    Badge App / Help Desk
+   Fighting-game style character select with VS animations
+   VS overlay is the main presentation focus (Punch-Out inspired)
    ============================================================ */
 
 /* --- Fonts (self-hosted, CSP-safe) --- */
@@ -34,17 +36,66 @@
 }
 
 /* ============================================================
+   EXPANDED VIEW — hide header, just switcher + content
+   ============================================================ */
+
+body.view-arcade .app-header > h1,
+body.view-arcade .app-header > .app-nav,
+body.view-arcade #sfTicker,
+body.view-arcade .sf-ticker,
+body.view-arcade .stats-panel,
+body.view-arcade .ticker-bar {
+  display: none !important;
+}
+
+body.view-arcade .app-header {
+  padding: 0;
+  border: none;
+  background: #0a0a12;
+}
+
+body.view-arcade .view-switcher-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+
+body.view-arcade .public-orgchart {
+  background: #0a0a12;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+/* ============================================================
    CONTAINER + LAYOUT
    ============================================================ */
 
 .arcade-container {
   display: flex;
+  flex-direction: column;
   width: 100%;
-  height: 100%;
-  min-height: 100vh;
-  background: #0a0a12;
+  height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(10, 10, 18, 0.85) 0%, rgba(10, 10, 18, 0.7) 40%, rgba(10, 10, 18, 0.9) 100%),
+    url('/images/arcade/backgrounds/server-room.jpg') center/cover no-repeat;
   position: relative;
   overflow: hidden;
+}
+
+/* Grid background with green overlay — main page only */
+.arcade-container::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* CRT scanline overlay */
@@ -63,33 +114,213 @@
   z-index: 100;
 }
 
-.arcade-grid-panel {
-  width: 60%;
-  overflow-y: auto;
-  padding: 16px;
-  box-sizing: border-box;
+/* ============================================================
+   HEADER — "SELECT YOUR FIGHTER"
+   ============================================================ */
+
+.arcade-header {
+  text-align: center;
+  padding: 52px 0 4px;
+  z-index: 1;
+  position: relative;
 }
 
-.arcade-preview-panel {
-  width: 40%;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  box-sizing: border-box;
+.arcade-header-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(12px, 2vw, 18px);
+  color: #ffcc00;
+  text-shadow:
+    0 0 10px #ffcc00,
+    0 0 30px rgba(255, 204, 0, 0.4),
+    0 2px 0 #cc8800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
 /* ============================================================
-   PORTRAIT SLOTS
+   DIVISION TABS — large, color-coded selectors
+   ============================================================ */
+
+.arcade-tabs {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  z-index: 1;
+  position: relative;
+  padding: 6px 12px;
+}
+
+.arcade-tab {
+  padding: 8px 16px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: var(--tab-color, #888899);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease, text-shadow 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.arcade-tab:hover {
+  color: var(--tab-color, #aaaacc);
+  text-shadow: 0 0 8px var(--tab-color, rgba(170, 170, 204, 0.5));
+}
+
+.arcade-tab.active {
+  color: var(--tab-color, #00ffcc);
+  border-bottom: 3px solid var(--tab-color, #00ffcc);
+  text-shadow: 0 0 12px var(--tab-color, rgba(0, 255, 204, 0.6));
+}
+
+.arcade-tab.division-pulse {
+  color: var(--pulse-color, #00ffcc);
+  border-bottom-color: var(--pulse-color, #00ffcc);
+  text-shadow: 0 0 8px var(--pulse-color, #00ffcc);
+  animation: divPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes divPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ============================================================
+   SPOTLIGHT — featured badge display (center of screen)
+   ============================================================ */
+
+.arcade-spotlight {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 16px 24px;
+  z-index: 1;
+  position: relative;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.arcade-spotlight-photo-wrap {
+  width: clamp(180px, 20vw, 280px);
+  height: clamp(180px, 20vw, 280px);
+  border: 4px solid var(--spotlight-color, #4a4a6a);
+  overflow: hidden;
+  background: #13131a;
+  box-shadow:
+    0 0 30px rgba(100, 100, 200, 0.25),
+    0 0 60px rgba(100, 100, 200, 0.12);
+  flex-shrink: 0;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.arcade-spotlight.active .arcade-spotlight-photo-wrap {
+  box-shadow:
+    0 0 30px color-mix(in srgb, var(--spotlight-color, #4a4a6a) 50%, transparent),
+    0 0 70px color-mix(in srgb, var(--spotlight-color, #4a4a6a) 25%, transparent);
+}
+
+.arcade-spotlight-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+.arcade-spotlight-silhouette {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  color: #556677;
+  background: #1C1C22;
+}
+
+.arcade-spotlight-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  max-width: 420px;
+}
+
+.arcade-spotlight-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(12px, 1.6vw, 20px);
+  color: var(--spotlight-color, #ffffff);
+  text-shadow: 0 0 12px currentColor;
+  text-transform: uppercase;
+  transition: color 0.3s ease;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.arcade-spotlight-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(8px, 1vw, 12px);
+  color: #999aaa;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.4;
+}
+
+.arcade-spotlight-dept {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(7px, 0.8vw, 10px);
+  color: var(--spotlight-color, #888899);
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* (Division headers removed — flat grid only) */
+
+/* ============================================================
+   CHARACTER ROSTER GRID — full page (no arena above)
+   ============================================================ */
+
+.arcade-roster {
+  padding: 12px 16px 44px;
+  z-index: 1;
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.arcade-roster-full {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.arcade-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  align-content: flex-start;
+  max-width: 100%;
+  width: 100%;
+  padding: 0 8px;
+}
+
+/* ============================================================
+   PORTRAIT SLOTS — compact for grid
    ============================================================ */
 
 .arcade-slot {
-  width: 96px;
-  height: 120px;
+  width: 56px;
+  height: 68px;
   border: 2px solid #2a2a3a;
   cursor: pointer;
   display: flex;
@@ -98,15 +329,31 @@
   justify-content: flex-end;
   gap: 0;
   background: #1a1a2a;
-  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.08s ease, transform 0.08s ease, box-shadow 0.08s ease;
   position: relative;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .arcade-slot:hover {
   border-color: #4a4a6a;
-  transform: scale(1.05);
+  transform: scale(1.08);
   box-shadow: 0 0 12px rgba(74, 74, 255, 0.3);
+  z-index: 2;
+}
+
+.arcade-slot.highlighted {
+  border-color: #00ffcc;
+  box-shadow: 0 0 8px rgba(0, 255, 204, 0.4);
+}
+
+.arcade-slot.cursor-active {
+  border-color: #ffcc00;
+  box-shadow:
+    0 0 12px rgba(255, 204, 0, 0.6),
+    0 0 24px rgba(255, 204, 0, 0.3);
+  transform: scale(1.15);
+  z-index: 5;
 }
 
 .arcade-slot.selected {
@@ -114,6 +361,16 @@
   box-shadow:
     0 0 8px rgba(74, 74, 255, 0.5),
     0 0 24px rgba(74, 74, 255, 0.25);
+}
+
+/* Boss slots — gold accent */
+.arcade-slot.boss {
+  border-color: #D4A843;
+}
+
+.arcade-slot.boss:hover {
+  border-color: #f0d060;
+  box-shadow: 0 0 16px rgba(212, 168, 67, 0.4);
 }
 
 .arcade-slot.locked {
@@ -125,44 +382,29 @@
 .arcade-slot.new::after {
   content: 'NEW';
   position: absolute;
-  top: 6px;
-  right: -20px;
+  top: 4px;
+  right: -16px;
   background: #ff3366;
   color: #ffffff;
   font-family: 'Press Start 2P', monospace;
-  font-size: 6px;
-  padding: 2px 24px;
+  font-size: 5px;
+  padding: 2px 20px;
   transform: rotate(45deg);
   animation: slotPulse 1.5s ease-in-out infinite;
 }
 
-/* Boss row — gold borders, sticky */
-.arcade-boss-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  padding: 12px 0;
-  background: #0a0a12;
-}
-
-.arcade-boss-row .arcade-slot {
-  border-color: #D4A843;
-}
-
-.arcade-boss-row .arcade-slot:hover {
-  border-color: #f0d060;
-  box-shadow: 0 0 16px rgba(212, 168, 67, 0.4);
-}
-
-.arcade-boss-row .arcade-slot.selected {
-  border-color: #D4A843;
+/* Winner glow — pulsing highlight after VS win */
+.arcade-slot.winner-glow {
+  border-color: #00ff41;
   box-shadow:
-    0 0 10px rgba(212, 168, 67, 0.6),
-    0 0 28px rgba(212, 168, 67, 0.3);
+    0 0 12px rgba(0, 255, 65, 0.6),
+    0 0 30px rgba(0, 255, 65, 0.3);
+  animation: winnerPulse 1s ease-in-out infinite;
+}
+
+@keyframes winnerPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 255, 65, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(0, 255, 65, 0.8), 0 0 50px rgba(0, 255, 65, 0.5); }
 }
 
 /* ============================================================
@@ -180,6 +422,8 @@
   object-fit: cover;
   object-position: top center;
   display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 .arcade-slot-silhouette {
@@ -188,7 +432,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: 24px;
   color: #556677;
   background: #1C1C22;
 }
@@ -196,13 +440,13 @@
 .arcade-slot-name {
   font-family: 'Roboto Condensed', sans-serif;
   font-weight: 700;
-  font-size: 10px;
+  font-size: 7px;
   text-transform: uppercase;
   color: #ffffff;
   background: rgba(10, 10, 18, 0.85);
   text-align: center;
   width: 100%;
-  padding: 3px 2px;
+  padding: 1px 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -210,111 +454,319 @@
 }
 
 /* ============================================================
-   STATS PANEL
-   ============================================================ */
-
-.arcade-stat-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.arcade-stat-label {
-  font-family: 'Press Start 2P', monospace;
-  font-size: 10px;
-  color: #aaaacc;
-  width: 40px;
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.arcade-stat-track {
-  display: flex;
-  gap: 1px;
-}
-
-.arcade-stat-block {
-  width: 12px;
-  height: 14px;
-  background: #1a1a2a;
-  transition: background-color 0.2s ease;
-}
-
-.arcade-stat-block.filled {
-  background: #00ffcc;
-}
-
-.arcade-stat-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: #ffffff;
-  margin-left: 8px;
-  min-width: 24px;
-  text-align: right;
-}
-
-/* ============================================================
-   DIVISION COLOR CLASSES
-   ============================================================ */
-
-.div-color-IT .arcade-stat-block.filled {
-  background: #00d4ff;
-}
-
-.div-color-Office .arcade-stat-block.filled {
-  background: #ff3366;
-}
-
-.div-color-Corporate .arcade-stat-block.filled {
-  background: #ff6b35;
-}
-
-.div-color-Punk .arcade-stat-block.filled {
-  background: #00ff41;
-}
-
-.div-color-_exec .arcade-stat-block.filled {
-  background: #ffffff;
-}
-
-.div-color-_custom .arcade-stat-block.filled {
-  background: #ffd700;
-}
-
-/* ============================================================
-   VS SCREEN OVERLAY
+   VS OVERLAY — Full-screen cinematic Punch-Out sequence
    ============================================================ */
 
 .arcade-vs-overlay {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.9);
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
+  opacity: 1;
 }
 
-.arcade-vs-left,
-.arcade-vs-right {
-  width: 50%;
+/* Stage background inside VS overlay — starts bright, darkens over time */
+.arcade-vs-bg {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: brightness(1.3) saturate(1.2);
+}
+
+.arcade-vs-bg-darken {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  z-index: 1;
+  transition: background 1.5s ease-in;
+}
+
+/* Beat 1: background fades in bright (foreground reveal) */
+.arcade-vs-overlay.bg-reveal .arcade-vs-bg {
+  opacity: 1;
+}
+
+/* Darken phase: BG transitions from foreground to background */
+.arcade-vs-overlay.bg-darken .arcade-vs-bg {
+  filter: brightness(0.7) saturate(0.8);
+  transition: filter 1.2s ease-in;
+}
+
+.arcade-vs-overlay.bg-darken .arcade-vs-bg-darken {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* ── Stage Backgrounds (reused from original, loaded in VS only) ── */
+.arcade-bg-server-room { background-image: url('/images/arcade/backgrounds/server-room.jpg'); }
+.arcade-bg-break-room { background-image: url('/images/arcade/backgrounds/break-room.jpg'); }
+.arcade-bg-network-closet { background-image: url('/images/arcade/backgrounds/network-closet.jpg'); }
+.arcade-bg-front-entrance { background-image: url('/images/arcade/backgrounds/front-lobby.jpg'); }
+.arcade-bg-meeting-room { background-image: url('/images/arcade/backgrounds/meeting-room.jpg'); }
+.arcade-bg-cubicle-farm { background-image: url('/images/arcade/backgrounds/cubicle-farm.jpg'); }
+
+/* ============================================================
+   VS SIDES — portraits that slide in
+   ============================================================ */
+
+.arcade-vs-side {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 10px;
+  z-index: 5;
+  position: relative;
+}
+
+/* Left: starts off-screen left, lands closer to center */
+.arcade-vs-left {
+  transform: translateX(-120%);
+  opacity: 0;
+  transition: none;
+}
+
+/* Right: starts off-screen right, lands closer to center */
+.arcade-vs-right {
+  transform: translateX(120%);
+  opacity: 0;
+  transition: none;
+}
+
+/* Beat 2: employee slides in — stops 25% closer to center */
+.arcade-vs-overlay.left-enter .arcade-vs-left {
+  transform: translateX(25%);
+  opacity: 1;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.3s ease;
+}
+
+/* Beat 4: boss slides in — stops 25% closer to center */
+.arcade-vs-overlay.right-enter .arcade-vs-right {
+  transform: translateX(-25%);
+  opacity: 1;
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.3s ease;
+}
+
+/* VS portrait frames */
+.arcade-vs-portrait-wrap {
+  width: clamp(200px, 22vw, 320px);
+  height: clamp(200px, 22vw, 320px);
+  border: 4px solid var(--side-color, #4a4a6a);
+  overflow: hidden;
+  background: #13131a;
+  box-shadow:
+    0 0 30px rgba(100, 100, 200, 0.3),
+    0 0 60px rgba(100, 100, 200, 0.15);
+  position: relative;
+}
+
+.arcade-vs-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.arcade-vs-fighter-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(12px, 1.6vw, 20px);
+  color: var(--side-color, #ffffff);
+  margin-top: 12px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.arcade-vs-fighter-class {
+  font-family: 'Roboto Condensed', sans-serif;
+  font-weight: 700;
+  font-size: clamp(12px, 1.3vw, 16px);
+  color: #aaaabb;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* Defeated side dims */
+.arcade-vs-side.defeated {
+  opacity: 0.35;
+  filter: grayscale(0.6) sepia(0.3) hue-rotate(-30deg);
+  transition: opacity 0.5s ease, filter 0.5s ease;
+}
+
+/* ── New Hire VS entrance — spin-in + NEW banner + fireworks ── */
+
+.arcade-vs-overlay.new-hire .arcade-vs-left .arcade-vs-portrait-wrap {
+  animation: newHireSpinIn 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes newHireSpinIn {
+  0% { transform: rotate(-360deg) scale(0.3); opacity: 0; }
+  50% { transform: rotate(-20deg) scale(1.1); opacity: 1; }
+  70% { transform: rotate(5deg) scale(0.95); }
+  100% { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+
+/* NEW banner on employee portrait during VS */
+.arcade-vs-new-badge {
+  position: absolute;
+  top: 12px;
+  right: -20px;
+  background: #ff3366;
+  color: #ffffff;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  padding: 4px 28px;
+  transform: rotate(45deg);
+  z-index: 10;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  animation: newBadgePulse 1s ease-in-out infinite;
+}
+
+@keyframes newBadgePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 51, 102, 0.6); }
+  50% { box-shadow: 0 0 20px rgba(255, 51, 102, 0.9), 0 0 40px rgba(255, 51, 102, 0.4); }
+}
+
+/* Firework particles — burst from employee portrait */
+.arcade-vs-firework {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 12;
+  animation: fireworkBurst 1.2s ease-out forwards;
+}
+
+@keyframes fireworkBurst {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: var(--fw-trajectory) scale(0.3); }
+}
+
+/* ============================================================
+   DIAGONAL SLASH WIPE — Beat 3
+   ============================================================ */
+
+.arcade-vs-slash {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.arcade-vs-overlay.slash-fire .arcade-vs-slash {
+  animation: slashWipe 1.2s ease-out forwards;
+}
+
+/* Persistent dividing line that remains after slash flash fades */
+.arcade-vs-slash::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 6px;
+  transform: translateX(-50%) skewX(-6deg);
+  background: linear-gradient(to bottom,
+    transparent 2%,
+    rgba(255, 204, 0, 0.4) 8%,
+    #ffcc00 20%,
+    #ffffff 50%,
+    #ffcc00 80%,
+    rgba(255, 204, 0, 0.4) 92%,
+    transparent 98%
+  );
+  box-shadow:
+    0 0 16px rgba(255, 204, 0, 0.6),
+    0 0 40px rgba(255, 204, 0, 0.25),
+    -3px 0 12px rgba(255, 204, 0, 0.15),
+    3px 0 12px rgba(255, 204, 0, 0.15);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.arcade-vs-overlay.slash-fire .arcade-vs-slash::after {
+  opacity: 1;
+  transition: opacity 0.2s ease 0.3s;
+}
+
+@keyframes slashWipe {
+  0% {
+    opacity: 1;
+    clip-path: polygon(45% 0%, 47% 0%, 55% 100%, 53% 100%);
+    background: linear-gradient(135deg, transparent 20%, #ffffff 40%, #ffcc00 50%, #ffffff 60%, transparent 80%);
+  }
+  30% {
+    clip-path: polygon(30% 0%, 70% 0%, 80% 100%, 20% 100%);
+    background: linear-gradient(135deg, transparent 10%, rgba(255, 255, 255, 0.9) 30%, #ffcc00 50%, rgba(255, 255, 255, 0.9) 70%, transparent 90%);
+  }
+  60% {
+    opacity: 0.8;
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+    background: rgba(255, 255, 255, 0.3);
+  }
+  100% {
+    opacity: 0;
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+    background: transparent;
+  }
+}
+
+/* ============================================================
+   VS CENTER TEXT — Beat 5
+   ============================================================ */
+
+.arcade-vs-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  flex-shrink: 0;
+  z-index: 6;
 }
 
 .arcade-vs-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: 64px;
+  font-size: clamp(24px, 4vw, 52px);
   color: #ffcc00;
   text-shadow:
     0 0 10px #ffcc00,
     0 0 30px #ffcc00,
-    0 0 60px #ff6600;
-  animation: vsShake 0.1s linear infinite;
+    0 0 60px #ff6600,
+    0 0 100px rgba(255, 102, 0, 0.3);
+  opacity: 0;
+  transform: scale(4);
+  transition: none;
+}
+
+.arcade-vs-text.slam {
+  animation: vsSlamIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards,
+             vsShake 0.1s linear 0.6s 3,
+             vsGlow 2s ease-in-out 0.9s infinite;
+}
+
+@keyframes vsGlow {
+  0%, 100% { text-shadow: 0 0 10px #ffcc00, 0 0 30px #ffcc00, 0 0 60px #ff6600; }
+  50% { text-shadow: 0 0 20px #ffcc00, 0 0 50px #ffcc00, 0 0 90px #ff6600, 0 0 120px rgba(255, 102, 0, 0.2); }
+}
+
+@keyframes vsSlamIn {
+  0% { transform: scale(5); opacity: 0; }
+  40% { transform: scale(0.8); opacity: 1; }
+  60% { transform: scale(1.15); }
+  75% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 @keyframes vsShake {
@@ -326,59 +778,392 @@
 }
 
 /* ============================================================
-   PROVISIONING OVERLAY
+   QUOTE BUBBLE — absolute overlay, typewriter effect (Beat 7)
    ============================================================ */
 
-.arcade-provision {
+.arcade-vs-quote-bubble {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: flex-end;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 5;
+  bottom: 10%;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px) scale(0.95);
+  z-index: 15;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(12px, 1.4vw, 16px);
+  color: #1a1a2a;
+  padding: 14px 28px;
+  background: #ffffff;
+  border: none;
+  border-radius: 999px;
+  max-width: 400px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: none;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    0 0 40px rgba(255, 255, 255, 0.15);
 }
 
-.arcade-provision-bar {
-  height: 4px;
-  width: 0%;
-  background: #00ffcc;
-  transition: width 0.3s ease;
+/* No triangle tail for pill style */
+.arcade-vs-quote-bubble::before {
+  display: none;
+}
+
+.arcade-vs-quote-bubble.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.0, 0.0, 0.2, 1);
 }
 
 /* ============================================================
-   DIVISION TABS
+   HEALTH BARS — Fight sequence (Beat 8)
    ============================================================ */
 
-.arcade-tabs {
+.arcade-vs-hp-container {
+  position: absolute;
+  top: 16%;
+  left: 8%;
+  right: 8%;
+  z-index: 20;
   display: flex;
-  flex-direction: row;
-  border-top: 1px solid #2a2a3a;
-  gap: 0;
+  justify-content: space-between;
+  gap: 40px;
+  opacity: 0;
+  transform: translateY(-20px);
 }
 
-.arcade-tab {
-  padding: 8px 16px;
+.arcade-vs-hp-container.visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease-out;
+}
+
+.arcade-vs-hp-bar {
+  flex: 1;
+  max-width: 360px;
+}
+
+.arcade-vs-hp-label {
   font-family: 'Press Start 2P', monospace;
-  font-size: 10px;
-  color: #aaaacc;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  font-size: clamp(7px, 0.9vw, 10px);
+  color: #ffffff;
+  margin-bottom: 4px;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
 }
 
-.arcade-tab:hover {
+.arcade-vs-hp-right .arcade-vs-hp-label {
+  text-align: right;
+}
+
+.arcade-vs-hp-track {
+  width: 100%;
+  height: 18px;
+  background: #1a1a2a;
+  border: 2px solid #3a3a4a;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Hash marks at 25%, 50%, 75% */
+.arcade-vs-hp-track::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(to right,
+      transparent calc(25% - 1px), rgba(255, 255, 255, 0.25) 25%, transparent calc(25% + 1px),
+      transparent calc(50% - 1px), rgba(255, 255, 255, 0.35) 50%, transparent calc(50% + 1px),
+      transparent calc(75% - 1px), rgba(255, 255, 255, 0.25) 75%, transparent calc(75% + 1px)
+    );
+}
+
+.arcade-vs-hp-fill {
+  width: 100%;
+  height: 100%;
+  background: #00ff41;
+  transition: width 0.2s ease-out, background-color 0.3s ease;
+  box-shadow: 0 0 8px #00ff41;
+}
+
+/* HP track hit flash — brief white pulse on damage */
+.arcade-vs-hp-track.hit-flash {
+  animation: hpHitFlash 0.15s ease-out;
+}
+
+@keyframes hpHitFlash {
+  0% { background: rgba(255, 255, 255, 0.3); }
+  100% { background: #1a1a2a; }
+}
+
+/* ============================================================
+   HIT SPARKS — localized flash on portraits
+   ============================================================ */
+
+.arcade-vs-hit-spark {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 200, 0.9) 0%, rgba(255, 200, 0, 0.4) 40%, transparent 70%);
+}
+
+.arcade-vs-hit-spark.flash {
+  animation: hitSparkFlash 0.15s ease-out forwards;
+}
+
+@keyframes hitSparkFlash {
+  0% { opacity: 1; }
+  50% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+/* Hit shake — micro screen shake during fight */
+.arcade-vs-overlay.hit-shake {
+  animation: hitShake 0.12s linear;
+}
+
+@keyframes hitShake {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(3px, -2px); }
+  75% { transform: translate(-2px, 1px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ============================================================
+   VS ANNOUNCER + RESULT
+   ============================================================ */
+
+.arcade-vs-announcer {
+  position: absolute;
+  top: 72px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.4vw, 16px);
+  color: #ffcc00;
+  text-shadow: 0 0 8px rgba(255, 204, 0, 0.6);
+  letter-spacing: 1px;
+  z-index: 15;
+}
+
+.arcade-vs-result {
+  position: absolute;
+  bottom: 14%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 25;
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.arcade-vs-result.reveal {
+  animation: resultSlam 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes resultSlam {
+  0% { opacity: 0; transform: scale(2.5); }
+  40% { opacity: 1; transform: scale(0.9); }
+  60% { transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.arcade-vs-winner-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.2vw, 14px);
   color: #ffffff;
 }
 
-.arcade-tab.active {
-  color: #00ffcc;
-  border-bottom: 2px solid #00ffcc;
+.arcade-vs-winner-name {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(14px, 2vw, 24px);
+  margin-top: 6px;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.arcade-vs-victory-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(8px, 1vw, 12px);
+  color: #00ff41;
+  margin-top: 8px;
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
+}
+
+.arcade-vs-defeat-text {
+  color: #ff3366;
+  text-shadow: 0 0 8px rgba(255, 51, 102, 0.6);
 }
 
 /* ============================================================
-   IDLE ANIMATIONS
+   FIGHT!! FLASH — center-screen slam text (Beat 7.5)
+   ============================================================ */
+
+.arcade-vs-fight-flash {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(3);
+  z-index: 30;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(32px, 6vw, 72px);
+  color: #ff3333;
+  text-shadow:
+    0 0 20px #ff3333,
+    0 0 60px rgba(255, 51, 51, 0.6),
+    0 0 100px rgba(255, 0, 0, 0.3),
+    0 4px 0 #aa0000;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.arcade-vs-fight-flash.active {
+  animation: fightFlash 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes fightFlash {
+  0% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+  20% { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
+  35% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+/* ============================================================
+   K.O. TEXT — slams onto loser portrait on final hit
+   ============================================================ */
+
+.arcade-vs-ko-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(20px, 3vw, 36px);
+  color: #ff3333;
+  text-shadow: 0 0 12px #ff0000, 0 2px 0 #990000;
+  z-index: 10;
+  pointer-events: none;
+  animation: koSlam 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes koSlam {
+  0% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  50% { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* ============================================================
+   ROUND TEXT — brief flash before FIGHT!!
+   ============================================================ */
+
+.arcade-vs-round-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  z-index: 30;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(14px, 2vw, 20px);
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.arcade-vs-round-text.active {
+  animation: roundFlash 0.5s ease-out forwards;
+}
+
+@keyframes roundFlash {
+  0% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+  30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+
+/* Dissolve out */
+.arcade-vs-overlay.dissolve {
+  opacity: 0;
+  transition: opacity 0.6s ease-in-out;
+}
+
+/* ============================================================
+   PROVISIONING OVERLAY (SSE new-hire)
+   ============================================================ */
+
+.arcade-provision-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 5;
+}
+
+.arcade-provision-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  color: #ffcc00;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.arcade-provision-bar {
+  width: 80%;
+  height: 3px;
+  background: #1a1a2a;
+  overflow: hidden;
+}
+
+.arcade-provision-fill {
+  width: 0%;
+  height: 100%;
+  background: #00ffcc;
+}
+
+.arcade-activated-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 255, 65, 0.15);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 5px;
+  color: #00ff41;
+  text-align: center;
+  z-index: 6;
+}
+
+/* ============================================================
+   ANNOUNCER — inline below spotlight info
+   ============================================================ */
+
+.arcade-announcer {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.4vw, 16px);
+  text-align: center;
+  color: #ffcc00;
+  padding: 6px 0;
+  z-index: 1;
+  position: relative;
+  text-shadow:
+    0 0 8px #ffcc00,
+    0 0 24px rgba(255, 204, 0, 0.4);
+  letter-spacing: 1px;
+  min-height: 24px;
+}
+
+/* ============================================================
+   ANIMATIONS
    ============================================================ */
 
 @keyframes insertCoin {
@@ -397,151 +1182,166 @@
 }
 
 /* ============================================================
-   ANNOUNCER BAR
-   ============================================================ */
-
-.arcade-announcer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 12px 16px;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 10px;
-  text-align: center;
-  color: #ffcc00;
-  background: #0a0a12;
-  border-top: 1px solid #2a2a3a;
-  text-shadow:
-    0 0 6px #ffcc00,
-    0 0 20px rgba(255, 204, 0, 0.4);
-  z-index: 50;
-}
-
-/* ============================================================
    REDUCED MOTION + FX OFF
    ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .arcade-slot {
-    transition: none;
-  }
-
-  .arcade-slot:hover {
-    transform: none;
-  }
-
-  .arcade-container::after {
-    display: none;
-  }
-
-  .arcade-vs-text {
-    animation: none;
-  }
-
-  .arcade-slot.new::after {
-    animation: none;
-  }
-
-  .arcade-provision-bar {
-    transition: none;
-  }
-
-  .arcade-stat-block {
-    transition: none;
-  }
+  .arcade-slot { transition: none; }
+  .arcade-slot:hover { transform: none; }
+  .arcade-container::after { display: none; }
+  .arcade-container::before { display: none; }
+  .arcade-tab.division-pulse { animation: none; }
+  .arcade-vs-text { animation: none; }
+  .arcade-vs-text.slam { animation: none; opacity: 1; transform: scale(1); }
+  .arcade-vs-left { transition: none; transform: none; opacity: 1; }
+  .arcade-vs-right { transition: none; transform: none; opacity: 1; }
+  .arcade-vs-overlay { transition: none; }
+  .arcade-vs-overlay.dissolve { transition: none; }
+  .arcade-vs-slash { display: none; }
+  .arcade-vs-hit-spark { display: none; }
+  .arcade-vs-overlay.hit-shake { animation: none; }
+  .arcade-vs-quote-bubble { transition: none; opacity: 1; transform: none; }
+  .arcade-vs-hp-container { transition: none; opacity: 1; transform: none; }
+  .arcade-vs-hp-fill { transition: none; }
+  .arcade-vs-result { transition: none; }
+  .arcade-vs-result.reveal { animation: none; opacity: 1; transform: none; }
+  .arcade-vs-fight-flash { display: none; }
+  .arcade-vs-ko-text { animation: none; transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  .arcade-vs-round-text { display: none; }
+  .arcade-vs-hp-track.hit-flash { animation: none; }
+  .arcade-slot.new::after { animation: none; }
+  .arcade-slot.winner-glow { animation: none; }
+  .arcade-provision-fill { transition: none; }
+  .arcade-spotlight-photo-wrap { transition: none; }
+  .arcade-spotlight-name { transition: none; }
+  .arcade-vs-overlay.new-hire .arcade-vs-left .arcade-vs-portrait-wrap { animation: none; }
+  .arcade-vs-new-badge { animation: none; }
+  .arcade-vs-firework { animation: none; display: none; }
 }
 
-.fx-off .arcade-slot {
-  transition: none;
-}
-
-.fx-off .arcade-slot:hover {
-  transform: none;
-}
-
-.fx-off .arcade-container::after {
-  display: none;
-}
-
-.fx-off .arcade-vs-text {
-  animation: none;
-}
-
-.fx-off .arcade-slot.new::after {
-  animation: none;
-}
-
-.fx-off .arcade-provision-bar {
-  transition: none;
-}
-
-.fx-off .arcade-stat-block {
-  transition: none;
-}
+.fx-off .arcade-slot { transition: none; }
+.fx-off .arcade-slot:hover { transform: none; }
+.fx-off .arcade-container::after { display: none; }
+.fx-off .arcade-container::before { display: none; }
+.fx-off .arcade-tab.division-pulse { animation: none; }
+.fx-off .arcade-vs-text { animation: none; }
+.fx-off .arcade-vs-text.slam { animation: none; opacity: 1; transform: scale(1); }
+.fx-off .arcade-vs-left { transition: none; transform: none; opacity: 1; }
+.fx-off .arcade-vs-right { transition: none; transform: none; opacity: 1; }
+.fx-off .arcade-vs-overlay { transition: none; }
+.fx-off .arcade-vs-slash { display: none; }
+.fx-off .arcade-vs-hit-spark { display: none; }
+.fx-off .arcade-vs-overlay.hit-shake { animation: none; }
+.fx-off .arcade-slot.new::after { animation: none; }
+.fx-off .arcade-slot.winner-glow { animation: none; }
+.fx-off .arcade-provision-fill { transition: none; }
+.fx-off .arcade-vs-fight-flash { display: none; }
+.fx-off .arcade-vs-ko-text { animation: none; transform: translate(-50%, -50%) scale(1); opacity: 1; }
+.fx-off .arcade-vs-round-text { display: none; }
+.fx-off .arcade-vs-result.reveal { animation: none; opacity: 1; transform: none; }
+.fx-off .arcade-vs-hp-track.hit-flash { animation: none; }
+.fx-off .arcade-vs-overlay.new-hire .arcade-vs-left .arcade-vs-portrait-wrap { animation: none; }
+.fx-off .arcade-vs-new-badge { animation: none; }
+.fx-off .arcade-vs-firework { animation: none; display: none; }
 
 /* ============================================================
    RESPONSIVE (<768px)
    ============================================================ */
 
 @media (max-width: 767px) {
-  .arcade-container {
-    flex-direction: column;
-  }
-
-  .arcade-grid-panel {
-    width: 100%;
-    overflow-y: visible;
-  }
-
-  .arcade-preview-panel {
-    width: 100%;
-    position: relative;
-    height: auto;
-    padding: 16px;
-  }
-
   .arcade-slot {
-    width: 72px;
-    height: 96px;
+    width: 44px;
+    height: 56px;
   }
 
   .arcade-slot-name {
-    font-size: 9px;
-  }
-
-  .arcade-grid-panel {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    justify-items: center;
-  }
-
-  .arcade-boss-row {
-    grid-column: 1 / -1;
-  }
-
-  /* Mini stat bars */
-  .arcade-stat-block {
-    width: 8px;
-    height: 10px;
-  }
-
-  .arcade-stat-label {
-    font-size: 8px;
-    width: 32px;
-  }
-
-  .arcade-stat-value {
-    font-size: 10px;
+    font-size: 7px;
   }
 
   .arcade-vs-text {
-    font-size: 36px;
+    font-size: 24px;
+  }
+
+  .arcade-vs-portrait-wrap {
+    width: clamp(120px, 30vw, 200px);
+    height: clamp(120px, 30vw, 200px);
+  }
+
+  .arcade-vs-quote-bubble {
+    display: none;
+  }
+
+  .arcade-header-text {
+    font-size: 10px;
   }
 
   .arcade-announcer {
-    font-size: 8px;
+    font-size: 9px;
+  }
+
+  .arcade-tab {
+    font-size: 7px;
+    padding: 5px 8px;
+  }
+
+  .arcade-spotlight {
     padding: 8px 12px;
+    gap: 12px;
+    max-width: 100%;
+  }
+
+  .arcade-spotlight-photo-wrap {
+    width: 120px;
+    height: 120px;
+  }
+
+  .arcade-spotlight-info {
+    max-width: 200px;
+  }
+
+  .arcade-spotlight-name {
+    font-size: 10px;
+  }
+
+  .arcade-spotlight-title {
+    font-size: 7px;
+  }
+
+  .arcade-vs-announcer {
+    top: 40px;
+    font-size: 8px;
+  }
+
+  .arcade-vs-result {
+    bottom: 10%;
+  }
+
+  .arcade-vs-hp-container {
+    top: 10%;
+    left: 4%;
+    right: 4%;
+    gap: 20px;
+  }
+
+  .arcade-vs-hp-label {
+    font-size: 6px;
+  }
+
+  .arcade-vs-hp-track {
+    height: 12px;
+  }
+
+  /* Fighters don't need to be as close on mobile */
+  .arcade-vs-overlay.left-enter .arcade-vs-left {
+    transform: translateX(10%);
+  }
+  .arcade-vs-overlay.right-enter .arcade-vs-right {
+    transform: translateX(-10%);
+  }
+
+  .arcade-vs-quote-bubble {
+    font-size: 9px;
+    padding: 10px 18px;
+    max-width: 60vw;
   }
 }
