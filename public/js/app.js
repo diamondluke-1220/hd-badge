@@ -1389,12 +1389,9 @@ function connectSSE() {
   if (sseSource) { sseSource.close(); }
   sseSource = new EventSource('/api/badges/stream');
 
-  sseSource.onopen = () => {
-    console.log('[SSE] Connected, readyState:', sseSource.readyState);
-  };
+  sseSource.onopen = () => {};
 
   sseSource.addEventListener('new-badge', (e) => {
-    console.log('[SSE] Received new-badge event:', e.data);
     try {
       const badge = JSON.parse(e.data);
       queueLiveAnimation(badge);
@@ -1403,9 +1400,7 @@ function connectSSE() {
     }
   });
 
-  sseSource.onerror = (e) => {
-    console.log('[SSE] Connection error, state:', sseSource.readyState);
-  };
+  sseSource.onerror = () => {};
 }
 
 function queueLiveAnimation(badge) {
@@ -1429,7 +1424,6 @@ async function processLiveQueue() {
     updateDonut(badge);
 
     const mode = getCurrentViewMode();
-    console.log(`[SSE] Processing badge ${badge.employeeId} (${badge.name}) in ${mode} mode`);
 
     if (mode === 'grid') {
       await playTerminalAnimation(badge);
@@ -1901,23 +1895,16 @@ function playPingTrace(nodeEl) {
         // Find the LIVE DOM element (original nodeEl may be detached by re-render)
         const liveNodeEl = g.querySelector(`[data-emp-id="${empId}"]`);
         const targetNode = liveNodeEl || nodeEl;
-        const isLive = !!liveNodeEl;
-        const isAttached = targetNode.isConnected;
-        console.log(`[PingTrace] ARRIVAL emp=${empId} — liveFound=${isLive}, isAttached=${isAttached}, targetNode=`, targetNode);
 
         // Mark as arrived — all future re-renders will show the photo
         if (window.DendroRenderer) {
           window.DendroRenderer._arrived.add(empId);
-          console.log(`[PingTrace] _arrived now: [${[...window.DendroRenderer._arrived].join(',')}]`);
         }
 
         // Reveal the badge photo on the LIVE element (swap placeholder → thumbnail)
         const awaitingCircle = targetNode.querySelector('circle.dendro-awaiting');
-        console.log(`[PingTrace] awaitingCircle found=${!!awaitingCircle}, empId=${empId}`);
         if (awaitingCircle) {
           const patId = awaitingCircle.getAttribute('data-pat-id');
-          const patternExists = !!svg.querySelector(`#${patId}`);
-          console.log(`[PingTrace] SWAP placeholder→photo: patId=${patId}, patternExists=${patternExists}`);
           awaitingCircle.setAttribute('fill', patId ? `url(#${patId})` : divColor);
           awaitingCircle.setAttribute('stroke-dasharray', 'none');
           awaitingCircle.setAttribute('stroke-opacity', '1');
@@ -1957,24 +1944,6 @@ function playPingTrace(nodeEl) {
           targetNode.classList.remove('dendro-arrival-glow');
           ring.remove();
         }, 2500);
-
-        // --- DEBUG: verify photo persists after arrival effects complete ---
-        setTimeout(() => {
-          const verifyNode = g.querySelector(`[data-emp-id="${empId}"]`);
-          if (verifyNode) {
-            const circle = verifyNode.querySelector('circle');
-            const fill = circle ? circle.getAttribute('fill') : 'NO_CIRCLE';
-            const isPhoto = fill && fill.startsWith('url(#dendro-thumb-');
-            const isPlaceholder = fill === '#1C1C22';
-            const hasAwaitingClass = circle ? circle.classList.contains('dendro-awaiting') : false;
-            console.log(`[PingTrace] POST-ARRIVAL VERIFY (3s) emp=${empId}: fill=${fill}, isPhoto=${isPhoto}, isPlaceholder=${isPlaceholder}, hasAwaiting=${hasAwaitingClass}, nodeAttached=${verifyNode.isConnected}`);
-            if (!isPhoto) {
-              console.error(`[PingTrace] ❌ PHOTO LOST for emp=${empId}! fill=${fill}. Check for unexpected re-render.`);
-            }
-          } else {
-            console.error(`[PingTrace] ❌ NODE GONE for emp=${empId}! Node not found in DOM 3s after arrival.`);
-          }
-        }, 3000);
 
         setTimeout(resolve, 2500);
         return;

@@ -80,7 +80,6 @@ window.DendroRenderer = {
 
   addBadge(badge) {
     if (!this._svg || !this._treeData || typeof d3 === 'undefined') {
-      console.log('[Dendro] addBadge bail: svg/tree/d3 missing');
       return null;
     }
 
@@ -90,7 +89,6 @@ window.DendroRenderer = {
 
     // Dedup
     if (this._nodeIndex[empKey]) {
-      console.log('[Dendro] addBadge bail: dedup', empKey);
       return null;
     }
 
@@ -115,7 +113,6 @@ window.DendroRenderer = {
         children: [],
       };
       this._treeData.children.push(divNode);
-      console.log('[Dendro] Created new division node:', divTheme);
     }
 
     // Find or create department node within division
@@ -131,7 +128,6 @@ window.DendroRenderer = {
         children: [],
       };
       divNode.children.push(deptNode);
-      console.log('[Dendro] Created new department node:', deptName, 'in', divTheme);
     }
 
     // Add employee to department
@@ -152,19 +148,15 @@ window.DendroRenderer = {
 
     // If only 1 pending badge (first in batch), render immediately for responsiveness
     if (this._pendingBadges.length === 1 && !this._debounceTimer) {
-      console.log(`[Dendro.addBadge] IMMEDIATE flush for ${empKey} (first in batch)`);
       this._flushPendingBadges();
     } else {
       // Additional badges within debounce window — defer render
-      console.log(`[Dendro.addBadge] DEFERRED ${empKey} (pending=${this._pendingBadges.length}, timerActive=${!!this._debounceTimer})`);
       clearTimeout(this._debounceTimer);
       this._debounceTimer = setTimeout(() => this._flushPendingBadges(), this._DEBOUNCE_MS);
     }
 
     // Return the node element (will exist after flush for first badge, null for queued)
-    const nodeEl = this._g.select(`[data-emp-id="${empKey}"]`).node();
-    console.log('[Dendro] addBadge result:', empKey, divTheme, deptName, nodeEl ? 'found' : 'queued');
-    return nodeEl;
+    return this._g.select(`[data-emp-id="${empKey}"]`).node();
   },
 
   _flushPendingBadges() {
@@ -174,7 +166,6 @@ window.DendroRenderer = {
     if (this._pendingBadges.length === 0) return;
 
     const flushed = this._pendingBadges.splice(0);
-    console.log(`[Dendro] Batch render: ${flushed.length} badge(s)`);
 
     // Single D3 re-render for all queued badges
     this._renderTree();
@@ -184,7 +175,6 @@ window.DendroRenderer = {
   },
 
   destroy() {
-    if (this._mutObserver) { this._mutObserver.disconnect(); this._mutObserver = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._debounceTimer) { clearTimeout(this._debounceTimer); this._debounceTimer = null; }
@@ -414,27 +404,10 @@ window.DendroRenderer = {
     });
     this._resizeObserver.observe(wrapper);
 
-    // --- DEBUG: MutationObserver to detect unexpected DOM changes ---
-    this._mutObserver = new MutationObserver((mutations) => {
-      const childChanges = mutations.filter(m => m.type === 'childList');
-      if (childChanges.length > 0) {
-        const removedCount = childChanges.reduce((n, m) => n + m.removedNodes.length, 0);
-        const addedCount = childChanges.reduce((n, m) => n + m.addedNodes.length, 0);
-        if (removedCount > 5) {
-          console.warn(`[Dendro.MutObserver] Major DOM change: +${addedCount} -${removedCount} nodes`, new Error().stack?.split('\n').slice(1,4).map(s=>s.trim()));
-        }
-      }
-    });
-    this._mutObserver.observe(this._g.node(), { childList: true, subtree: true });
   },
 
   _renderTree() {
     if (!this._g || !this._treeData) return;
-
-    // --- DEBUG: trace re-render cause ---
-    const arrivedSnapshot = [...this._arrived];
-    const patternsBefore = this._defs ? this._defs.node().querySelectorAll('pattern[id^="dendro-thumb-"]').length : 0;
-    console.log(`[Dendro._renderTree] START — arrived=(${arrivedSnapshot.length}), patterns_before=${patternsBefore}`, new Error().stack?.split('\n').slice(1,4).map(s=>s.trim()));
 
     // Clear previous tree content
     this._g.selectAll('*').remove();
@@ -752,11 +725,6 @@ window.DendroRenderer = {
         showBadgeDetail(d.data._badge.employeeId, d.data._badge.name);
       });
 
-    // --- DEBUG: summary at end of render ---
-    const patternsAfter = this._defs ? this._defs.node().querySelectorAll('pattern[id^="dendro-thumb-"]').length : 0;
-    const awaitingCount = this._g.node().querySelectorAll('circle.dendro-awaiting').length;
-    const photoCount = this._g.node().querySelectorAll('circle[fill^="url(#dendro-thumb-"]').length;
-    console.log(`[Dendro._renderTree] END — patterns=${patternsAfter}, awaiting=${awaitingCount}, photos=${photoCount}`);
   },
 
   _autoFit(wrapper) {
