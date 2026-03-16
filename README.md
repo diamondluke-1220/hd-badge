@@ -28,23 +28,14 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
   - **Arcade Select** [4] — fighting game character select grid with RPG stats and VS screen
 
 **Live Show Features**
-- Presentation mode (`/presentation` route) — band intro sequence, auto-rotating views (90s timer), chyron ticker
-- SSE real-time badge events (new hires appear live on the org chart projector)
-- Stock ticker banner with corporate parody stats
-- Terminal onboarding animation (CLI-style new hire sequence)
-- Spotlight mode (newest badge highlighted with glow)
-- CSS donut chart (department distribution)
-- Demo mode (5-100 test badges, configurable duration)
+- Presentation mode (`/presentation`) — band intro, auto-rotating views (grid → dendro → arcade, 90s each), chyron ticker
+- SSE real-time badge events, stock ticker, terminal onboarding animation, spotlight mode
+- CSS donut chart (department distribution), demo mode (5-100 test badges)
 
 **Admin (HR Dashboard)**
-- Bearer token auth (`bearerAuth()`) with rate limiting (5 fails = 15min lockout)
-- Content Security Policy (CSP) headers
-- Search, filters (date range, division, department, photo, status)
-- Payment + print tracking (Venmo manual workflow)
-- Content flagging system (two-tier profanity filter)
-- Analytics dashboard and CSV export
-- Photo upload with crop tool for band member badges
-- Localhost-only mode for WiFi kiosk security
+- Bearer token auth with rate limiting (5 fails = 15min lockout), CSP headers, localhost-only option
+- Search, filters, payment/print tracking, content flagging (two-tier profanity filter)
+- Analytics dashboard, CSV export, band member photo management
 
 ## Tech Stack
 
@@ -54,7 +45,7 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - **Badge Rendering:** [Playwright](https://playwright.dev) (server-side, headless Chromium)
 - **Thumbnails:** [sharp](https://sharp.pixelplumbing.com)
 - **Visualizations:** [D3.js](https://d3js.org) (dendrogram tree view)
-- **Client-side:** Vanilla JS, html2canvas (download only), Cropper.js
+- **Client-side:** Vanilla JS, Cropper.js, html2canvas (PNG download fallback)
 - **CI/CD:** GitHub Actions → ghcr.io → Docker (Unraid)
 
 ## Quick Start
@@ -110,8 +101,10 @@ docker pull ghcr.io/diamondluke-1220/hd-badge:latest
 
 ```
 src/
-  server.ts          # Hono server, routes, SSE
-  db.ts              # SQLite schema, queries, migrations
+  server.ts          # Hono server, routes, SSE, captive portal
+  db.ts              # SQLite schema, queries, migrations, band member seeding
+  demo.ts            # Demo mode (test badge generation, cleanup)
+  logger.ts          # Ring buffer logger (200 entries, categories)
   presentation.ts    # Presentation mode state machine + endpoints
   profanity.ts       # Two-tier content filter
   rate-limit.ts      # IP-based rate limiting
@@ -120,14 +113,17 @@ public/
   admin.html         # HR Dashboard
   presentation.html  # Projector display for live shows
   table-tent.html    # Printable merch table card with QR codes
-  js/app.js          # Badge editor, SSE, ticker, terminal, shared state
-  js/view-grid.js    # Grid renderer (default)
-  js/view-reviewboard.js # AI Review renderer (split-flap text grid)
-  js/view-dendro.js    # D3 dendrogram renderer
-  js/view-arcade.js    # Arcade Select renderer
-  js/arcade-stats.js   # RPG stat generation
+  js/app.js            # Badge editor, SSE, ticker, terminal, view switching
+  js/badge-render.js   # Badge DOM rendering (departments, titles, waveforms, access levels)
+  js/shared.js         # Shared constants and utilities across views
+  js/badge-pool.js     # Badge data pool for view renderers
+  js/view-grid.js      # Grid view (default, odometer counter)
+  js/view-reviewboard.js # AI Review (split-flap text grid, headshot tiles)
+  js/view-dendro.js    # D3 dendrogram tree view
+  js/view-arcade.js    # Arcade fighting game select view
   js/presentation.js   # Presentation mode client
-  css/               # App styles, badge styles, theme overrides
+  js/presentation-shims.js # Shims for presentation route compatibility
+  css/               # App styles, badge styles, view-specific styles
   lib/               # Vendored deps (d3, html2canvas, cropper, qrcode)
   fonts/             # Self-hosted web fonts (Barlow, Inter, JetBrains Mono, Orbitron, Press Start 2P)
 data/                # Runtime data (gitignored)
