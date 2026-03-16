@@ -31,12 +31,17 @@ window.ArcadeRenderer = {
     'WELCOME TO THE CORPORATE ARENA',
     'MAY YOUR UPTIME BE ETERNAL',
     'CTRL+ALT+DEFEAT',
+    'YOUR TIMESHEET IS DUE',
+    'THE PTO REQUEST HAS BEEN DENIED',
+    'SYNERGY LEVELS CRITICAL',
+    'PLEASE HOLD FOR THE NEXT COMBATANT',
+    'WE GOT A RED ALERT',
   ],
 
   // Boss creatures for VS battles — "Corporate Dread" illustrated art
   _CREATURES: [
     { name: 'The Phantom Printer', tagline: 'PC LOAD LETTER.', move: 'PAPER JAM OF DOOM', imageUrl: '/images/arcade/phantom-printer.png' },
-    { name: 'The Network Wizard', tagline: 'Wireless or Wired?', move: 'PACKET STORM', imageUrl: '/images/arcade/network-wizard.png' },
+    { name: 'The Network Wizard', tagline: "It's always DNS.", move: 'PACKET STORM', imageUrl: '/images/arcade/network-wizard.png' },
     { name: 'Watercooler Will', tagline: 'Oh hey, quick question...', move: 'ENDLESS ANECDOTE', imageUrl: '/images/arcade/watercooler-will.png' },
     { name: 'HR Nancy', tagline: 'Just a quick mandatory training.', move: 'COMPLIANCE LOCKDOWN', imageUrl: '/images/arcade/hr-nancy.png' },
     { name: 'The Dirty Microwave', tagline: 'WHO LEFT FISH IN HERE?!', move: 'HAZMAT EXPLOSION', imageUrl: '/images/arcade/dirty-microwave.png' },
@@ -69,15 +74,39 @@ window.ArcadeRenderer = {
     'HD-00005': 'LOW END THEORY',
   },
 
-  // Boss trash-talk lines
-  _BOSS_TAGLINES: [
+  // Per-boss trash-talk lines (keyed by employee ID)
+  _BOSS_TAGLINES: {
+    'HD-00001': [ // Luke — Chief Escalation Officer
+      "I'm escalating this to ME.",
+      "Your ticket has been reassigned.",
+      "Priority: you losing.",
+      "Help desk, please hold.",
+    ],
+    'HD-00002': [ // Drew — Chief Audio Architect
+      "You're about to get feedback.",
+      "I don't like your tone.",
+      "This mix needs more pain.",
+    ],
+    'HD-00003': [ // Henry — Chief Impact Officer
+      "I hit things for a living.",
+      "Brace for impact.",
+      "That's gonna leave a mark.",
+    ],
+    'HD-00004': [ // Todd — VP of Power Distribution
+      "I control the power here.",
+      "Your access has been revoked.",
+      "Lights out.",
+    ],
+    'HD-00005': [ // Adam — VP of Bottom Line Operations
+      "The bottom line is you lose.",
+      "This is non-negotiable.",
+      "Check the budget. You're cut.",
+    ],
+  },
+  _BOSS_TAGLINES_FALLBACK: [
     "You're not even on the org chart.",
-    "I approve your termination.",
-    "Check your email. HR meeting.",
     "Your badge has been deactivated.",
-    "I own this department.",
     "My calendar says you're fired.",
-    "Welcome to your exit interview.",
   ],
 
   // Employee defeat lines (when boss/creature wins)
@@ -88,8 +117,15 @@ window.ArcadeRenderer = {
     'MANDATORY OVERTIME ACTIVATED',
     'MOVED TO AN OPEN FLOOR PLAN',
     'DEMOTED TO INTERN STATUS',
-    'PERFORMANCE REVIEW: UNSATISFACTORY',
+    'SENT TO GET EVERYONE COFFEE',
     'TRANSFERRED TO NIGHT SHIFT',
+    'NOW ON UNPTO',
+    'FRIDAY JEANS ACCESS REVOKED',
+    'ADDED TO THE PIP',
+    'PARKING SPOT REASSIGNED',
+    'WELCOME TO YOUR EXIT INTERVIEW',
+    'INSTALLING 1 OF 1000 UPDATES',
+    "YOU CAN'T QUIT, YOU'RE FIRED",
   ],
 
   // Stage backgrounds for VS overlay only
@@ -673,7 +709,7 @@ window.ArcadeRenderer = {
         photoUrl: snesPortrait || fallbackUrl,
         fallbackPhotoUrl: snesPortrait ? fallbackUrl : null,
         className: boss.title || 'BOSS',
-        tagline: this._BOSS_TAGLINES[Math.floor(Math.random() * this._BOSS_TAGLINES.length)],
+        tagline: this._pickBossTagline(boss.employeeId),
         move: this._BOSS_MOVES[boss.employeeId] || 'EXECUTIVE ORDER',
       };
     } else if (roll < 0.75) {
@@ -948,7 +984,7 @@ window.ArcadeRenderer = {
             loseResult.className = 'arcade-vs-side-result arcade-vs-side-result-lose';
             loseResult.innerHTML = `
               <div class="arcade-vs-defeat-label">DEFEATED</div>
-              <div class="arcade-vs-victory-text arcade-vs-defeat-text">${this._getDefeatText()}</div>
+              <div class="arcade-vs-victory-text arcade-vs-defeat-text">${this._getDefeatText(opponent)}</div>
             `;
             rightSide.appendChild(loseResult);
             requestAnimationFrame(() => loseResult.classList.add('reveal'));
@@ -1084,29 +1120,34 @@ window.ArcadeRenderer = {
   _FIGHT_LINES_EVEN: [
     'TRADING BLOWS!',
     'NEITHER WILL BACK DOWN!',
-    'AN EVEN MATCH!',
     'WHAT A BATTLE!',
+    "THEY'RE CC'ING EVERYONE!",
+    'PASSIVE-AGGRESSIVE EMAILS FLYING!',
+    'DUELING CALENDAR INVITES!',
   ],
 
   _FIGHT_LINES_WINNING: [
     'TAKING CONTROL!',
     'GAINING THE UPPER HAND!',
-    'DOMINATING!',
-    'ON THE OFFENSIVE!',
+    'ESCALATING TO MANAGEMENT!',
+    'FILING A COUNTER-COMPLAINT!',
+    'REPLY-ALL OF DOOM!',
   ],
 
   _FIGHT_LINES_RALLY: [
     'WAIT... A COMEBACK?!',
-    'REFUSING TO GO DOWN!',
-    'DIGGING DEEP!',
     'NOT DONE YET!',
+    'SUBMITTED A REBUTTAL!',
+    'CITING THE EMPLOYEE HANDBOOK!',
+    'EMERGENCY PTO DENIED!',
   ],
 
   _FIGHT_LINES_FINISH: [
     'THIS IS IT!',
     'THE FINAL BLOW!',
-    'IT\'S OVER!',
-    'DOWN FOR THE COUNT!',
+    "IT'S OVER!",
+    'MEETING ADJOURNED!',
+    'TICKET CLOSED!',
   ],
 
   _animateFight(overlay, winner, badge, opponent, empColor, oppColor, setVSAnnouncer) {
@@ -1525,14 +1566,51 @@ window.ArcadeRenderer = {
     }
   },
 
+  _pickBossTagline(employeeId) {
+    const pool = this._BOSS_TAGLINES[employeeId] || this._BOSS_TAGLINES_FALLBACK;
+    return pool[Math.floor(Math.random() * pool.length)];
+  },
+
   _getVictoryText(opponent) {
-    if (opponent.type === 'boss') return 'PROMOTION INCOMING';
-    if (opponent.type === 'creature') return 'THREAT NEUTRALIZED';
-    if (opponent.type === 'employee') return 'MANAGEMENT WINS AGAIN';
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    if (opponent.type === 'boss') return pick([
+      'PROMOTION INCOMING',
+      'CORNER OFFICE UNLOCKED',
+      'YOU JUST MADE PARTNER',
+      'EXPENSE ACCOUNT APPROVED',
+    ]);
+    if (opponent.type === 'creature') return pick([
+      'INCIDENT TICKET CLOSED',
+      'HELP DESK: 1, CHAOS: 0',
+      'PROBLEM RESOLVED',
+      'SERVICE RESTORED',
+    ]);
+    if (opponent.type === 'employee') return pick([
+      'MANAGEMENT WINS AGAIN',
+      'BACK TO YOUR DESK',
+      'HR HAS BEEN NOTIFIED',
+    ]);
     return 'THE INTERN HAS BEEN DEFEATED. AGAIN.';
   },
 
-  _getDefeatText() {
+  // Creature-specific defeat lines (when employee beats a creature)
+  _CREATURE_DEFEAT_LINES: {
+    'The Phantom Printer': ['OUT OF TONER', 'UNPLUGGED', 'PAPER JAMMED FOREVER'],
+    'The Network Wizard': ['CONNECTION TERMINATED', 'PING TIMED OUT', 'CABLE UNPLUGGED'],
+    'Watercooler Will': ['FINALLY STOPPED TALKING', 'MEETING ADJOURNED', 'PUT ON MUTE'],
+    'HR Nancy': ['TRAINING CANCELLED', 'COMPLIANCE WAIVED', 'FORM REJECTED'],
+    'The Dirty Microwave': ['SCRUBBED CLEAN', 'SENT TO HAZMAT', 'UNPLUGGED FOR GOOD'],
+    'The MFA Guardian': ['CODE ACCEPTED', 'ACCESS GRANTED', 'AUTHENTICATION BYPASSED'],
+    'The Consultant': ['CONTRACT TERMINATED', 'INVOICE DENIED', "YOUR JOB'S BEEN OUTSOURCED"],
+  },
+
+  _getDefeatText(opponent) {
+    // If a creature was defeated by the employee, use creature-specific lines
+    if (opponent && opponent.type === 'creature' && this._CREATURE_DEFEAT_LINES[opponent.name]) {
+      const pool = this._CREATURE_DEFEAT_LINES[opponent.name];
+      return pool[Math.floor(Math.random() * pool.length)];
+    }
+    // Employee defeat (boss/creature won)
     return this._EMPLOYEE_DEFEAT_LINES[Math.floor(Math.random() * this._EMPLOYEE_DEFEAT_LINES.length)];
   },
 
