@@ -59,7 +59,7 @@ body.view-arcade .view-switcher-bar {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: 1100;
 }
 
 body.view-arcade .public-orgchart {
@@ -229,7 +229,7 @@ body.view-arcade .public-orgchart {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: top center;
+  object-position: center 25%;
   display: block;
 }
 
@@ -319,8 +319,8 @@ body.view-arcade .public-orgchart {
    ============================================================ */
 
 .arcade-slot {
-  width: 56px;
-  height: 68px;
+  width: 120px;
+  height: 146px;
   border: 2px solid #2a2a3a;
   cursor: pointer;
   display: flex;
@@ -495,12 +495,12 @@ body.view-arcade .public-orgchart {
 
 /* Darken phase: BG transitions from foreground to background */
 .arcade-vs-overlay.bg-darken .arcade-vs-bg {
-  filter: brightness(0.7) saturate(0.8);
+  filter: brightness(0.8) saturate(0.85);
   transition: filter 1.2s ease-in;
 }
 
 .arcade-vs-overlay.bg-darken .arcade-vs-bg-darken {
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.35);
 }
 
 /* ── Stage Backgrounds (reused from original, loaded in VS only) ── */
@@ -510,6 +510,89 @@ body.view-arcade .public-orgchart {
 .arcade-bg-front-entrance { background-image: url('/images/arcade/backgrounds/front-lobby.jpg'); }
 .arcade-bg-meeting-room { background-image: url('/images/arcade/backgrounds/meeting-room.jpg'); }
 .arcade-bg-cubicle-farm { background-image: url('/images/arcade/backgrounds/cubicle-farm.jpg'); }
+
+/* ── Stage Ambient Effects (on darken layer so they render above the dim) ── */
+
+.arcade-vs-bg-darken[data-stage="server-room"]::after,
+.arcade-vs-bg-darken[data-stage="network-closet"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(4px 4px at 12% 30%, #00ff41, transparent 8px),
+    radial-gradient(4px 4px at 14% 45%, #ff3333, transparent 8px),
+    radial-gradient(4px 4px at 88% 25%, #00ff41, transparent 8px),
+    radial-gradient(4px 4px at 86% 50%, #ffcc00, transparent 8px),
+    radial-gradient(4px 4px at 10% 65%, #00ff41, transparent 8px),
+    radial-gradient(4px 4px at 90% 70%, #ff3333, transparent 8px),
+    radial-gradient(4px 4px at 15% 80%, #ffcc00, transparent 8px),
+    radial-gradient(4px 4px at 85% 38%, #00ff41, transparent 8px),
+    radial-gradient(3px 3px at 50% 28%, #00ff41, transparent 6px),
+    radial-gradient(3px 3px at 52% 62%, #ff3333, transparent 6px);
+  animation: serverLEDs 2s step-end infinite;
+  pointer-events: none;
+}
+
+.arcade-vs-bg-darken[data-stage="network-closet"]::after {
+  animation-duration: 1.5s;
+}
+
+.arcade-vs-bg-darken[data-stage="break-room"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* Vending machine panel glow — left side */
+    radial-gradient(ellipse 40px 80px at 12% 55%, rgba(50, 180, 255, 0.12), transparent),
+    radial-gradient(ellipse 35px 70px at 14% 50%, rgba(50, 180, 255, 0.08), transparent),
+    /* Vending machine panel glow — right side */
+    radial-gradient(ellipse 36px 72px at 88% 52%, rgba(255, 80, 80, 0.10), transparent),
+    radial-gradient(ellipse 30px 60px at 86% 48%, rgba(255, 80, 80, 0.07), transparent),
+    /* Coffee pot indicator light */
+    radial-gradient(6px 6px at 45% 68%, #ff4400, transparent 10px),
+    /* Coffee percolation bubbles */
+    radial-gradient(4px 4px at 44% 62%, rgba(180, 120, 60, 0.25), transparent 6px),
+    radial-gradient(3px 3px at 46% 58%, rgba(180, 120, 60, 0.20), transparent 5px),
+    radial-gradient(3px 3px at 43% 55%, rgba(180, 120, 60, 0.15), transparent 5px);
+  animation: vendingGlow 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.arcade-vs-bg-darken[data-stage="meeting-room"]::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: 20%;
+  width: 60%;
+  height: 45%;
+  background: radial-gradient(ellipse at center, rgba(100, 140, 255, 0.12), transparent 70%);
+  animation: projectorFlicker 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.arcade-vs-bg-darken[data-stage="front-entrance"]::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 30%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  animation: lightSweep 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.arcade-vs-bg-darken[data-stage="cubicle-farm"]::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 20%;
+  background: linear-gradient(180deg, rgba(200, 220, 255, 0.15), transparent);
+  animation: fluorescentHum 5s ease-in-out infinite;
+  pointer-events: none;
+}
 
 /* ============================================================
    VS SIDES — portraits that slide in
@@ -540,17 +623,60 @@ body.view-arcade .public-orgchart {
   transition: none;
 }
 
-/* Beat 2: employee slides in — stops 25% closer to center */
+/* Opponent silhouette placeholder — visible before right-enter */
+.arcade-vs-opponent-pending {
+  position: absolute;
+  right: 15%;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.arcade-vs-overlay.left-enter .arcade-vs-opponent-pending {
+  opacity: 1;
+}
+
+.arcade-vs-overlay.right-enter .arcade-vs-opponent-pending {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.arcade-vs-opponent-pending-icon {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(64px, 8vw, 110px);
+  color: rgba(255, 255, 255, 0.2);
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.1);
+  animation: pendingPulse 1.2s ease-in-out infinite;
+}
+
+.arcade-vs-opponent-pending-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.3vw, 16px);
+  color: rgba(255, 204, 0, 0.6);
+  margin-top: 16px;
+  letter-spacing: 2px;
+  animation: pendingPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pendingPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* Beat 2: employee slides in — stops 15% closer to center */
 .arcade-vs-overlay.left-enter .arcade-vs-left {
-  transform: translateX(25%);
+  transform: translateX(15%);
   opacity: 1;
   transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
               opacity 0.3s ease;
 }
 
-/* Beat 4: boss slides in — stops 25% closer to center */
+/* Beat 4: boss slides in — stops 15% closer to center */
 .arcade-vs-overlay.right-enter .arcade-vs-right {
-  transform: translateX(-25%);
+  transform: translateX(-15%);
   opacity: 1;
   transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1),
               opacity 0.3s ease;
@@ -582,25 +708,36 @@ body.view-arcade .public-orgchart {
   color: var(--side-color, #ffffff);
   margin-top: 12px;
   text-transform: uppercase;
-  text-shadow: 0 0 10px currentColor;
+  text-shadow: 0 0 10px currentColor, 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 .arcade-vs-fighter-class {
   font-family: 'Roboto Condensed', sans-serif;
   font-weight: 700;
   font-size: clamp(12px, 1.3vw, 16px);
-  color: #aaaabb;
+  color: #ccccdd;
   margin-top: 6px;
   text-transform: uppercase;
   letter-spacing: 1.5px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.5);
 }
 
 /* Defeated side dims */
 .arcade-vs-side.defeated {
-  opacity: 0.35;
-  filter: grayscale(0.6) sepia(0.3) hue-rotate(-30deg);
-  transition: opacity 0.5s ease, filter 0.5s ease;
+  transition: filter 0.5s ease;
 }
+
+.arcade-vs-side.defeated .arcade-vs-portrait-wrap {
+  filter: grayscale(0.7) brightness(0.3);
+  transition: filter 0.5s ease;
+}
+
+.arcade-vs-side.defeated .arcade-vs-fighter-name,
+.arcade-vs-side.defeated .arcade-vs-fighter-class {
+  filter: grayscale(0.7) brightness(0.35);
+  transition: filter 0.5s ease;
+}
+
 
 /* ── New Hire VS entrance — spin-in + NEW banner + fireworks ── */
 
@@ -678,18 +815,10 @@ body.view-arcade .public-orgchart {
   left: 50%;
   width: 6px;
   transform: translateX(-50%) skewX(-6deg);
-  background: linear-gradient(to bottom,
-    transparent 2%,
-    rgba(255, 204, 0, 0.4) 8%,
-    #ffcc00 20%,
-    #ffffff 50%,
-    #ffcc00 80%,
-    rgba(255, 204, 0, 0.4) 92%,
-    transparent 98%
-  );
+  background: linear-gradient(to bottom, #ffcc00, #ffffff 50%, #ffcc00);
   box-shadow:
-    0 0 16px rgba(255, 204, 0, 0.6),
-    0 0 40px rgba(255, 204, 0, 0.25),
+    0 0 16px rgba(255, 204, 0, 0.5),
+    0 0 40px rgba(255, 255, 255, 0.2),
     -3px 0 12px rgba(255, 204, 0, 0.15),
     3px 0 12px rgba(255, 204, 0, 0.15);
   opacity: 0;
@@ -783,12 +912,14 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-quote-bubble {
   position: absolute;
-  bottom: 10%;
-  left: 70%;
-  transform: translateX(-50%) translateY(8px) scale(0.95);
+  bottom: 8%;
+  right: 5%;
+  transform: translateY(8px) scale(0.95);
   z-index: 15;
-  font-family: 'Press Start 2P', monospace;
-  font-size: clamp(12px, 1.4vw, 16px);
+  font-family: 'Roboto Condensed', sans-serif;
+  font-size: clamp(18px, 2.2vw, 26px);
+  font-style: italic;
+  font-weight: 500;
   color: #1a1a2a;
   padding: 14px 28px;
   background: #ffffff;
@@ -812,7 +943,7 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-quote-bubble.visible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
+  transform: translateY(0) scale(1);
   transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.0, 0.0, 0.2, 1);
 }
 
@@ -848,10 +979,10 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-hp-label {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(7px, 0.9vw, 10px);
+  font-size: clamp(9px, 1.1vw, 13px);
   color: #ffffff;
   margin-bottom: 4px;
-  text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.5);
 }
 
 .arcade-vs-hp-right .arcade-vs-hp-label {
@@ -860,7 +991,7 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-hp-track {
   width: 100%;
-  height: 18px;
+  height: 24px;
   background: #1a1a2a;
   border: 2px solid #3a3a4a;
   overflow: hidden;
@@ -950,10 +1081,10 @@ body.view-arcade .public-orgchart {
   right: 0;
   text-align: center;
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(10px, 1.4vw, 16px);
+  font-size: clamp(14px, 2vw, 22px);
   color: #ffcc00;
-  text-shadow: 0 0 8px rgba(255, 204, 0, 0.6);
-  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(255, 204, 0, 0.6), 0 0 20px rgba(255, 204, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.9);
+  letter-spacing: 2px;
   z-index: 15;
 }
 
@@ -981,8 +1112,9 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-winner-label {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(10px, 1.2vw, 14px);
+  font-size: clamp(12px, 1.6vw, 18px);
   color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.5);
 }
 
 .arcade-vs-winner-name {
@@ -994,7 +1126,7 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-victory-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(8px, 1vw, 12px);
+  font-size: clamp(10px, 1.3vw, 16px);
   color: #00ff41;
   margin-top: 8px;
   text-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
@@ -1003,6 +1135,25 @@ body.view-arcade .public-orgchart {
 .arcade-vs-defeat-text {
   color: #ff3366;
   text-shadow: 0 0 8px rgba(255, 51, 102, 0.6);
+}
+
+/* Side-anchored result cards — winner under winner, loser under loser */
+.arcade-vs-side-result {
+  margin-top: 12px;
+  text-align: center;
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.arcade-vs-side-result.reveal {
+  animation: resultSlam 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.arcade-vs-defeat-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.3vw, 15px);
+  color: #ff3366;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 12px rgba(255, 51, 102, 0.4);
 }
 
 /* ============================================================
@@ -1045,13 +1196,17 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-ko-text {
   position: absolute;
-  top: 50%;
+  top: 40%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0);
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(20px, 3vw, 36px);
-  color: #ff3333;
-  text-shadow: 0 0 12px #ff0000, 0 2px 0 #990000;
+  font-size: clamp(24px, 4vw, 44px);
+  color: #ff1a1a;
+  text-shadow:
+    0 0 16px #ff0000,
+    0 0 40px rgba(255, 0, 0, 0.8),
+    0 0 80px rgba(255, 0, 0, 0.4),
+    0 3px 0 #880000;
   z-index: 10;
   pointer-events: none;
   animation: koSlam 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
@@ -1165,11 +1320,211 @@ body.view-arcade .public-orgchart {
     0 0 24px rgba(255, 204, 0, 0.4);
   letter-spacing: 1px;
   min-height: 24px;
+  transition: font-size 0.3s ease;
+}
+
+.arcade-announcer-text.blink {
+  animation: insertCoin 0.8s step-end infinite;
+}
+
+.arcade-announcer-text.announcer-large {
+  font-size: clamp(16px, 2.8vw, 28px);
+  letter-spacing: 3px;
+  text-shadow:
+    0 0 12px #ffcc00,
+    0 0 32px rgba(255, 204, 0, 0.5),
+    0 0 48px rgba(255, 204, 0, 0.25);
+}
+
+/* ============================================================
+   CURSOR TICK PULSE
+   ============================================================ */
+
+.arcade-announcer-text.tick-pulse {
+  animation: cursorTickPulse 0.1s ease-out;
+}
+
+/* ============================================================
+   WINNER CONFETTI
+   ============================================================ */
+
+.arcade-confetti-particle {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 1;
+  animation: confettiBurst 2.5s ease-out forwards;
+}
+
+/* ============================================================
+   BOSS SPECIAL MOVE — charge buildup + release + attack particles
+   ============================================================ */
+
+/* Phase 1: Charging buildup (~900ms before release) — text grows + glows */
+.arcade-vs-fighter-class.special-move-charging {
+  color: #ffffff;
+  text-shadow:
+    0 0 8px var(--side-color, #D4A843),
+    0 0 16px var(--side-color, #D4A843),
+    0 0 28px rgba(255, 200, 50, 0.3);
+  animation: specialMoveCharge 0.3s ease-in-out infinite, specialMoveChargeGrow 1.6s ease-in forwards;
+  transform-origin: center;
+}
+
+.arcade-vs-portrait-wrap.special-move-charge-aura {
+  box-shadow:
+    0 0 20px var(--side-color, #D4A843),
+    0 0 40px rgba(255, 200, 50, 0.3),
+    inset 0 0 20px rgba(255, 200, 50, 0.1);
+  animation: specialMoveChargeAura 1.6s ease-in forwards;
+}
+
+/* Phase 2: Release — text turns solid accent color + big glow burst */
+.arcade-vs-fighter-class.special-move-highlight {
+  color: var(--side-color, #D4A843);
+  text-shadow:
+    0 0 16px var(--side-color, #D4A843),
+    0 0 32px var(--side-color, #D4A843),
+    0 0 48px var(--side-color, #D4A843),
+    0 0 64px rgba(255, 255, 255, 0.3);
+  animation: specialMoveGlow 1.5s ease-out;
+  transform-origin: center;
+}
+
+.arcade-vs-side.special-move-windup {
+  animation: specialMoveShake 0.6s ease-out;
+}
+
+/* Lightning bolt effect for boss special move */
+.arcade-lightning {
+  position: absolute;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  z-index: 25;
+  pointer-events: none;
+  animation: lightningFlicker 0.3s ease-out forwards;
+}
+
+.arcade-vs-overlay.lightning-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 24;
+  pointer-events: none;
+  animation: lightningScreenFlash 0.15s ease-out forwards;
 }
 
 /* ============================================================
    ANIMATIONS
    ============================================================ */
+
+@keyframes cursorTickPulse {
+  0% {
+    text-shadow: 0 0 8px #ffcc00, 0 0 24px rgba(255, 204, 0, 0.4), 0 0 40px rgba(255, 204, 0, 0.6);
+    border-bottom: 2px solid rgba(255, 204, 0, 0.8);
+  }
+  100% {
+    text-shadow: 0 0 8px #ffcc00, 0 0 24px rgba(255, 204, 0, 0.4);
+    border-bottom: 2px solid transparent;
+  }
+}
+
+@keyframes confettiBurst {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-320px) translateX(var(--confetti-drift, 0px)) rotate(var(--confetti-spin, 360deg)) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes specialMoveCharge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes specialMoveChargeGrow {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.3); }
+}
+
+@keyframes specialMoveChargeAura {
+  0% {
+    box-shadow: 0 0 4px rgba(255, 200, 50, 0.1);
+  }
+  60% {
+    box-shadow:
+      0 0 24px var(--side-color, #D4A843),
+      0 0 48px rgba(255, 200, 50, 0.4),
+      inset 0 0 16px rgba(255, 200, 50, 0.15);
+  }
+  100% {
+    box-shadow:
+      0 0 40px var(--side-color, #D4A843),
+      0 0 80px rgba(255, 200, 50, 0.5),
+      inset 0 0 24px rgba(255, 200, 50, 0.2);
+  }
+}
+
+@keyframes specialMoveGlow {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.35); }
+  30% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes specialMoveShake {
+  0%, 100% { transform: translateX(0); }
+  10% { transform: translateX(8px); }
+  20% { transform: translateX(-8px); }
+  30% { transform: translateX(6px); }
+  40% { transform: translateX(-6px); }
+  50% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  70% { transform: translateX(2px); }
+}
+
+@keyframes lightningFlicker {
+  0% { opacity: 1; }
+  30% { opacity: 0.6; }
+  50% { opacity: 1; }
+  70% { opacity: 0.4; }
+  100% { opacity: 0; }
+}
+
+@keyframes lightningScreenFlash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Music note barrage for band member special moves */
+.arcade-music-note {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  font-family: serif;
+  text-shadow: 0 0 8px currentColor, 0 0 20px currentColor;
+  transform: scale(var(--note-scale, 1));
+  animation: musicNoteFly 0.5s ease-out forwards;
+}
+
+@keyframes musicNoteFly {
+  0% {
+    transform: scale(var(--note-scale, 1)) translateX(0) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  40% { opacity: 1; }
+  100% {
+    transform: scale(var(--note-scale, 1)) translateX(var(--travel-x)) translateY(var(--drift-y)) rotate(-20deg);
+    opacity: 0;
+  }
+}
 
 @keyframes insertCoin {
   0%, 49% { opacity: 1; }
@@ -1184,6 +1539,44 @@ body.view-arcade .public-orgchart {
 @keyframes neonFlicker {
   0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; }
   20%, 24%, 55% { opacity: 0.6; }
+}
+
+/* ── Stage Ambient Keyframes ── */
+
+@keyframes serverLEDs {
+  0% { opacity: 0.7; }
+  25% { opacity: 1; }
+  50% { opacity: 0.5; }
+  75% { opacity: 0.9; }
+  100% { opacity: 0.7; }
+}
+
+@keyframes vendingGlow {
+  0%, 100% { opacity: 0.6; }
+  30% { opacity: 1; }
+  50% { opacity: 0.75; }
+  70% { opacity: 0.95; }
+}
+
+@keyframes projectorFlicker {
+  0%, 100% { opacity: 0.6; }
+  30% { opacity: 1; }
+  32% { opacity: 0.3; }
+  34% { opacity: 0.9; }
+  70% { opacity: 0.7; }
+}
+
+@keyframes lightSweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes fluorescentHum {
+  0%, 100% { opacity: 0.5; }
+  48% { opacity: 0.7; }
+  50% { opacity: 0.2; }
+  52% { opacity: 0.8; }
+  80% { opacity: 0.6; }
 }
 
 /* ============================================================
@@ -1210,6 +1603,9 @@ body.view-arcade .public-orgchart {
   .arcade-vs-hp-fill { transition: none; }
   .arcade-vs-result { transition: none; }
   .arcade-vs-result.reveal { animation: none; opacity: 1; transform: none; }
+  .arcade-vs-side-result.reveal { animation: none; opacity: 1; transform: none; }
+  .arcade-vs-opponent-pending-icon { animation: none; }
+  .arcade-vs-opponent-pending-text { animation: none; }
   .arcade-vs-fight-flash { display: none; }
   .arcade-vs-ko-text { animation: none; transform: translate(-50%, -50%) scale(1); opacity: 1; }
   .arcade-vs-round-text { display: none; }
@@ -1222,6 +1618,17 @@ body.view-arcade .public-orgchart {
   .arcade-vs-overlay.new-hire .arcade-vs-left .arcade-vs-portrait-wrap { animation: none; }
   .arcade-vs-new-badge { animation: none; }
   .arcade-vs-firework { animation: none; display: none; }
+  /* Disable ambient stage effects */
+  .arcade-vs-bg-darken::after { animation: none; display: none; }
+  /* Disable new animation features */
+  .arcade-confetti-particle { animation: none; display: none; }
+  .arcade-lightning { animation: none; display: none; }
+  .arcade-music-note { animation: none; display: none; }
+  .arcade-vs-fighter-class.special-move-charging { animation: none; }
+  .arcade-vs-fighter-class.special-move-highlight { animation: none; }
+  .arcade-vs-portrait-wrap.special-move-charge-aura { animation: none; box-shadow: none; }
+  .arcade-vs-side.special-move-windup { animation: none; }
+  .arcade-announcer-text.tick-pulse { animation: none; }
 }
 
 .fx-off .arcade-slot { transition: none; }

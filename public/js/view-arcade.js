@@ -287,24 +287,25 @@ window.ArcadeRenderer = {
     const rosterHeight = roster.clientHeight - 24;
     const gap = 4;
 
-    // Target: fill the space with multiple rows
-    // Start at max size and shrink until we get good coverage
-    const minW = 56, minH = 68;  // current minimum
-    const maxW = 80, maxH = 96;  // max slot size
+    // Start large and shrink based on badge count
+    // Few badges = big portraits filling the grid, many = compact
+    const minW = 44, minH = 54;
+    const maxW = 120, maxH = 146;
 
-    let bestW = minW, bestH = minH;
+    let bestW = maxW, bestH = maxH;
 
     for (let w = maxW; w >= minW; w -= 4) {
-      const h = Math.round(w * (68 / 56)); // maintain aspect ratio
+      const h = Math.round(w * (146 / 120)); // maintain aspect ratio
       const cols = Math.floor((rosterWidth + gap) / (w + gap));
+      if (cols <= 0) continue;
       const rows = Math.ceil(badgeCount / cols);
       const totalHeight = rows * (h + gap) - gap;
 
-      if (cols > 0 && totalHeight <= rosterHeight * 1.2) {
+      // Accept this size if it fits within available height (with some overflow allowed)
+      if (totalHeight <= rosterHeight * 1.3) {
         bestW = w;
         bestH = h;
-        // Prefer more rows over fewer — keep going unless we're getting too small
-        if (rows >= 2) break;
+        break; // Take the largest size that fits
       }
     }
 
@@ -387,9 +388,12 @@ window.ArcadeRenderer = {
 
   // ─── Announcer ──────────────────────────────────────────────
 
-  _setAnnouncer(text) {
+  _setAnnouncer(text, { blink = false, large = false } = {}) {
     if (this._announcer) {
       this._announcer.textContent = text;
+      this._announcer.classList.remove('tick-pulse');
+      this._announcer.classList.toggle('blink', blink);
+      this._announcer.classList.toggle('announcer-large', large);
     }
   },
 
@@ -410,24 +414,16 @@ window.ArcadeRenderer = {
     this._rotationIndex = 0;
     this._rotationTick = 0;
 
-    // Start with cursor select on first badge
-    this._displayRotationBadge(this._shuffledBadges[0]);
+    // Show welcome text first, then begin selection after 3s
+    this._setAnnouncer('WELCOME TO THE CORPORATE ARENA', { blink: true, large: true });
 
-    // FX on: ~32s (cursor 7s + VS 25s). FX off: 3s quick cycling.
-    const interval = animationsEnabled() ? 32000 : 3000;
-    this._rotationTimer = setInterval(() => {
-      if (this._isArrivalActive || this._locked || this._isVSActive) return;
-      this._rotationTick++;
-      this._rotationIndex++;
-
-      if (this._rotationIndex >= this._shuffledBadges.length) {
-        this._shuffledBadges = this._shuffle(this._allBadges);
-        this._rotationIndex = 0;
-      }
-
+    const startDelay = animationsEnabled() ? 3000 : 0;
+    const startTid = setTimeout(() => {
+      this._setAnnouncer('', { blink: false, large: false });
+      // Go straight to VS matchup (cursor select → fight → breather chain)
       this._showVSMatchup();
-    }, interval);
-    this._intervals.push(this._rotationTimer);
+    }, startDelay);
+    this._timeouts.push(startTid);
   },
 
   _stopRotation() {
@@ -456,7 +452,7 @@ window.ArcadeRenderer = {
     this._intervals.push(this._rotationTimer);
   },
 
-  // ─── Cursor Selection Animation (6-8s, slowed) ──────────────
+  // ─── Cursor Selection Animation (~7s, progressive deceleration) ──────────────
 
   _animateCursorSelect(targetBadge, onLand) {
     const visibleSlots = [...this._container.querySelectorAll('.arcade-slot:not([style*="display: none"])')];
@@ -471,20 +467,24 @@ window.ArcadeRenderer = {
 
     this._setAnnouncer('SELECTING FIGHTER...');
 
-    // Build deceleration schedule: ~4.5s total (snappier feel)
+    // Build deceleration schedule: ~6.5s total (smooth deceleration, snappy finish)
     const steps = [];
     let t = 0;
 
-    // Phase 1: fast cycling (70ms intervals, 8 steps = 0.56s)
-    for (let i = 0; i < 8; i++) { steps.push(t); t += 70; }
-    // Phase 2: medium (140ms intervals, 6 steps = 0.84s)
-    for (let i = 0; i < 6; i++) { steps.push(t); t += 140; }
-    // Phase 3: slowing (250ms intervals, 5 steps = 1.25s)
-    for (let i = 0; i < 5; i++) { steps.push(t); t += 250; }
-    // Phase 4: crawling (400ms intervals, 3 steps = 1.2s)
-    for (let i = 0; i < 3; i++) { steps.push(t); t += 400; }
+    // Phase 1: rapid cycling (100ms intervals, 10 steps = 1.0s)
+    for (let i = 0; i < 10; i++) { steps.push(t); t += 100; }
+    // Phase 2: fast (150ms intervals, 8 steps = 1.2s)
+    for (let i = 0; i < 8; i++) { steps.push(t); t += 150; }
+    // Phase 3: easing (250ms intervals, 4 steps = 1.0s)
+    for (let i = 0; i < 4; i++) { steps.push(t); t += 250; }
+    // Phase 4: slowing (375ms intervals, 3 steps = 1.125s)
+    for (let i = 0; i < 3; i++) { steps.push(t); t += 375; }
+    // Phase 5: heavy (450ms intervals, 2 steps = 0.9s)
+    for (let i = 0; i < 2; i++) { steps.push(t); t += 450; }
+    // Phase 6: landing (525ms intervals, 2 steps = 1.05s)
+    for (let i = 0; i < 2; i++) { steps.push(t); t += 525; }
     // Final land
-    const landTime = t + 400;
+    const landTime = t + 500;
 
     const targetSlot = this._container.querySelector(`[data-employee-id="${targetBadge.employeeId}"]`);
     const totalSteps = steps.length;
@@ -508,6 +508,13 @@ window.ArcadeRenderer = {
         }
 
         slot.classList.add('cursor-active');
+
+        // Tick pulse on announcer bar
+        if (this._announcer) {
+          this._announcer.classList.remove('tick-pulse');
+          void this._announcer.offsetWidth; // force reflow to restart animation
+          this._announcer.classList.add('tick-pulse');
+        }
 
         // Pulse the matching division tab
         this._pulseDivisionTab(slot.dataset.division);
@@ -634,13 +641,30 @@ window.ArcadeRenderer = {
       return;
     }
 
+    // Stop interval timer — breather chain owns the loop from here
+    this._stopRotation();
+
     // Run cursor animation, then fire VS when it lands
     this._isVSActive = true;
     this._setAnnouncer('SELECTING FIGHTER...');
     this._animateCursorSelect(currentBadge, () => {
       this._animateVS(currentBadge, div).then(() => {
         this._isVSActive = false;
-        this._setAnnouncer(this._ANNOUNCER_LINES[Math.floor(Math.random() * this._ANNOUNCER_LINES.length)]);
+        // Blinking INSERT COIN style text during breather — immediately visible
+        this._setAnnouncer('WELCOME TO THE CORPORATE ARENA', { blink: true, large: true });
+
+        // Chain next matchup directly — breather owns the loop, no interval dependency
+        const breatherId = setTimeout(() => {
+          if (this._locked || this._isArrivalActive || this._isVSActive) return;
+          this._setAnnouncer('', { blink: false, large: false });
+          this._rotationIndex++;
+          if (this._rotationIndex >= this._shuffledBadges.length) {
+            this._shuffledBadges = this._shuffle(this._allBadges);
+            this._rotationIndex = 0;
+          }
+          this._showVSMatchup();
+        }, 4000);
+        this._timeouts.push(breatherId);
       });
     });
   },
@@ -745,7 +769,7 @@ window.ArcadeRenderer = {
       overlay.className = 'arcade-vs-overlay';
       overlay.innerHTML = `
         <div class="arcade-vs-bg arcade-bg-${bgName}"></div>
-        <div class="arcade-vs-bg-darken"></div>
+        <div class="arcade-vs-bg-darken" data-stage="${bgName}"></div>
 
         <div class="arcade-vs-slash"></div>
 
@@ -761,6 +785,11 @@ window.ArcadeRenderer = {
 
         <div class="arcade-vs-center">
           <div class="arcade-vs-text">VS</div>
+        </div>
+
+        <div class="arcade-vs-opponent-pending">
+          <div class="arcade-vs-opponent-pending-icon">?</div>
+          <div class="arcade-vs-opponent-pending-text">AWAITING OPPONENT</div>
         </div>
 
         <div class="arcade-vs-side arcade-vs-right" style="--side-color: ${opponentColor}">
@@ -816,18 +845,19 @@ window.ArcadeRenderer = {
       overlay.getBoundingClientRect();
 
       // ═══════════════════════════════════════════════════════════
-      // TIMELINE — ~25s total
+      // TIMELINE — 30s total
       //    0ms  BG reveal (bright)
       //  1500   BG darkens
       //  3000   Employee slides in from left
       //  5000   Slash wipe + VS text slam
-      //  7000   Opponent slides in from right
-      //  8000   VS text + divider line fade out
-      //  9000   Typewriter quote bubble
-      // 12000   FIGHT!! flash
-      // 12500   Fight sequence (~7.5s)
-      // 20500   Winner reveal
-      // 23500   Dissolve
+      //  6500   Opponent slides in (3.5s after employee)
+      //  7500   VS text + divider line fade out
+      //  8500   Typewriter quote bubble (~3s to read)
+      // 11500   FIGHT!! flash
+      // 12000   Fight sequence (~14s)
+      // 26000   Winner reveal + confetti
+      // 28000   Second confetti burst
+      // 30000   Dissolve
       // ═══════════════════════════════════════════════════════════
 
       requestAnimationFrame(() => {
@@ -857,12 +887,12 @@ window.ArcadeRenderer = {
         if (vsText) vsText.classList.add('slam');
       });
 
-      beat(7000, () => {
+      beat(6500, () => {
         overlay.classList.add('right-enter');
         setVSAnnouncer(`${opponent.name.toUpperCase()} APPEARS!`);
       });
 
-      beat(8000, () => {
+      beat(7500, () => {
         const vsText = overlay.querySelector('.arcade-vs-text');
         if (vsText) {
           vsText.style.animation = 'none';
@@ -877,7 +907,7 @@ window.ArcadeRenderer = {
         }
       });
 
-      beat(9000, () => {
+      beat(8500, () => {
         const bubble = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubble && quote) {
           bubble.classList.add('visible');
@@ -885,7 +915,7 @@ window.ArcadeRenderer = {
         }
       });
 
-      beat(12000, () => {
+      beat(11500, () => {
         const fightEl = document.createElement('div');
         fightEl.className = 'arcade-vs-fight-flash';
         fightEl.textContent = 'FIGHT!!';
@@ -896,7 +926,7 @@ window.ArcadeRenderer = {
         beat(13000, () => fightEl.remove());
       });
 
-      beat(12500, () => {
+      beat(12000, () => {
         const bubble = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubble) {
           bubble.style.transition = 'opacity 0.3s ease';
@@ -905,43 +935,87 @@ window.ArcadeRenderer = {
         this._animateFight(overlay, winner, badge, opponent, employeeColor, opponentColor, setVSAnnouncer);
       });
 
-      beat(20500, () => {
+      beat(26000, () => {
         const bubbleCleanup = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubbleCleanup) bubbleCleanup.style.display = 'none';
 
-        const result = overlay.querySelector('.arcade-vs-result');
-        if (result) {
-          result.style.display = '';
+        const leftSide = overlay.querySelector('.arcade-vs-left');
+        const rightSide = overlay.querySelector('.arcade-vs-right');
 
-          if (winner === 'employee') {
-            result.innerHTML = `
+        if (winner === 'employee') {
+          // Winner text under employee (left)
+          if (leftSide) {
+            const winResult = document.createElement('div');
+            winResult.className = 'arcade-vs-side-result arcade-vs-side-result-win';
+            winResult.innerHTML = `
               <div class="arcade-vs-winner-label">WINNER</div>
-              <div class="arcade-vs-winner-name" style="color: ${employeeColor}">${esc(badge.name)}</div>
               <div class="arcade-vs-victory-text">${this._getVictoryText(opponent)}</div>
             `;
-            this._highlightWinnerBadge(badge.employeeId);
-          } else {
-            result.innerHTML = `
-              <div class="arcade-vs-winner-label">WINNER</div>
-              <div class="arcade-vs-winner-name" style="color: ${opponentColor}">${esc(opponent.name)}</div>
+            leftSide.appendChild(winResult);
+            requestAnimationFrame(() => winResult.classList.add('reveal'));
+            this._spawnConfetti(leftSide, employeeColor);
+          }
+          // Defeat text under opponent (right)
+          if (rightSide) {
+            const loseResult = document.createElement('div');
+            loseResult.className = 'arcade-vs-side-result arcade-vs-side-result-lose';
+            loseResult.innerHTML = `
+              <div class="arcade-vs-defeat-label">DEFEATED</div>
               <div class="arcade-vs-victory-text arcade-vs-defeat-text">${this._getDefeatText()}</div>
             `;
+            rightSide.appendChild(loseResult);
+            requestAnimationFrame(() => loseResult.classList.add('reveal'));
           }
-          result.classList.add('reveal');
+          this._highlightWinnerBadge(badge.employeeId);
+        } else {
+          // Winner text under opponent (right)
+          if (rightSide) {
+            const winResult = document.createElement('div');
+            winResult.className = 'arcade-vs-side-result arcade-vs-side-result-win';
+            winResult.innerHTML = `
+              <div class="arcade-vs-winner-label">WINNER</div>
+              <div class="arcade-vs-victory-text">${this._getVictoryText({ type: 'employee' })}</div>
+            `;
+            rightSide.appendChild(winResult);
+            requestAnimationFrame(() => winResult.classList.add('reveal'));
+            this._spawnConfetti(rightSide, opponentColor);
+          }
+          // Defeat text under employee (left)
+          if (leftSide) {
+            const loseResult = document.createElement('div');
+            loseResult.className = 'arcade-vs-side-result arcade-vs-side-result-lose';
+            loseResult.innerHTML = `
+              <div class="arcade-vs-defeat-label">DEFEATED</div>
+              <div class="arcade-vs-victory-text arcade-vs-defeat-text">${this._getDefeatText()}</div>
+            `;
+            leftSide.appendChild(loseResult);
+            requestAnimationFrame(() => loseResult.classList.add('reveal'));
+          }
         }
+
         setVSAnnouncer(winner === 'employee'
           ? `${badge.name.toUpperCase()} WINS!`
           : `${opponent.name.toUpperCase()} WINS!`);
       });
 
-      beat(23500, () => {
+      // Second confetti burst for extended celebration
+      beat(28000, () => {
+        const winnerSide = winner === 'employee'
+          ? overlay.querySelector('.arcade-vs-left')
+          : overlay.querySelector('.arcade-vs-right');
+        const winColor = winner === 'employee' ? employeeColor : opponentColor;
+        if (winnerSide) this._spawnConfetti(winnerSide, winColor);
+      });
+
+      beat(30000, () => {
         overlay.classList.add('dissolve');
-        beat(24100, () => {
+        // Resolve immediately when dissolve starts so breather text shows during fade
+        resolve();
+        beat(30600, () => {
           overlay.remove();
-          beat(26100, () => {
+          beat(32600, () => {
             this._container.querySelectorAll('.arcade-slot.winner-glow').forEach(s => s.classList.remove('winner-glow'));
           });
-          resolve();
         });
       });
     });
@@ -1117,12 +1191,12 @@ window.ArcadeRenderer = {
     const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
     // ═══════════════════════════════════════════════════════════
-    // Extended fight choreography (~7.5s)
+    // Extended fight choreography (~14s)
     //
     // Both fighters start at 100%. The fight has 3 acts:
-    //   Act 1 (0-2.5s):    Even exchange — both drop to ~65-75%
-    //   Act 2 (2.5-5.0s):  Winner pushes, loser rallies briefly
-    //   Act 3 (5.0-7.5s):  Final sequence — loser collapses, K.O.
+    //   Act 1 (0-5.0s):    Even exchange — both drop to ~65-75%
+    //   Act 2 (5.0-9.0s):  Winner pushes, special move, loser rallies
+    //   Act 3 (9.0-14.0s): Final sequence — loser collapses, K.O.
     //
     // Winner ends at 15-40% HP for drama. Loser hits 0.
     // ═══════════════════════════════════════════════════════════
@@ -1132,23 +1206,23 @@ window.ArcadeRenderer = {
     const winnerFinalHP = 15 + Math.floor(Math.random() * 25); // 15-40%
 
     const allHits = [
-      // Act 1: Even exchange (0–2.5s)
-      { delay: 400,  target: 'loser',  dmg: 10 },
-      { delay: 900,  target: 'winner', dmg: 12 },
-      { delay: 1400, target: 'loser',  dmg: 8 },
-      { delay: 1800, target: 'winner', dmg: 10 },
-      { delay: 2300, target: 'loser',  dmg: 7 },
-      // Act 2: Winner pushes, loser rallies (2.5–5.0s)
-      { delay: 2800, target: 'loser',  dmg: 12 },
-      { delay: 3200, target: 'loser',  dmg: 15 },
-      { delay: 3700, target: 'winner', dmg: 8 },
-      { delay: 4100, target: 'winner', dmg: 12 },
-      { delay: 4600, target: 'loser',  dmg: 5 },
-      // Act 3: Finish (5.0–7.5s)
-      { delay: 5200, target: 'loser',  dmg: 10 },
-      { delay: 5700, target: 'winner', dmg: 5 },
-      { delay: 6200, target: 'loser',  dmg: 12 },
-      { delay: 6800, target: 'loser',  dmg: 999, final: true },
+      // Act 1: Even exchange (0–5.0s)
+      { delay: 700,  target: 'loser',  dmg: 10 },
+      { delay: 1700, target: 'winner', dmg: 12 },
+      { delay: 2700, target: 'loser',  dmg: 8 },
+      { delay: 3500, target: 'winner', dmg: 10 },
+      { delay: 4400, target: 'loser',  dmg: 7 },
+      // Act 2: Winner pushes, loser rallies (5.0–9.0s)
+      { delay: 5200, target: 'loser',  dmg: 12 },
+      { delay: 6100, target: 'loser',  dmg: 15 },
+      { delay: 7000, target: 'winner', dmg: 8 },
+      { delay: 7800, target: 'winner', dmg: 12 },
+      { delay: 8600, target: 'loser',  dmg: 5 },
+      // Act 3: Finish (9.0–14.0s)
+      { delay: 9800,  target: 'loser',  dmg: 10 },
+      { delay: 10800, target: 'winner', dmg: 5 },
+      { delay: 11800, target: 'loser',  dmg: 12 },
+      { delay: 12900, target: 'loser',  dmg: 999, final: true },
     ];
 
     // Pre-calculate HP scaling so winner ends at winnerFinalHP and loser at 0
@@ -1164,12 +1238,26 @@ window.ArcadeRenderer = {
 
     // Announcer beats
     [
-      [500,  pickLine(this._FIGHT_LINES_EVEN)],
-      [2000, pickLine(this._FIGHT_LINES_EVEN)],
-      [3300, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
-      [4200, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
-      [5800, pickLine(this._FIGHT_LINES_FINISH)],
+      [1000, pickLine(this._FIGHT_LINES_EVEN)],
+      [3800, pickLine(this._FIGHT_LINES_EVEN)],
+      [6200, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
+      [8000, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
+      [11000, pickLine(this._FIGHT_LINES_FINISH)],
     ].forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
+
+    // Special move — charge buildup (1.6s) then release with lightning (bosses + creatures, not interns)
+    if (opponent.type !== 'intern' && opponent.move) {
+      // Phase 1: Charging buildup at beat 4200 (transition to Act 2)
+      beat(4200, () => {
+        this._startSpecialMoveCharge(overlay);
+        setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+      });
+      // Phase 2: Release at beat 5800 (1.6s buildup — dramatic)
+      beat(5800, () => {
+        this._triggerSpecialMove(overlay, oppColor, opponent.type);
+        setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
+      });
+    }
 
     // Schedule all hits
     allHits.forEach(hit => {
@@ -1178,12 +1266,13 @@ window.ArcadeRenderer = {
           loserHP = 0;
           setHP(loserFill, 0);
           doHit(loserSpark, true);
-          const loserPortrait = loserSpark.parentElement;
-          if (loserPortrait) {
+          // Append K.O. to the side element (not portrait-wrap) so it isn't dimmed by .defeated
+          const loserSide = loserSpark.closest('.arcade-vs-side');
+          if (loserSide) {
             const koEl = document.createElement('div');
             koEl.className = 'arcade-vs-ko-text';
             koEl.textContent = 'K.O.';
-            loserPortrait.appendChild(koEl);
+            loserSide.appendChild(koEl);
           }
           return;
         }
@@ -1203,7 +1292,7 @@ window.ArcadeRenderer = {
     });
 
     // Loser portrait dims after K.O.
-    beat(7200, () => {
+    beat(13400, () => {
       const loserSide = winner === 'employee'
         ? overlay.querySelector('.arcade-vs-right')
         : overlay.querySelector('.arcade-vs-left');
@@ -1218,6 +1307,207 @@ window.ArcadeRenderer = {
     if (slot) {
       slot.classList.add('winner-glow');
       slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  },
+
+  // ─── Winner Confetti ────────────────────────────────────
+
+  _spawnConfetti(container, color) {
+    const count = 30;
+    const shapes = ['square', 'rect', 'circle'];
+    // Generate a palette: main color + white + gold variants
+    const colors = [color, color, color, '#ffffff', '#ffcc00'];
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      el.className = 'arcade-confetti-particle';
+      const shape = shapes[Math.floor(Math.random() * shapes.length)];
+      const c = colors[Math.floor(Math.random() * colors.length)];
+      // Bigger particles, wider spread, longer travel
+      const x = 10 + Math.random() * 80; // 10-90% horizontal
+      const size = 6 + Math.random() * 12; // 6-18px
+      const delay = Math.random() * 0.5; // 0-500ms stagger
+      const duration = 2.0 + Math.random() * 1.0; // 2-3s
+      const drift = -100 + Math.random() * 200; // wider horizontal drift
+      const spin = Math.random() * 1080 - 540; // more rotation
+
+      el.style.cssText = `
+        left: ${x}%;
+        bottom: 40%;
+        width: ${shape === 'rect' ? size * 2.5 : size}px;
+        height: ${size}px;
+        background: ${c};
+        border-radius: ${shape === 'circle' ? '50%' : '2px'};
+        animation-delay: ${delay}s;
+        animation-duration: ${duration}s;
+        --confetti-drift: ${drift}px;
+        --confetti-spin: ${spin}deg;
+      `;
+      container.appendChild(el);
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+    }
+  },
+
+  // ─── Boss Special Move ──────────────────────────────────
+
+  _startSpecialMoveCharge(overlay) {
+    // Text starts pulsing
+    const classEl = overlay.querySelector('.arcade-vs-right .arcade-vs-fighter-class');
+    if (classEl) {
+      classEl.classList.add('special-move-charging');
+    }
+    // Portrait gets charging aura glow
+    const portrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+    if (portrait) {
+      portrait.classList.add('special-move-charge-aura');
+    }
+  },
+
+  _triggerSpecialMove(overlay, color, opponentType) {
+    // Remove charging phase
+    const classEl = overlay.querySelector('.arcade-vs-right .arcade-vs-fighter-class');
+    if (classEl) {
+      classEl.classList.remove('special-move-charging');
+      classEl.classList.add('special-move-highlight');
+      setTimeout(() => classEl.classList.remove('special-move-highlight'), 1500);
+    }
+
+    // Remove charge aura, add shake
+    const rightSide = overlay.querySelector('.arcade-vs-right');
+    if (rightSide) {
+      const portrait = rightSide.querySelector('.arcade-vs-portrait-wrap');
+      if (portrait) portrait.classList.remove('special-move-charge-aura');
+      rightSide.classList.add('special-move-windup');
+      setTimeout(() => rightSide.classList.remove('special-move-windup'), 600);
+    }
+
+    const bossPortrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+    const empPortrait = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
+    if (!bossPortrait || !empPortrait) return;
+
+    if (opponentType === 'boss') {
+      // Band members: music note barrage
+      this._launchMusicNotes(overlay, bossPortrait, empPortrait, color);
+    } else {
+      // Creatures: lightning bolts
+      this._launchLightning(overlay, bossPortrait, empPortrait, color);
+    }
+  },
+
+  _launchLightning(overlay, fromEl, toEl, color) {
+    const overlayRect = overlay.getBoundingClientRect();
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+
+    // Start from boss center, end at employee center (relative to overlay)
+    const x1 = fromRect.left - overlayRect.left + fromRect.width / 2;
+    const y1 = fromRect.top - overlayRect.top + fromRect.height / 2;
+    const x2 = toRect.left - overlayRect.left + toRect.width / 2;
+    const y2 = toRect.top - overlayRect.top + toRect.height / 2;
+
+    // Fire 5 staggered bolts for a crackling effect
+    for (let b = 0; b < 5; b++) {
+      setTimeout(() => {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'arcade-lightning');
+        svg.style.cssText = `position:absolute;left:0;top:0;width:100%;height:100%;z-index:25;pointer-events:none;`;
+
+        // Build jagged lightning path
+        const segments = 8 + Math.floor(Math.random() * 5);
+        let d = `M ${x1} ${y1}`;
+        for (let i = 1; i < segments; i++) {
+          const t = i / segments;
+          const mx = x1 + (x2 - x1) * t;
+          const my = y1 + (y2 - y1) * t;
+          // Jagged offsets — bigger in the middle, tighter at ends
+          const jag = Math.sin(t * Math.PI) * (30 + Math.random() * 50);
+          const ox = (Math.random() - 0.5) * jag * 0.3;
+          const oy = (Math.random() - 0.5) * jag;
+          d += ` L ${mx + ox} ${my + oy}`;
+        }
+        d += ` L ${x2} ${y2}`;
+
+        // Main bolt
+        const bolt = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        bolt.setAttribute('d', d);
+        bolt.setAttribute('fill', 'none');
+        bolt.setAttribute('stroke', color);
+        bolt.setAttribute('stroke-width', '5');
+        bolt.setAttribute('filter', 'url(#lightning-glow)');
+        bolt.setAttribute('stroke-linecap', 'round');
+
+        // White-hot core
+        const core = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        core.setAttribute('d', d);
+        core.setAttribute('fill', 'none');
+        core.setAttribute('stroke', '#ffffff');
+        core.setAttribute('stroke-width', '2.5');
+        core.setAttribute('stroke-linecap', 'round');
+
+        // SVG filter for glow
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        defs.innerHTML = `<filter id="lightning-glow"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+
+        svg.appendChild(defs);
+        svg.appendChild(bolt);
+        svg.appendChild(core);
+        overlay.appendChild(svg);
+
+        // Flash the whole overlay briefly
+        if (b === 0) {
+          overlay.classList.add('lightning-flash');
+          setTimeout(() => overlay.classList.remove('lightning-flash'), 150);
+        }
+
+        // Remove after animation
+        setTimeout(() => svg.remove(), 250 + Math.random() * 100);
+      }, b * 120);
+    }
+  },
+
+  _launchMusicNotes(overlay, fromEl, toEl, color) {
+    const overlayRect = overlay.getBoundingClientRect();
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+
+    const x1 = fromRect.left - overlayRect.left + fromRect.width / 2;
+    const y1 = fromRect.top - overlayRect.top + fromRect.height / 2;
+    const x2 = toRect.left - overlayRect.left + toRect.width / 2;
+    const y2 = toRect.top - overlayRect.top + toRect.height / 2;
+
+    const notes = ['\u266A', '\u266B', '\u266C', '\u2669']; // ♪ ♫ ♬ ♩
+    const count = 24;
+
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => {
+        const el = document.createElement('div');
+        el.className = 'arcade-music-note';
+        el.textContent = notes[Math.floor(Math.random() * notes.length)];
+
+        // Arc path: start near boss, fly toward employee with vertical spread
+        const ySpread = (Math.random() - 0.5) * 120;
+        const scale = 0.8 + Math.random() * 0.6;
+        const drift = -20 + Math.random() * 40; // slight vertical drift during flight
+        const travelX = x2 - x1;
+
+        el.style.cssText = `
+          left: ${x1}px;
+          top: ${y1 + ySpread}px;
+          color: ${color};
+          font-size: ${32 + Math.random() * 24}px;
+          --travel-x: ${travelX}px;
+          --drift-y: ${drift}px;
+          --note-scale: ${scale};
+        `;
+        overlay.appendChild(el);
+
+        // Screen flash on first note
+        if (i === 0) {
+          overlay.classList.add('lightning-flash');
+          setTimeout(() => overlay.classList.remove('lightning-flash'), 150);
+        }
+
+        el.addEventListener('animationend', () => el.remove(), { once: true });
+      }, i * 60);
     }
   },
 
@@ -1251,6 +1541,7 @@ window.ArcadeRenderer = {
   _getVictoryText(opponent) {
     if (opponent.type === 'boss') return 'PROMOTION INCOMING';
     if (opponent.type === 'creature') return 'THREAT NEUTRALIZED';
+    if (opponent.type === 'employee') return 'MANAGEMENT WINS AGAIN';
     return 'THE INTERN HAS BEEN DEFEATED. AGAIN.';
   },
 
