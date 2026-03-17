@@ -35,7 +35,8 @@
 4. **Validate uploads with Sharp.** All image uploads must pass `sharp(buffer).metadata()` before saving. Only `image/*` MIME types accepted.
 5. **Generic error messages only.** Never leak internal state, file paths, or stack traces in API responses. Use themed messages ("Badge printer is overheating").
 6. **Field clamping.** All user text fields capped at 200 characters via `clampField()`.
-7. **Rate limiting enforced.** Badge creation: 3/hour, 10/day (normal); 10/hour, 50/day (show mode). Admin auth: 5 failures → 15 min lockout. Print: 5/min.
+7. **Rate limiting enforced.** Badge creation: 3/hour, 10/day (normal); 10/hour, 50/day (show mode). Admin auth: 5 failures → 15 min lockout.
+8. **Print-ready badge export is admin-only.** `/api/admin/badge/:id/print` requires Bearer token. Moved from public routes — print formatting is a paid feature.
 
 ---
 
