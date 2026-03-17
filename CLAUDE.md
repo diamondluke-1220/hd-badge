@@ -29,7 +29,7 @@
 
 ## Security Rules
 
-1. **No innerHTML with user data.** All user-supplied content (name, title, department, song) must be set via `textContent` or DOM API. Static HTML templates are acceptable.
+1. **No innerHTML with user data.** All user-supplied content (name, title, department, song) must use `esc()` (from shared.js) or `textContent` / DOM API. Static HTML templates are acceptable. Full innerHTML audit completed (`c4dc73c`) — 55 usages classified.
 2. **Admin routes live in `src/routes/admin.ts`** — all admin endpoints use `/api/admin/*` prefix with Bearer token auth middleware.
 3. **Tokens are hashed.** Delete tokens stored in DB via `hashToken()` (SHA-256). Raw tokens returned to user once, never stored.
 4. **Validate uploads with Sharp.** All image uploads must pass `sharp(buffer).metadata()` before saving. Only `image/*` MIME types accepted.
@@ -54,7 +54,7 @@
 1. **Frontend globals under `window.HD.state`.** No loose global variables. View state belongs in view modules.
 2. **Cleanup in view `destroy()`.** Every view module must clean up timers, event listeners, D3 selections, and animation frames in its destroy function.
 3. **No synchronous I/O in request handlers.** Use async `Bun.file()` / `Bun.write()` instead of `readFileSync` / `writeFileSync`. Exception: `existsSync()` for quick path checks.
-4. **SSE client cap at 50.** Never raise `MAX_SSE_CLIENTS` without load testing.
+4. **SSE client cap at 500.** `MAX_SSE_CLIENTS` in server.ts. Client-side exponential backoff (1s→30s) in live-viz.js and presentation.js prevents reconnect floods during server restarts.
 5. **Profanity filter is two-tier.** Hard block (hate speech → 400) vs soft flag (edgy → created but flagged). General profanity is allowed — it's a punk show.
 
 ---
@@ -96,11 +96,13 @@ grep -rn 'readFileSync\|writeFileSync' src/routes/ --include='*.ts'
 ## Testing
 
 ```bash
-bun test              # All tests (API + DB)
+bun test              # All tests (API + DB) — 45 tests, 0 failures
 bun run test:api      # API integration tests only
 bun run test:db       # DB unit tests only
-bun run test:e2e      # Playwright E2E smoke tests
+bun run test:e2e      # Playwright E2E smoke tests (10 tests, requires running server)
 bun run lint          # Grep-based lint checks
 ```
+
+**File naming convention:** `.test.ts` = Bun test runner, `.pw.ts` = Playwright runner. This prevents `bun test` from auto-discovering Playwright specs (which require the Playwright runner context).
 
 Test harness uses temp SQLite DBs and mocked Playwright — no browser needed for API/DB tests.
