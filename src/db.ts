@@ -587,6 +587,11 @@ export function exportAllBadges(): BadgeRow[] {
   return db.prepare('SELECT * FROM badges ORDER BY id ASC').all() as BadgeRow[];
 }
 
+/** Get paid but unprinted badges (print queue) */
+export function getPrintQueue(): BadgeRow[] {
+  return db.prepare('SELECT * FROM badges WHERE is_paid = 1 AND is_printed = 0 ORDER BY created_at ASC').all() as BadgeRow[];
+}
+
 /** Get all demo badge employee IDs (for file cleanup) */
 export function listDemoBadgeIds(): string[] {
   const rows = db.prepare('SELECT employee_id FROM badges WHERE is_demo = 1').all() as { employee_id: string }[];

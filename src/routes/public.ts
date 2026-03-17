@@ -198,35 +198,6 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     });
   });
 
-  // ─── Print-Ready Badge ───────────────────────────────────
-
-  const printRateLimit = new Map<string, number[]>();
-  app.get('/api/badge/:id/print', async (c) => {
-    const ip = getClientIp(c);
-    const now = Date.now();
-    const timestamps = (printRateLimit.get(ip) || []).filter(t => t > now - 60_000);
-    if (timestamps.length >= 5) {
-      return c.json({ success: false, error: 'Too many print requests. Try again in a minute.' }, 429);
-    }
-    timestamps.push(now);
-    printRateLimit.set(ip, timestamps);
-
-    const id = c.req.param('id');
-    const badge = getBadge(id);
-    if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
-    }
-
-    const printBuffer = await renderBadgePlaywright(badge, { print: true });
-    return new Response(printBuffer, {
-      headers: {
-        'Content-Type': 'image/png',
-        'Content-Disposition': `attachment; filename="${id}-print.png"`,
-        'Cache-Control': 'no-cache',
-      },
-    });
-  });
-
   // ─── Headshot Photo ──────────────────────────────────────
 
   app.get('/api/badge/:id/headshot', async (c) => {

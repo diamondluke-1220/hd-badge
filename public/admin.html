@@ -568,6 +568,93 @@
       background: #5BA3FF;
     }
 
+    /* Print Queue */
+    .pq-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .pq-card {
+      background: #2A2A32;
+      border: 1px solid #3A3A44;
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    .pq-card-thumb {
+      width: 44px;
+      height: 70px;
+      border-radius: 4px;
+      object-fit: cover;
+      background: #1C1C22;
+      flex-shrink: 0;
+    }
+    .pq-card-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .pq-card-name {
+      font-weight: 700;
+      font-size: 14px;
+      color: #E0E8F0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pq-card-dept {
+      font-size: 11px;
+      color: #667788;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pq-card-date {
+      font-size: 10px;
+      color: #556677;
+      margin-top: 4px;
+    }
+    .pq-card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .pq-btn {
+      padding: 6px 10px;
+      border: 1px solid #3A3A44;
+      border-radius: 6px;
+      background: #1C1C22;
+      color: #8899AA;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .pq-btn:hover { border-color: #5B8DEF; color: #5B8DEF; }
+    .pq-btn-print { border-color: #2E7DFF; color: #2E7DFF; }
+    .pq-btn-print:hover { background: #2E7DFF; color: white; }
+    .pq-btn-done { border-color: #22C55E; color: #22C55E; }
+    .pq-btn-done:hover { background: #22C55E; color: white; }
+    .pq-btn[disabled] { opacity: 0.5; cursor: default; }
+    .pq-empty {
+      color: #556677;
+      font-size: 13px;
+      padding: 24px;
+      text-align: center;
+    }
+    .pq-count-badge {
+      background: #2E7DFF;
+      color: white;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
+      margin-left: 4px;
+      font-weight: 700;
+    }
+
     @media (max-width: 768px) {
       .stats-bar { flex-direction: column; }
       .stat-card { min-width: auto; }
@@ -605,6 +692,7 @@
       <div class="subtitle">Authorized Personnel Only</div>
     </div>
     <nav style="display:flex;gap:8px;" role="navigation" aria-label="Dashboard actions">
+      <button onclick="togglePrintQueue()">Print Queue <span class="pq-count-badge" id="pqNavCount" style="display:none;">0</span></button>
       <button onclick="toggleAnalytics()">Analytics</button>
       <button onclick="toggleDemo()">Demo Mode</button>
       <button onclick="togglePresentation()">Presentation</button>
@@ -647,6 +735,17 @@
     <button class="analytics-toggle" onclick="setDatePreset('month')">This Month</button>
     <button class="analytics-toggle" onclick="setDatePreset('quarter')">This Quarter</button>
     <button class="analytics-toggle" onclick="clearDates()">Clear Dates</button>
+  </div>
+
+  <!-- Print Queue Section -->
+  <div class="analytics-section" id="printQueueSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>Print Queue</h2>
+      <span style="font-size:11px;color:#667788;" id="pqStatus">0 badges awaiting print</span>
+    </div>
+    <div id="printQueueGrid" class="pq-grid">
+      <div class="pq-empty">No badges in print queue. Mark badges as paid to add them.</div>
+    </div>
   </div>
 
   <div class="analytics-section" id="analyticsSection" style="display:none;">
@@ -807,6 +906,7 @@ function showDashboard() {
   loadDivisions();
   loadBadges();
   loadAnalytics();
+  loadPrintQueueCount();
 }
 
 // ─── Stats ──────────────────────────────────────────────
@@ -843,6 +943,10 @@ async function loadStats() {
     <div class="stat-card">
       <div class="stat-value">${departments.length}</div>
       <div class="stat-label">Departments</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="pqStatCount" style="color:#2E7DFF">—</div>
+      <div class="stat-label">Print Queue</div>
     </div>
   `;
 }
@@ -958,11 +1062,15 @@ async function toggleFlag(id) {
 async function togglePaid(id) {
   await apiFetch(`/api/admin/badge/${id}/paid`, { method: 'POST' });
   loadBadges();
+  loadPrintQueueCount();
+  if (pqVisible) loadPrintQueue();
 }
 
 async function togglePrinted(id) {
   await apiFetch(`/api/admin/badge/${id}/printed`, { method: 'POST' });
   loadBadges();
+  loadPrintQueueCount();
+  if (pqVisible) loadPrintQueue();
 }
 
 async function toggleHide(id) {
@@ -1138,6 +1246,96 @@ function clearDates() {
   document.getElementById('dateTo').value = '';
   currentPage = 1;
   loadBadges();
+}
+
+// ─── Print Queue ────────────────────────────────────────
+let pqVisible = false;
+let pqBadges = [];
+
+function togglePrintQueue() {
+  pqVisible = !pqVisible;
+  document.getElementById('printQueueSection').style.display = pqVisible ? 'block' : 'none';
+  if (pqVisible) loadPrintQueue();
+}
+
+async function loadPrintQueue() {
+  const data = await apiFetch('/api/admin/badges/print-queue');
+  if (data.error) return;
+  pqBadges = data.badges || [];
+  updatePrintQueueCount(data.count || 0);
+  renderPrintQueue();
+}
+
+function updatePrintQueueCount(count) {
+  const navBadge = document.getElementById('pqNavCount');
+  const statCount = document.getElementById('pqStatCount');
+  const statusText = document.getElementById('pqStatus');
+
+  if (navBadge) {
+    navBadge.textContent = count;
+    navBadge.style.display = count > 0 ? 'inline' : 'none';
+  }
+  if (statCount) statCount.textContent = count;
+  if (statusText) statusText.textContent = `${count} badge${count !== 1 ? 's' : ''} awaiting print`;
+}
+
+function renderPrintQueue() {
+  const grid = document.getElementById('printQueueGrid');
+  if (pqBadges.length === 0) {
+    grid.innerHTML = '<div class="pq-empty">No badges in print queue. Mark badges as paid to add them.</div>';
+    return;
+  }
+
+  grid.innerHTML = pqBadges.map(b => {
+    const date = b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '';
+    return `<div class="pq-card" data-id="${esc(b.employeeId)}">
+      <img class="pq-card-thumb" src="/api/badge/${esc(b.employeeId)}/thumb" alt="" loading="lazy">
+      <div class="pq-card-info">
+        <div class="pq-card-name">${esc(b.name)}</div>
+        <div class="pq-card-dept">${esc(b.department)}</div>
+        <div class="pq-card-date">${date}</div>
+      </div>
+      <div class="pq-card-actions">
+        <button class="pq-btn pq-btn-print" onclick="pqDownload('${esc(b.employeeId)}', this)">&#128424; Print</button>
+        <button class="pq-btn pq-btn-done" onclick="pqMarkPrinted('${esc(b.employeeId)}')">&#10003; Done</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function pqDownload(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Rendering…';
+  try {
+    const resp = await fetch(`/api/admin/badge/${id}/print`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new Error('Render failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${id}-print.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Failed to download print badge. Try again.');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '&#128424; Print';
+}
+
+async function pqMarkPrinted(id) {
+  await apiFetch(`/api/admin/badge/${id}/printed`, { method: 'POST' });
+  loadPrintQueue();
+  loadBadges();
+}
+
+// Load print queue count on initial page load
+async function loadPrintQueueCount() {
+  const data = await apiFetch('/api/admin/badges/print-queue');
+  if (data.error) return;
+  updatePrintQueueCount(data.count || 0);
 }
 
 // ─── Analytics ──────────────────────────────────────────

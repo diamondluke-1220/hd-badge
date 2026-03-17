@@ -5,7 +5,7 @@ import type { Hono } from 'hono';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
-import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges } from '../db';
+import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue } from '../db';
 import { log, getLog } from '../logger';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
@@ -111,6 +111,40 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
     return c.json({ success: true, message: 'Print status toggled.' });
+  });
+
+  // ─── Print Queue ──────────────────────────────────────────
+
+  app.get('/api/admin/badges/print-queue', (c) => {
+    const badges = getPrintQueue();
+    return c.json({
+      badges: badges.map(b => ({
+        employeeId: b.employee_id,
+        name: b.name,
+        department: b.department,
+        title: b.title,
+        hasPhoto: !!b.has_photo,
+        createdAt: b.created_at,
+      })),
+      count: badges.length,
+    });
+  });
+
+  app.get('/api/admin/badge/:id/print', async (c) => {
+    const id = c.req.param('id');
+    const badge = getBadge(id);
+    if (!badge) {
+      return c.json({ success: false, error: 'Badge not found.' }, 404);
+    }
+
+    const printBuffer = await renderBadgePlaywright(badge, { print: true });
+    return new Response(printBuffer, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': `attachment; filename="${id}-print.png"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
   });
 
   app.post('/api/admin/badge/:id/flag', (c) => {
