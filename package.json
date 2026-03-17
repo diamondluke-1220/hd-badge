@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/server.ts",
-    "start": "bun run src/server.ts"
+    "start": "bun run src/server.ts",
+    "test": "bun test tests/api/ tests/db/",
+    "test:api": "bun test tests/api/",
+    "test:db": "bun test tests/db/",
+    "test:e2e": "bunx playwright test",
+    "lint": "bash scripts/lint.sh"
   },
   "dependencies": {
     "hono": "^4.0.0",

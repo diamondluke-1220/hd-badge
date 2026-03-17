@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS badges (
   is_paid INTEGER DEFAULT 0,
   paid_at TEXT,
   is_printed INTEGER DEFAULT 0,
-  printed_at TEXT
+  printed_at TEXT,
+  is_flagged INTEGER DEFAULT 0,
+  is_demo INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_badges_department ON badges(department);

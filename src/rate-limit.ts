@@ -26,6 +26,11 @@ function getLimits(): { hourly: number; daily: number } {
   return { hourly: 3, daily: 10 };
 }
 
+/** Reset all rate limit state (for testing) */
+export function resetRateLimits(): void {
+  store.clear();
+}
+
 export function checkRateLimit(ip: string): { allowed: boolean; message?: string } {
   const now = Date.now();
   const limits = getLimits();
