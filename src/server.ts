@@ -303,7 +303,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
     const roundedMask = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
     );
-    return await sharp(rgbaBuf)
+    return await sharp(rgbaBuf, { raw: { width: W, height: H, channels: 4 } })
       .composite([{ input: roundedMask, blend: 'dest-in' }])
       .png()
       .toBuffer();
