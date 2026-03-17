@@ -68,6 +68,9 @@
 
   // ─── SSE Connection ─────────────────────────────────────
 
+  let sseRetryDelay = 1000;
+  const SSE_MAX_RETRY = 30000;
+
   function connectSSE() {
     if (pres.sseSource) {
       pres.sseSource.close();
@@ -77,6 +80,7 @@
 
     pres.sseSource.addEventListener('connected', () => {
       console.log('[Presentation] SSE connected');
+      sseRetryDelay = 1000; // reset backoff on successful connection
     });
 
     pres.sseSource.addEventListener('presentation-state', (e) => {
@@ -106,7 +110,10 @@
     });
 
     pres.sseSource.onerror = () => {
-      console.log('[Presentation] SSE error — will auto-reconnect');
+      pres.sseSource.close();
+      console.log(`[Presentation] SSE lost — retrying in ${sseRetryDelay / 1000}s`);
+      setTimeout(connectSSE, sseRetryDelay);
+      sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY);
     };
   }
 
@@ -216,7 +223,7 @@
         const div = document.createElement('div');
         div.className = 'intro-line';
         div.style.animationDelay = `${1.5 + i * 0.6}s`;
-        div.innerHTML = `<span class="intro-prompt">${line.prompt}</span><span class="${line.cls || ''}">${line.text}</span>`;
+        div.innerHTML = `<span class="intro-prompt">${esc(line.prompt)}</span><span class="${line.cls || ''}">${esc(line.text)}</span>`;
         introTerminal.appendChild(div);
       });
     }, 800); // 800ms fade-out before new member

@@ -309,7 +309,7 @@ window.GridRenderer = {
       <div class="badge-grid-photo">
         <img class="badge-grid-avatar" src="/api/badge/${esc(badge.employeeId)}/headshot" alt="${esc(badge.name)}" loading="lazy"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="badge-grid-fallback" style="display:none">${initials}</div>
+        <div class="badge-grid-fallback" style="display:none">${esc(initials)}</div>
       </div>
       <div class="badge-grid-info">
         <div class="badge-grid-name">${esc(badge.name)}</div>

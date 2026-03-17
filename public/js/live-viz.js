@@ -5,6 +5,8 @@
 
 // --- SSE Connection ---
 let sseSource = null;
+let sseRetryDelay = 1000;
+const SSE_MAX_RETRY = 30000;
 const liveAnimationQueue = [];
 let liveIsAnimating = false;
 
@@ -12,7 +14,9 @@ function connectSSE() {
   if (sseSource) { sseSource.close(); }
   sseSource = new EventSource('/api/badges/stream');
 
-  sseSource.onopen = () => {};
+  sseSource.onopen = () => {
+    sseRetryDelay = 1000; // reset backoff on successful connection
+  };
 
   sseSource.addEventListener('new-badge', (e) => {
     try {
@@ -23,7 +27,12 @@ function connectSSE() {
     }
   });
 
-  sseSource.onerror = () => {};
+  sseSource.onerror = () => {
+    sseSource.close();
+    console.log(`[SSE] Connection lost — retrying in ${sseRetryDelay / 1000}s`);
+    setTimeout(connectSSE, sseRetryDelay);
+    sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY);
+  };
 }
 
 function queueLiveAnimation(badge) {

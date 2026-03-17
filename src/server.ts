@@ -321,7 +321,7 @@ interface SSEClient {
 }
 
 const sseClients = new Set<SSEClient>();
-const MAX_SSE_CLIENTS = 50;
+const MAX_SSE_CLIENTS = 500;
 
 function sseWrite(client: SSEClient, event: string, data: string) {
   client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
