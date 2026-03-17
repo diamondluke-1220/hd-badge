@@ -95,13 +95,13 @@ function buildTickerContent() {
   });
 
   // Department stats
-  Object.entries(window._tickerStats).forEach(([dept, count]) => {
-    items.push(`<span class="ticker-item"><span class="ticker-value">${esc(dept)}</span> <span class="ticker-label">×</span> <span class="ticker-highlight">${count}</span></span>`);
+  Object.entries(window.HD.state.tickerStats).forEach(([dept, count]) => {
+    items.push(`<span class="ticker-item" data-ticker-dept="${esc(dept)}"><span class="ticker-value">${esc(dept)}</span> <span class="ticker-label">×</span> <span class="ticker-highlight" data-ticker-dept-count="${esc(dept)}">${count}</span></span>`);
     items.push('<span class="ticker-sep"></span>');
   });
 
-  if (window._tickerTotalHires > 0) {
-    items.push(`<span class="ticker-item"><span class="ticker-new">$HELP</span> <span class="ticker-up">▲ ${window._tickerTotalHires}</span> <span class="ticker-label">TOTAL HIRES</span></span>`);
+  if (window.HD.state.tickerTotalHires > 0) {
+    items.push(`<span class="ticker-item" data-ticker-total><span class="ticker-new">$HELP</span> <span class="ticker-up" data-ticker-total-count>▲ ${window.HD.state.tickerTotalHires}</span> <span class="ticker-label">TOTAL HIRES</span></span>`);
     items.push('<span class="ticker-sep"></span>');
   }
 
@@ -111,15 +111,24 @@ function buildTickerContent() {
 }
 
 function updateTicker(badge) {
-  window._tickerTotalHires++;
-  window._tickerStats[badge.department] = (window._tickerStats[badge.department] || 0) + 1;
+  window.HD.state.tickerTotalHires++;
+  window.HD.state.tickerStats[badge.department] = (window.HD.state.tickerStats[badge.department] || 0) + 1;
 
-  // Inject a live hire notice into the ticker track
   const track = document.getElementById('tickerTrack');
   if (!track) return;
 
-  // Rebuild with updated stats
-  buildTickerContent();
+  // Try in-place update for existing departments
+  const deptCountEls = track.querySelectorAll(`[data-ticker-dept-count="${CSS.escape(badge.department)}"]`);
+  const totalCountEls = track.querySelectorAll('[data-ticker-total-count]');
+
+  if (deptCountEls.length > 0) {
+    // Department already in ticker — update counts in-place
+    deptCountEls.forEach(el => { el.textContent = window.HD.state.tickerStats[badge.department]; });
+    totalCountEls.forEach(el => { el.textContent = '▲ ' + window.HD.state.tickerTotalHires; });
+  } else {
+    // New department — full rebuild needed to add it
+    buildTickerContent();
+  }
 }
 
 // --- Animation Toggle ---

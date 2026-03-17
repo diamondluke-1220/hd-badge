@@ -6,14 +6,15 @@ import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync } from 'fs';
 import sharp from 'sharp';
-import { initDb, createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, closeDb } from './db';
-import { checkRateLimit } from './rate-limit';
-import { isNameClean, shouldFlag } from './profanity';
-import { log, getLog } from './logger';
-import { initDemo, startDemo, stopDemo, getDemoStatus, cleanupDemo } from './demo';
-import { initPresentation, startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro, isPresentationActive } from './presentation';
+import { initDb, closeDb } from './db';
+import { log } from './logger';
+import { initDemo } from './demo';
+import { initPresentation } from './presentation';
+import { registerPortalRoutes } from './routes/portal';
+import { registerPublicRoutes } from './routes/public';
+import { registerAdminRoutes } from './routes/admin';
 
 // ─── Playwright Browser Pool ─────────────────────────────
 
@@ -22,7 +23,6 @@ let _browserLaunching: Promise<import('playwright').Browser> | null = null;
 
 async function getBrowser() {
   if (_browser?.isConnected()) return _browser;
-  // Mutex: if already launching, wait for that instead of launching again
   if (_browserLaunching) return _browserLaunching;
   _browser = null;
   _browserLaunching = (async () => {
@@ -104,21 +104,14 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-/** Truncate a string field to MAX_FIELD_LENGTH */
-function clampField(val: string): string {
-  return val.slice(0, MAX_FIELD_LENGTH);
-}
-
 // ─── Helpers ─────────────────────────────────────────────
 
 function getClientIp(c: any): string {
-  // Only trust forwarded headers behind a known reverse proxy (Cloudflare, nginx)
   if (process.env.TRUST_PROXY === '1') {
     return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
       || c.req.header('x-real-ip')
       || 'unknown';
   }
-  // Use actual socket IP (prevents X-Forwarded-For spoofing on venue WiFi)
   try {
     const info = getConnInfo(c);
     return info.remote.address || 'unknown';
@@ -127,9 +120,19 @@ function getClientIp(c: any): string {
   }
 }
 
-// Admin auth: uses Hono's built-in bearerAuth with timing-safe comparison.
-// When ADMIN_TOKEN is empty, all admin routes return 401 (admin disabled).
-// Rate limiting: 5 failed attempts per IP = 15-minute lockout.
+function clampField(val: string): string {
+  return val.slice(0, MAX_FIELD_LENGTH);
+}
+
+/** Strip data URL prefix and decode base64 to Buffer */
+function decodeBase64Image(dataUrl: string): Buffer | null {
+  const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
+  if (!match) return null;
+  return Buffer.from(match[1], 'base64');
+}
+
+// ─── Admin Auth ─────────────────────────────────────────
+
 const adminFailures = new Map<string, { count: number; lastAttempt: number }>();
 
 /** Check if an IP is localhost (handles IPv4, IPv6, and IPv4-mapped IPv6) */
@@ -137,7 +140,7 @@ function isLocalhost(ip: string): boolean {
   return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
 }
 
-// Also restrict /admin HTML page to localhost in local mode
+// Restrict /admin HTML page to localhost in local mode
 app.use('/admin', async (c, next) => {
   if (process.env.ADMIN_LOCAL_ONLY === '1') {
     const ip = getClientIp(c);
@@ -149,24 +152,21 @@ app.use('/admin', async (c, next) => {
 });
 
 app.use('/api/admin/*', async (c, next) => {
-  // Block if admin is disabled (no token set)
   if (!ADMIN_TOKEN) {
-    return c.json({ error: 'Admin panel disabled. Set ADMIN_TOKEN env var.' }, 401);
+    return c.json({ success: false, error: 'Admin panel disabled. Set ADMIN_TOKEN env var.' }, 401);
   }
 
-  // In local mode, restrict admin API to localhost only (token never crosses WiFi)
   if (process.env.ADMIN_LOCAL_ONLY === '1') {
     const ip = getClientIp(c);
     if (!isLocalhost(ip)) {
-      return c.json({ error: 'Admin access restricted to localhost.' }, 403);
+      return c.json({ success: false, error: 'Admin access restricted to localhost.' }, 403);
     }
   }
 
-  // Rate limit failed admin auth attempts
   const ip = getClientIp(c);
   const record = adminFailures.get(ip);
   if (record && record.count >= 5 && Date.now() - record.lastAttempt < 15 * 60 * 1000) {
-    return c.json({ error: 'Too many failed attempts. Try again in 15 minutes.' }, 429);
+    return c.json({ success: false, error: 'Too many failed attempts. Try again in 15 minutes.' }, 429);
   }
 
   await next();
@@ -174,19 +174,17 @@ app.use('/api/admin/*', async (c, next) => {
 
 // Bearer auth middleware (timing-safe token comparison)
 app.use('/api/admin/*', async (c, next) => {
-  if (!ADMIN_TOKEN) return next(); // Already handled above
+  if (!ADMIN_TOKEN) return next();
   try {
     await bearerAuth({ token: ADMIN_TOKEN })(c, next);
   } catch (e: any) {
-    // Track failed auth attempts for rate limiting
     const ip = getClientIp(c);
     const record = adminFailures.get(ip) || { count: 0, lastAttempt: 0 };
     record.count++;
     record.lastAttempt = Date.now();
     adminFailures.set(ip, record);
     log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
-    // Return JSON error instead of plain text "Unauthorized" (client expects JSON)
-    return c.json({ error: 'Unauthorized. Invalid or missing admin token.' }, 401);
+    return c.json({ success: false, error: 'Unauthorized. Invalid or missing admin token.' }, 401);
   }
 });
 
@@ -198,86 +196,16 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
-// ─── Captive Portal Detection ────────────────────────────
-// OS-level connectivity checks. Two-phase approach:
-//
-// Phase 1 (initial connect): Return "wrong" response → OS opens captive portal
-//   mini-browser → fan sees badge generator. This happens automatically because
-//   our wildcard DNS + generic HTML response doesn't match what the OS expects.
-//
-// Phase 2 (after badge created): Fan hits "Done" in captive portal browser, or
-//   the OS re-checks connectivity. We return the "correct" success responses so
-//   the OS stops nagging about "no internet" and stays connected.
-//
-// We track IPs that have visited the badge page. Once they have, we tell the
-// OS "you're connected" so it doesn't auto-disconnect.
+// ─── Captive Portal State ────────────────────────────────
 
 const portalCleared = new Set<string>();
 
-// Call this after badge creation or page visit to "clear" the portal for that IP
 function markPortalCleared(ip: string): void {
   portalCleared.add(ip);
-  // Auto-expire after 4 hours (show duration)
   setTimeout(() => portalCleared.delete(ip), 4 * 60 * 60 * 1000);
 }
 
-// iOS / macOS
-app.get('/hotspot-detect.html', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return c.text('Success');  // Tell iOS "you're online" — stay connected
-  }
-  // First visit: return redirect to badge page → triggers captive portal browser
-  return c.redirect('/');
-});
-
-// Android (Google + Samsung)
-app.get('/generate_204', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return new Response(null, { status: 204 });  // Tell Android "you're online"
-  }
-  return c.redirect('/');
-});
-app.get('/gen_204', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return new Response(null, { status: 204 });
-  }
-  return c.redirect('/');
-});
-
-// Windows
-app.get('/connecttest.txt', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return c.text('Microsoft Connect Test');
-  }
-  return c.redirect('/');
-});
-app.get('/ncsi.txt', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return c.text('Microsoft NCSI');
-  }
-  return c.redirect('/');
-});
-
-// Firefox
-app.get('/success.txt', (c) => {
-  const ip = getClientIp(c);
-  if (portalCleared.has(ip)) {
-    return c.text('success\n');
-  }
-  return c.redirect('/');
-});
-
-/** Strip data URL prefix and decode base64 to Buffer */
-function decodeBase64Image(dataUrl: string): Buffer | null {
-  const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
-  if (!match) return null;
-  return Buffer.from(match[1], 'base64');
-}
+// ─── Playwright Badge Render ─────────────────────────────
 
 /** Server-side badge render via Playwright + Sharp corner clipping */
 async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean }): Promise<Buffer> {
@@ -295,7 +223,6 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       const photoBuffer = await Bun.file(photoPath).arrayBuffer();
       photoDataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuffer).toString('base64')}`;
     } else {
-      // Use skull headset placeholder for badges without a photo
       const placeholderPath = join('public', 'placeholder-photo.png');
       if (existsSync(placeholderPath)) {
         const placeholderBuffer = await Bun.file(placeholderPath).arrayBuffer();
@@ -345,53 +272,33 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       await page.waitForTimeout(300);
     }
 
-    await page.evaluate(({ isPrint }) => {
-      document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
-        el.remove();
-      });
-      document.body.style.background = 'white';
-      document.body.style.margin = '0';
-      document.body.style.padding = '0';
-
-      const captureDiv = document.getElementById('badgeCapture');
-      if (captureDiv) {
-        captureDiv.style.left = '0';
-        captureDiv.style.top = '0';
-        captureDiv.style.position = 'fixed';
-        captureDiv.style.zIndex = '9999';
-      }
-
-      const badgeDiv = document.getElementById('badge');
-      if (badgeDiv) {
-        if (!isPrint) {
-          badgeDiv.style.clipPath = 'inset(0 round 75px)';
-        } else {
-          // Print mode: square corners, white background — physical card handles rounding
-          badgeDiv.style.clipPath = 'none';
-          badgeDiv.style.borderRadius = '0';
+    // Print mode: white background, no rounded corners
+    if (options?.print) {
+      await page.evaluate(() => {
+        const el = document.getElementById('badge');
+        if (el) {
+          el.style.borderRadius = '0';
+          el.style.boxShadow = 'none';
         }
-      }
-    }, { isPrint: !!options?.print });
+        document.body.style.background = 'white';
+      });
+    }
 
     const badgeEl = await page.$('#badge');
-    if (!badgeEl) {
-      throw new Error('Badge element not found on page.');
-    }
+    if (!badgeEl) throw new Error('Badge element not found');
+
+    const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !options?.print });
 
     if (options?.print) {
-      // Print mode: white background, no transparency, no rounded corners
-      const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: false });
-      return await sharp(screenshot).flatten({ background: '#FFFFFF' }).png().toBuffer();
+      return Buffer.from(pngBuf);
     }
 
-    const screenshot = await badgeEl.screenshot({ type: 'png', omitBackground: true });
-
-    // Apply rounded-corner alpha mask
-    const rgbaBuf = await sharp(screenshot).ensureAlpha().png().toBuffer();
-    const meta = await sharp(rgbaBuf).metadata();
-    const W = meta.width!;
-    const H = meta.height!;
-    const R = Math.round(75 * (W / 1276));
+    // Round corners with SVG mask
+    const meta = await sharp(Buffer.from(pngBuf)).metadata();
+    const W = meta.width || 700;
+    const H = meta.height || 1100;
+    const R = Math.round(W * 0.04);
+    const rgbaBuf = await sharp(Buffer.from(pngBuf)).ensureAlpha().raw().toBuffer();
     const roundedMask = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
     );
@@ -414,12 +321,10 @@ interface SSEClient {
 
 const sseClients = new Set<SSEClient>();
 
-/** Format and enqueue an SSE event */
 function sseWrite(client: SSEClient, event: string, data: string) {
   client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
 }
 
-/** Broadcast a new badge event to all connected org chart viewers */
 function broadcastNewBadge(badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) {
   const data = JSON.stringify(badge);
   for (const client of sseClients) {
@@ -432,7 +337,6 @@ function broadcastNewBadge(badge: { employeeId: string; name: string; department
   }
 }
 
-/** Broadcast a generic SSE event to all connected clients */
 function broadcastSSE(event: string, data: any) {
   const json = JSON.stringify(data);
   for (const client of sseClients) {
@@ -445,17 +349,14 @@ function broadcastSSE(event: string, data: any) {
   }
 }
 
-// Wire up demo engine now that broadcastNewBadge is defined
+// Wire up demo and presentation engines
 initDemo({
   broadcast: broadcastNewBadge,
   writeFile: writeFileSync,
   badgesDir: BADGES_DIR,
 });
-
-// Wire up presentation engine
 initPresentation({ broadcast: broadcastSSE });
 
-/** Handle SSE directly at the Bun.serve level — bypasses Hono entirely */
 function handleSSEDirect(): Response {
   const encoder = new TextEncoder();
   let clientRef: SSEClient | null = null;
@@ -470,7 +371,7 @@ function handleSSEDirect(): Response {
         } catch {
           clearInterval(keepalive);
         }
-      }, 5_000); // Must be under Bun's 10s idle timeout
+      }, 5_000);
 
       clientRef = { controller, encoder, keepalive };
       sseClients.add(clientRef);
@@ -499,748 +400,33 @@ function handleSSEDirect(): Response {
   });
 }
 
-// ─── Captive Portal Clearance ────────────────────────────
-
-// Client-side JS calls this on page load to clear the portal for this device.
-// After this, OS connectivity checks get "success" responses and the device
-// stays connected without "no internet" warnings.
-app.post('/api/portal/clear', (c) => {
-  const ip = getClientIp(c);
-  markPortalCleared(ip);
-  return c.json({ cleared: true });
-});
-
-// ─── Public API Routes ───────────────────────────────────
-
-// Create badge (join org chart)
-app.post('/api/badge', async (c) => {
-  const ip = getClientIp(c);
-
-  // Rate limit check
-  const rateCheck = checkRateLimit(ip);
-  if (!rateCheck.allowed) {
-    return c.json({ success: false, error: rateCheck.message }, 429);
-  }
-
-  let body: any;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ success: false, error: 'Invalid request body.' }, 400);
-  }
-
-  const { name, department, title, song, accessLevel, accessCss, photo, photoPublic } = body;
-
-  // Validate required fields
-  if (!name || !department || !title || !song || !accessLevel || !accessCss) {
-    return c.json({ success: false, error: 'Missing required fields.' }, 400);
-  }
-
-  // Profanity check
-  if (!isNameClean(name)) {
-    return c.json({ success: false, error: 'HR has flagged your name for review.' }, 400);
-  }
-
-  try {
-    const hasPhoto = !!photo;
-    let photoBuffer: Buffer | null = null;
-    if (photo) {
-      photoBuffer = decodeBase64Image(photo);
-      // Validate decoded buffer is actually an image via sharp
-      if (photoBuffer) {
-        try {
-          await sharp(photoBuffer).metadata();
-        } catch {
-          return c.json({ success: false, error: 'Invalid image file.' }, 400);
-        }
-      }
-    }
-
-    // Auto-flag edgy content for admin review
-    const cleanName = clampField(name.trim().toUpperCase());
-    const cleanTitle = clampField(title.trim());
-    const flagged = shouldFlag(cleanName) || shouldFlag(cleanTitle);
-
-    // During presentation, block flagged content (big screen safety)
-    if (isPresentationActive() && flagged) {
-      return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
-    }
-
-    // Create DB record (clamp all text fields to prevent abuse)
-    const result = createBadge({
-      name: cleanName,
-      department: clampField(department.trim().toUpperCase()),
-      title: cleanTitle,
-      song: clampField(song.trim().toUpperCase()),
-      accessLevel: clampField(accessLevel.trim().toUpperCase()),
-      accessCss: clampField(accessCss.trim()),
-      hasPhoto,
-      photoPublic: photoPublic !== false, // default true
-      source: body.source || 'web',
-      flagged,
-    });
-
-    // Save photo BEFORE render (Playwright needs it on disk)
-    if (photoBuffer) {
-      await Bun.write(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
-    }
-
-    // Server-side Playwright render for consistent output
-    let badge, badgeBuffer;
-    try {
-      badge = getBadge(result.employeeId);
-      badgeBuffer = await renderBadgePlaywright(badge);
-      await Bun.write(join(BADGES_DIR, `${result.employeeId}.png`), badgeBuffer);
-
-      // Render no-photo variant if fan has a photo but opted out of public display
-      if (hasPhoto && photoPublic === false) {
-        const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
-        await Bun.write(join(BADGES_DIR, `${result.employeeId}-nophoto.png`), noPhotoBuffer);
-      }
-    } catch (renderErr: any) {
-      // Clean up orphaned DB row and files on render failure
-      log('error', 'badge', `Render failed for ${result.employeeId}, cleaning up: ${renderErr.message}`);
-      hardDeleteBadge(result.employeeId);
-      try { unlinkSync(join(PHOTOS_DIR, `${result.employeeId}.jpg`)); } catch { /* ignore */ }
-      try { unlinkSync(join(BADGES_DIR, `${result.employeeId}.png`)); } catch { /* ignore */ }
-      throw renderErr;
-    }
-
-    // Clear captive portal for this IP — OS will stop nagging about "no internet"
-    markPortalCleared(ip);
-
-    // Broadcast to all connected org chart viewers via SSE
-    broadcastNewBadge({
-      employeeId: result.employeeId,
-      name: cleanName,
-      department: clampField(department.trim().toUpperCase()),
-      title: cleanTitle,
-      accessLevel: clampField(accessLevel.trim().toUpperCase()),
-      accessCss: clampField(accessCss.trim()),
-      isBandMember: false,
-    });
-
-    log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${clampField(department.trim().toUpperCase())}`);
-
-    return c.json({
-      success: true,
-      employeeId: result.employeeId,
-      deleteToken: result.deleteToken,
-      message: 'Welcome to Help Desk LLC.',
-    });
-  } catch (err: any) {
-    log('error', 'badge', `Creation failed: ${err.message}`);
-    return c.json({ success: false, error: 'Badge creation failed. Please try again.' }, 500);
-  }
-});
-
-// Get badge metadata
-app.get('/api/badge/:id', (c) => {
-  const badge = getBadge(c.req.param('id'));
-  if (!badge || !badge.is_visible) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  return c.json({
-    employeeId: badge.employee_id,
-    name: badge.name,
-    department: badge.department,
-    title: badge.title,
-    song: badge.song,
-    accessLevel: badge.access_level,
-    accessCss: badge.access_css,
-    hasPhoto: !!badge.has_photo,
-    photoPublic: !!badge.photo_public,
-    isBandMember: !!badge.is_band_member,
-    createdAt: badge.created_at,
-  });
-});
-
-// Serve badge image
-app.get('/api/badge/:id/image', (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  // Determine which image to serve
-  // Admin with ?full=1 always gets the full version (check Bearer token inline)
-  const authHeader = c.req.header('authorization');
-  const isAdmin = !!ADMIN_TOKEN && authHeader === `Bearer ${ADMIN_TOKEN}` && c.req.query('full') === '1';
-
-  let imagePath: string;
-  if (!isAdmin && !badge.photo_public && badge.has_photo) {
-    // Serve no-photo version for public view when photo is opted out
-    const noPhotoPath = join(BADGES_DIR, `${id}-nophoto.png`);
-    imagePath = existsSync(noPhotoPath) ? noPhotoPath : join(BADGES_DIR, `${id}.png`);
-  } else {
-    imagePath = join(BADGES_DIR, `${id}.png`);
-  }
-
-  if (!existsSync(imagePath)) {
-    return c.json({ error: 'Badge image not found.' }, 404);
-  }
-
-  const file = Bun.file(imagePath);
-  return new Response(file, {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },
-  });
-});
-
-// Print-ready badge PNG — white background, square corners, 600 DPI CR80
-const printRateLimit = new Map<string, number[]>();
-app.get('/api/badge/:id/print', async (c) => {
-  // Rate limit: 5 prints per minute per IP to prevent Playwright DoS
-  const ip = getClientIp(c);
-  const now = Date.now();
-  const timestamps = (printRateLimit.get(ip) || []).filter(t => t > now - 60_000);
-  if (timestamps.length >= 5) {
-    return c.json({ error: 'Too many print requests. Try again in a minute.' }, 429);
-  }
-  timestamps.push(now);
-  printRateLimit.set(ip, timestamps);
-
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  const printBuffer = await renderBadgePlaywright(badge, { print: true });
-  return new Response(printBuffer, {
-    headers: {
-      'Content-Type': 'image/png',
-      'Content-Disposition': `attachment; filename="${id}-print.png"`,
-      'Cache-Control': 'no-cache',
-    },
-  });
-});
-
-// Serve badge photo (admin only — for re-rendering)
-app.get('/api/admin/badge/:id/photo-source', (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge || !badge.has_photo) {
-    return c.json({ error: 'Photo not found.' }, 404);
-  }
-
-  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
-  if (!existsSync(photoPath)) {
-    return c.json({ error: 'Photo file not found.' }, 404);
-  }
-
-  const file = Bun.file(photoPath);
-  return new Response(file, {
-    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache' },
-  });
-});
-
-// Serve employee headshot photo (public, privacy-aware, resized for org chart)
-app.get('/api/badge/:id/headshot', async (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
-  const placeholderPath = join('public', 'placeholder-photo.png');
-  const hasUsablePhoto = badge.has_photo && badge.photo_public && existsSync(photoPath);
-
-  if (!hasUsablePhoto) {
-    // Serve skull placeholder for no-photo or private-photo badges
-    if (!existsSync(placeholderPath)) {
-      return c.json({ error: 'Placeholder not found.' }, 404);
-    }
-    const file = Bun.file(placeholderPath);
-    return new Response(file, {
-      headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' },
-    });
-  }
-
-  // Serve resized headshot (cached)
-  const headshotPath = join(HEADSHOTS_DIR, `${id}.jpg`);
-
-  let needsGenerate = !existsSync(headshotPath);
-  if (!needsGenerate) {
-    const sourceStat = await Bun.file(photoPath).stat();
-    const headshotStat = await Bun.file(headshotPath).stat();
-    if (sourceStat.mtimeMs > headshotStat.mtimeMs) {
-      needsGenerate = true;
-    }
-  }
-
-  if (needsGenerate) {
-    try {
-      await sharp(photoPath)
-        .resize(HEADSHOT_WIDTH)
-        .jpeg({ quality: 85 })
-        .toFile(headshotPath);
-    } catch (err: any) {
-      console.error(`Headshot generation failed for ${id}:`, err.message);
-      // Fall back to full-size photo
-      const file = Bun.file(photoPath);
-      return new Response(file, {
-        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=60' },
-      });
-    }
-  }
-
-  const file = Bun.file(headshotPath);
-  return new Response(file, {
-    headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=86400' },
-  });
-});
-
-// Serve badge thumbnail (resized for grid display)
-app.get('/api/badge/:id/thumb', async (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  // Determine source image (respect photo privacy)
-  let sourcePath: string;
-  if (!badge.photo_public && badge.has_photo) {
-    const noPhotoPath = join(BADGES_DIR, `${id}-nophoto.png`);
-    sourcePath = existsSync(noPhotoPath) ? noPhotoPath : join(BADGES_DIR, `${id}.png`);
-  } else {
-    sourcePath = join(BADGES_DIR, `${id}.png`);
-  }
-
-  if (!existsSync(sourcePath)) {
-    return c.json({ error: 'Badge image not found.' }, 404);
-  }
-
-  const thumbPath = join(THUMBS_DIR, `${id}.png`);
-
-  // Check if thumbnail needs (re)generation
-  let needsGenerate = !existsSync(thumbPath);
-  if (!needsGenerate) {
-    const sourceStat = await Bun.file(sourcePath).stat();
-    const thumbStat = await Bun.file(thumbPath).stat();
-    if (sourceStat.mtimeMs > thumbStat.mtimeMs) {
-      needsGenerate = true;
-    }
-  }
-
-  if (needsGenerate) {
-    try {
-      await sharp(sourcePath)
-        .resize(THUMB_WIDTH)
-        .png({ quality: 80 })
-        .toFile(thumbPath);
-    } catch (err: any) {
-      console.error(`Thumbnail generation failed for ${id}:`, err.message);
-      // Fall back to full-size image
-      const file = Bun.file(sourcePath);
-      return new Response(file, {
-        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },
-      });
-    }
-  }
-
-  const file = Bun.file(thumbPath);
-  return new Response(file, {
-    headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' },
-  });
-});
-
-// Self-service delete (soft delete)
-app.delete('/api/badge/:id', (c) => {
-  const id = c.req.param('id');
-  const token = c.req.query('token');
-
-  if (!token) {
-    return c.json({ error: 'Delete token required.' }, 400);
-  }
-
-  const success = softDeleteBadge(id, token);
-  if (!success) {
-    return c.json({ error: 'Badge not found or invalid token.' }, 403);
-  }
-
-  return c.json({ success: true, message: 'Your badge has been shredded.' });
-});
-
-// Public org chart listing
-app.get('/api/orgchart', (c) => {
-  const department = c.req.query('department') || undefined;
-  const division = c.req.query('division') || undefined;
-  const page = parseInt(c.req.query('page') || '1', 10);
-  const limit = parseInt(c.req.query('limit') || '50', 10);
-  const recentFirst = c.req.query('recentFirst') === '1';
-
-  const result = listBadges({ department, division, page, limit, recentFirst });
-
-  return c.json({
-    badges: result.badges.map(b => ({
-      employeeId: b.employee_id,
-      name: b.name,
-      department: b.department,
-      title: b.title,
-      song: b.song,
-      accessLevel: b.access_level,
-      accessCss: b.access_css,
-      hasPhoto: !!b.has_photo,
-      photoPublic: !!b.photo_public,
-      isBandMember: !!b.is_band_member,
-      createdAt: b.created_at,
-    })),
-    total: result.total,
-    page: result.page,
-    pages: result.pages,
-  });
-});
-
-// Org chart stats
-app.get('/api/orgchart/stats', (c) => {
-  return c.json(getStats());
-});
-
-// ─── Admin API Routes ────────────────────────────────────
-
-// Admin: list all badges (including hidden)
-app.get('/api/admin/badges', (c) => {
-
-  const page = parseInt(c.req.query('page') || '1', 10);
-  const limit = parseInt(c.req.query('limit') || '100', 10);
-  const department = c.req.query('department') || undefined;
-  const search = c.req.query('search') || undefined;
-  const division = c.req.query('division') || undefined;
-  const dateFrom = c.req.query('dateFrom') || undefined;
-  const dateTo = c.req.query('dateTo') || undefined;
-  const photoParam = c.req.query('hasPhoto');
-  const hasPhoto = photoParam === '1' ? true : photoParam === '0' ? false : undefined;
-
-  const result = listBadges({ page, limit, includeHidden: true, department, division, dateFrom, dateTo, hasPhoto });
-
-  // Client-side search filter (simple — server-side would need a LIKE query)
-  let badges = result.badges;
-  if (search) {
-    const q = search.toUpperCase();
-    badges = badges.filter(b =>
-      b.name.includes(q) || b.employee_id.includes(q) || b.department.includes(q)
-    );
-  }
-
-  return c.json({
-    badges: badges.map(b => ({
-      employeeId: b.employee_id,
-      name: b.name,
-      department: b.department,
-      title: b.title,
-      song: b.song,
-      accessLevel: b.access_level,
-      accessCss: b.access_css,
-      hasPhoto: !!b.has_photo,
-      photoPublic: !!b.photo_public,
-      isBandMember: !!b.is_band_member,
-      isVisible: !!b.is_visible,
-      isPaid: !!b.is_paid,
-      paidAt: b.paid_at,
-      isPrinted: !!b.is_printed,
-      printedAt: b.printed_at,
-      isFlagged: !!b.is_flagged,
-      createdAt: b.created_at,
-      source: b.source,
-    })),
-    total: result.total,
-    page: result.page,
-    pages: result.pages,
-  });
-});
-
-// Admin: extended stats (auth handled by middleware)
-app.get('/api/admin/stats', (c) => {
-  return c.json(getStats());
-});
-
-// Admin: toggle badge visibility
-app.post('/api/admin/badge/:id/hide', (c) => {
-
-  const success = toggleVisibility(c.req.param('id'));
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  return c.json({ success: true, message: 'Visibility toggled.' });
-});
-
-// Admin: hard delete
-app.delete('/api/admin/badge/:id', (c) => {
-
-  const id = c.req.param('id');
-
-  // Delete DB row first to prevent concurrent reads from finding a badge with missing files
-  const success = hardDeleteBadge(id);
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  // Then clean up all associated files (including thumbs and headshots)
-  const files = [
-    join(BADGES_DIR, `${id}.png`),
-    join(BADGES_DIR, `${id}-nophoto.png`),
-    join(PHOTOS_DIR, `${id}.jpg`),
-    join(THUMBS_DIR, `${id}.png`),
-    join(HEADSHOTS_DIR, `${id}.jpg`),
-  ];
-  for (const f of files) {
-    try { unlinkSync(f); } catch { /* ignore — file may not exist */ }
-  }
-
-  return c.json({ success: true, message: 'Badge permanently deleted.' });
-});
-
-// Admin: toggle paid status
-app.post('/api/admin/badge/:id/paid', (c) => {
-
-  const success = togglePaid(c.req.param('id'));
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  return c.json({ success: true, message: 'Payment status toggled.' });
-});
-
-// Admin: toggle printed status
-app.post('/api/admin/badge/:id/printed', (c) => {
-
-  const success = togglePrinted(c.req.param('id'));
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  return c.json({ success: true, message: 'Print status toggled.' });
-});
-
-// Admin: toggle flagged status
-app.post('/api/admin/badge/:id/flag', (c) => {
-
-  const success = toggleFlagged(c.req.param('id'));
-  if (!success) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  return c.json({ success: true, message: 'Flag status toggled.' });
-});
-
-// Admin: upload photo for existing badge
-app.post('/api/admin/badge/:id/photo', async (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  try {
-    const formData = await c.req.formData();
-    const file = formData.get('photo');
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: 'No photo file provided.' }, 400);
-    }
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      return c.json({ error: 'File must be an image.' }, 400);
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    // Process with sharp — resize to reasonable max, save as JPEG
-    await sharp(buffer)
-      .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 90 })
-      .toFile(join(PHOTOS_DIR, `${id}.jpg`));
-
-    // Update DB
-    setHasPhoto(id, true);
-
-    // Invalidate thumbnail and headshot caches so they regenerate on next request
-    const thumbPath = join(THUMBS_DIR, `${id}.png`);
-    if (existsSync(thumbPath)) {
-      unlinkSync(thumbPath);
-    }
-    const headshotPath = join(HEADSHOTS_DIR, `${id}.jpg`);
-    if (existsSync(headshotPath)) {
-      unlinkSync(headshotPath);
-    }
-
-    log('info', 'admin', `Photo uploaded for ${id} (${badge.name})`);
-    return c.json({ success: true, message: `Photo uploaded for ${badge.name}.` });
-  } catch (err: any) {
-    log('error', 'admin', `Photo upload failed for ${id}: ${err.message}`);
-    return c.json({ error: 'Photo upload failed.' }, 500);
-  }
-});
-
-// Admin: server-side badge render using Playwright (captures CSS perfectly)
-app.post('/api/admin/badge/:id/render', async (c) => {
-  const id = c.req.param('id');
-  const badge = getBadge(id);
-  if (!badge) {
-    return c.json({ error: 'Badge not found.' }, 404);
-  }
-
-  try {
-    const badgeBuffer = await renderBadgePlaywright(badge);
-    await Bun.write(join(BADGES_DIR, `${id}.png`), badgeBuffer);
-
-    // Invalidate thumbnail
-    const thumbPath = join(THUMBS_DIR, `${id}.png`);
-    if (existsSync(thumbPath)) {
-      unlinkSync(thumbPath);
-    }
-
-    log('info', 'admin', `Badge rendered (Playwright) for ${id} (${badge.name})`);
-    return c.json({ success: true, message: `Badge rendered for ${badge.name}.` });
-  } catch (err: any) {
-    log('error', 'admin', `Badge render failed for ${id}: ${err.message}`);
-    return c.json({ error: 'Badge render failed.' }, 500);
-  }
-});
-
-// Admin: analytics data (auth handled by middleware)
-app.get('/api/admin/analytics', (c) => {
-  return c.json(getAnalytics());
-});
-
-// Admin: list available divisions (auth handled by middleware)
-app.get('/api/admin/divisions', (c) => {
-  return c.json({ divisions: getDivisionNames() });
-});
-
-// Admin: export all badges as CSV
-app.get('/api/admin/export/csv', (c) => {
-
-  const badges = exportAllBadges();
-
-  const headers = ['id', 'employee_id', 'name', 'department', 'title', 'song', 'access_level', 'access_css', 'created_at', 'source', 'is_visible', 'has_photo', 'is_band_member', 'photo_public', 'is_paid', 'paid_at', 'is_printed', 'printed_at', 'is_flagged'];
-
-  const escCsv = (val: any): string => {
-    if (val === null || val === undefined) return '';
-    const s = String(val);
-    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-      return '"' + s.replace(/"/g, '""') + '"';
-    }
-    return s;
-  };
-
-  const lines = [headers.join(',')];
-  for (const b of badges) {
-    const row = headers.map(h => escCsv((b as any)[h]));
-    lines.push(row.join(','));
-  }
-
-  const csv = lines.join('\n');
-  const filename = `helpdesk-badges-${new Date().toISOString().slice(0, 10)}.csv`;
-
-  return new Response(csv, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    },
-  });
-});
-
-// ─── Admin: System Logs ──────────────────────────────────
-
-app.get('/api/admin/logs', (c) => {
-  return c.json({ logs: getLog() });
-});
-
-// ─── Admin: Demo Mode ────────────────────────────────────
-
-app.post('/api/admin/demo/start', async (c) => {
-  let body: any;
-  try {
-    body = await c.req.json();
-  } catch {
-    body = {};
-  }
-  const count = body.count || 30;
-  const duration = body.duration || 300;
-  const result = startDemo(count, duration);
-  if ('error' in result) {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-  return c.json({ success: true, ...result });
-});
-
-app.post('/api/admin/demo/stop', (c) => {
-  const result = stopDemo();
-  if ('error' in result) {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-  return c.json({ success: true, ...result });
-});
-
-app.get('/api/admin/demo/status', (c) => {
-  return c.json(getDemoStatus());
-});
-
-app.post('/api/admin/demo/cleanup', (c) => {
-  const result = cleanupDemo(BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR);
-  return c.json({ success: true, ...result });
-});
-
-// ─── Admin: Presentation Mode ─────────────────────────────
-
-app.post('/api/admin/presentation/start', async (c) => {
-  let body: any;
-  try { body = await c.req.json(); } catch { body = {}; }
-  const result = startPresentation({ chyronMessages: body.chyronMessages });
-  if ('error' in result) {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-  return c.json(result);
-});
-
-app.post('/api/admin/presentation/stop', (c) => {
-  const result = stopPresentation();
-  if ('error' in result) {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-  return c.json(result);
-});
-
-app.get('/api/admin/presentation/status', (c) => {
-  return c.json(getPresentationState());
-});
-
-app.post('/api/admin/presentation/chyron', async (c) => {
-  let body: any;
-  try { body = await c.req.json(); } catch { body = {}; }
-  const messages = Array.isArray(body.messages) ? body.messages.filter((m: any) => typeof m === 'string' && m.trim()) : [];
-  const result = updateChyron(messages);
-  return c.json(result);
-});
-
-app.post('/api/admin/presentation/skip-intro', (c) => {
-  const result = skipBandIntro();
-  if ('error' in result) {
-    return c.json({ success: false, error: result.error }, 400);
-  }
-  return c.json(result);
-});
-
-// Public presentation status (for SSE reconnect recovery — no auth needed)
-app.get('/api/presentation/status', (c) => {
-  return c.json(getPublicState());
-});
+// ─── Route Modules ───────────────────────────────────────
+
+const sharedDeps = {
+  getClientIp,
+  markPortalCleared,
+  broadcastNewBadge,
+  decodeBase64Image,
+  renderBadgePlaywright,
+  clampField,
+  portalCleared,
+  PHOTOS_DIR,
+  BADGES_DIR,
+  THUMBS_DIR,
+  HEADSHOTS_DIR,
+  ADMIN_TOKEN,
+  THUMB_WIDTH,
+  HEADSHOT_WIDTH,
+};
+
+registerPortalRoutes(app, sharedDeps);
+registerPublicRoutes(app, sharedDeps);
+registerAdminRoutes(app, sharedDeps);
 
 // ─── HTML Page Routes ────────────────────────────────────
 
-// Org chart page (serves same SPA, client detects pathname)
 app.get('/orgchart', serveStatic({ path: './public/index.html' }));
-
-// Presentation mode display (dedicated big-screen route)
 app.get('/presentation', serveStatic({ path: './public/presentation.html' }));
-
-// Admin panel (separate page)
 app.get('/admin', serveStatic({ path: './public/admin.html' }));
 
 // ─── Static Files (must be LAST) ─────────────────────────
@@ -1270,11 +456,10 @@ process.on('SIGINT', async () => { await closeBrowser(); closeDb(); process.exit
 
 export default {
   port,
-  idleTimeout: 120, // seconds — prevent Bun from killing SSE connections (default 10s)
+  idleTimeout: 120,
   fetch(req: Request, server: any): Response | Promise<Response> {
     const url = new URL(req.url);
 
-    // Handle SSE at the Bun level — bypass Hono entirely to avoid response wrapping
     if (url.pathname === '/api/badges/stream') {
       return handleSSEDirect();
     }

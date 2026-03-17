@@ -62,17 +62,49 @@ const DIVISION_ACCENT_COLORS = {
   '_custom':   '#ffd700',
 };
 
-// Shared renderer state (accessed by renderers via window._)
-window._publicOrgPage = 1;
-window._publicOrgDept = '';
-window._tickerStats = {};
-window._tickerTotalHires = 0;
+/** Fisher-Yates shuffle — returns a new shuffled copy of the array */
+function hdShuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+window.hdShuffle = hdShuffle;
+
+// Shared renderer state — namespaced under window.HD
+window.HD = window.HD || {};
+window.HD.state = {
+  publicOrgPage: 1,
+  publicOrgDept: '',
+  tickerStats: {},
+  tickerTotalHires: 0,
+};
+
+// Backwards-compat aliases (used across many files)
+Object.defineProperty(window, '_publicOrgPage', {
+  get() { return window.HD.state.publicOrgPage; },
+  set(v) { window.HD.state.publicOrgPage = v; },
+});
+Object.defineProperty(window, '_publicOrgDept', {
+  get() { return window.HD.state.publicOrgDept; },
+  set(v) { window.HD.state.publicOrgDept = v; },
+});
+Object.defineProperty(window, '_tickerStats', {
+  get() { return window.HD.state.tickerStats; },
+  set(v) { window.HD.state.tickerStats = v; },
+});
+Object.defineProperty(window, '_tickerTotalHires', {
+  get() { return window.HD.state.tickerTotalHires; },
+  set(v) { window.HD.state.tickerTotalHires = v; },
+});
 
 /** Common renderer stats initialization — call in each renderer's init() */
 function initRendererStats(stats) {
-  window._tickerTotalHires = stats.visible || 0;
+  window.HD.state.tickerTotalHires = stats.visible || 0;
   if (stats.byDepartment) {
-    window._tickerStats = Object.assign({}, stats.byDepartment);
+    window.HD.state.tickerStats = Object.assign({}, stats.byDepartment);
   }
   initDonut(stats);
 }

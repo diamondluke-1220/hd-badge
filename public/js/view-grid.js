@@ -35,8 +35,8 @@ window.GridRenderer = {
     allBtn.className = 'dept-filter-btn active';
     allBtn.textContent = 'All';
     allBtn.addEventListener('click', () => {
-      window._publicOrgDept = '';
-      window._publicOrgPage = 1;
+      window.HD.state.publicOrgDept = '';
+      window.HD.state.publicOrgPage = 1;
       filterBar.querySelectorAll('.dept-filter-btn').forEach(b => b.classList.remove('active'));
       allBtn.classList.add('active');
       this._updateDeptHeading('', stats);
@@ -51,8 +51,8 @@ window.GridRenderer = {
       btn.className = 'dept-filter-btn';
       btn.innerHTML = `${esc(dept)} <span class="dept-count">${count}</span>`;
       btn.addEventListener('click', () => {
-        window._publicOrgDept = dept;
-        window._publicOrgPage = 1;
+        window.HD.state.publicOrgDept = dept;
+        window.HD.state.publicOrgPage = 1;
         filterBar.querySelectorAll('.dept-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this._updateDeptHeading(dept, stats);
@@ -62,7 +62,7 @@ window.GridRenderer = {
     });
 
     // Load first page
-    window._publicOrgPage = 1;
+    window.HD.state.publicOrgPage = 1;
     this._updateDeptHeading('', stats);
     await this._loadBadges(true);
   },
@@ -78,7 +78,7 @@ window.GridRenderer = {
     card.setAttribute('data-employee-id', badge.employeeId);
     card.classList.add('sse-new');
 
-    if (!window._publicOrgDept) {
+    if (!window.HD.state.publicOrgDept) {
       // Division-grouped view: find the right division grid
       const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
       const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === divTheme);
@@ -210,8 +210,8 @@ window.GridRenderer = {
     }
     loadMoreArea.innerHTML = '';
 
-    let url = `/api/orgchart?page=${window._publicOrgPage}&limit=60`;
-    if (window._publicOrgDept) url += `&department=${encodeURIComponent(window._publicOrgDept)}`;
+    let url = `/api/orgchart?page=${window.HD.state.publicOrgPage}&limit=60`;
+    if (window.HD.state.publicOrgDept) url += `&department=${encodeURIComponent(window.HD.state.publicOrgDept)}`;
 
     let data;
     try {
@@ -226,8 +226,8 @@ window.GridRenderer = {
     const skeleton = document.getElementById('skeletonGrid');
     if (skeleton) skeleton.remove();
 
-    if (data.badges.length === 0 && window._publicOrgPage === 1) {
-      if (window._publicOrgDept) {
+    if (data.badges.length === 0 && window.HD.state.publicOrgPage === 1) {
+      if (window.HD.state.publicOrgDept) {
         content.innerHTML = '<div class="no-badges-msg">No employees in this department. Try another filter.</div>';
       } else {
         content.innerHTML = '<div class="no-badges-msg">No employees found. The hiring freeze continues.<br><a href="/" style="color:#5B8DEF;margin-top:8px;display:inline-block;">Be the first employee &rarr;</a></div>';
@@ -236,7 +236,7 @@ window.GridRenderer = {
     }
 
     // When showing all departments, group by division
-    if (!window._publicOrgDept) {
+    if (!window.HD.state.publicOrgDept) {
       const byDivision = {};
       PUBLIC_DIVISIONS.forEach(d => { byDivision[d.theme] = []; });
 
@@ -264,12 +264,12 @@ window.GridRenderer = {
     }
 
     // Load more button
-    if (window._publicOrgPage < data.pages) {
+    if (window.HD.state.publicOrgPage < data.pages) {
       const btn = document.createElement('button');
       btn.className = 'load-more-btn';
       btn.textContent = 'Load More Employees';
       btn.addEventListener('click', () => {
-        window._publicOrgPage++;
+        window.HD.state.publicOrgPage++;
         this._loadBadges(false);
       });
       loadMoreArea.appendChild(btn);

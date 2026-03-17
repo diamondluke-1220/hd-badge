@@ -4,6 +4,7 @@
 // Badge tile panel (12×16) on the right, sampled from headshot photo.
 
 window.ReviewBoardRenderer = {
+  FLAP_PARTS: '.static-top, .static-bottom, .flap-top, .flap-bottom',
   _container: null,
   _stats: null,
   _stage: null,
@@ -685,7 +686,7 @@ window.ReviewBoardRenderer = {
   },
 
   _setTileColor(cell, color) {
-    const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    const flaps = cell.querySelectorAll(this.FLAP_PARTS);
     flaps.forEach(el => {
       el.style.background = color;
       el.style.color = color;
@@ -694,7 +695,7 @@ window.ReviewBoardRenderer = {
   },
 
   _clearTileColor(cell) {
-    const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    const flaps = cell.querySelectorAll(this.FLAP_PARTS);
     flaps.forEach(el => {
       el.style.background = '';
       el.style.color = '';
@@ -873,7 +874,7 @@ window.ReviewBoardRenderer = {
   _setRowDivisionColor(rowIdx, divColor, startCol, length) {
     for (let c = startCol; c < startCol + length && c < this.COLS; c++) {
       const cell = this._cells[rowIdx][c];
-      const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+      const flaps = cell.querySelectorAll(this.FLAP_PARTS);
       flaps.forEach(el => {
         el.style.color = divColor;
       });
@@ -901,7 +902,7 @@ window.ReviewBoardRenderer = {
     for (let r = 5; r < 10; r++) {
       for (let c = 0; c < this.COLS; c++) {
         const cell = this._cells[r][c];
-        const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+        const flaps = cell.querySelectorAll(this.FLAP_PARTS);
         flaps.forEach(el => { el.style.color = dimColor; });
       }
     }
@@ -931,7 +932,7 @@ window.ReviewBoardRenderer = {
   _clearRowColor(rowIdx) {
     for (let c = 0; c < this.COLS; c++) {
       const cell = this._cells[rowIdx][c];
-      const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+      const flaps = cell.querySelectorAll(this.FLAP_PARTS);
       flaps.forEach(el => {
         el.style.color = '';
       });
@@ -942,7 +943,7 @@ window.ReviewBoardRenderer = {
 
   _setAccentTile(rowIdx, color) {
     const cell = this._cells[rowIdx][0];
-    const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    const flaps = cell.querySelectorAll(this.FLAP_PARTS);
     flaps.forEach(el => {
       el.style.background = color;
       el.style.color = color;
@@ -952,7 +953,7 @@ window.ReviewBoardRenderer = {
 
   _clearAccentTile(rowIdx) {
     const cell = this._cells[rowIdx][0];
-    const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    const flaps = cell.querySelectorAll(this.FLAP_PARTS);
     flaps.forEach(el => {
       el.style.background = '';
       el.style.color = '';
@@ -962,7 +963,7 @@ window.ReviewBoardRenderer = {
   // ─── Color Flash Helper ────────────────────────────────
 
   _flashTileColor(cell, divColor) {
-    const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+    const flaps = cell.querySelectorAll(this.FLAP_PARTS);
     flaps.forEach(el => {
       el.style.transition = 'background 150ms ease';
       el.style.background = divColor;
@@ -1109,14 +1110,14 @@ window.ReviewBoardRenderer = {
         const inRange = col >= range[0] && col < range[1];
         if (targetChar === currentChar) {
           // No animation needed — just update color to match new badge
-          const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+          const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
           flaps.forEach(el => { el.style.color = inRange ? divColor : '#ffffff'; });
           continue;
         }
         headerPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
-              const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+              const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
               // Intermediate chars cycle in white; division color applied after landing
               flaps.forEach(el => { el.style.color = '#ffffff'; });
               if (inRange) this._flashTileColor(this._cells[row][col], divColor);
@@ -1146,14 +1147,14 @@ window.ReviewBoardRenderer = {
         const cellColor = targetChar.trim() ? '#ffffff' : '';
         if (targetChar === currentChar) {
           // No animation needed — just update color
-          const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+          const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
           flaps.forEach(el => { el.style.color = cellColor; });
           continue;
         }
         skillsPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
-              const flaps = this._cells[row][col].querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+              const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
               // Cycle in white, apply target color after landing
               flaps.forEach(el => { el.style.color = '#ffffff'; });
               this._cycleToChar(this._cells[row][col], targetChar, currentChar).then(() => {
@@ -1204,7 +1205,7 @@ window.ReviewBoardRenderer = {
           setTimeout(() => {
             const cell = this._cells[rowIdx][item.c];
             // Set dim color before character appears
-            const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+            const flaps = cell.querySelectorAll(this.FLAP_PARTS);
             flaps.forEach(el => { el.style.color = dimColor; });
             this._setChar(cell, item.char);
             // Flip animation on non-space characters
@@ -1245,18 +1246,9 @@ window.ReviewBoardRenderer = {
 
   // ─── Rotation ──────────────────────────────────────────
 
-  _shuffle(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  },
-
   _startRotation() {
     if (this._allBadges.length === 0) return;
-    this._shuffledBadges = this._shuffle(this._allBadges);
+    this._shuffledBadges = hdShuffle(this._allBadges);
     this._rotationIndex = 0;
 
     // Display first badge instantly
@@ -1269,7 +1261,7 @@ window.ReviewBoardRenderer = {
       if (this._isArrivalActive) return;
       this._rotationIndex++;
       if (this._rotationIndex >= this._shuffledBadges.length) {
-        this._shuffledBadges = this._shuffle(this._allBadges);
+        this._shuffledBadges = hdShuffle(this._allBadges);
         this._rotationIndex = 0;
       }
       if (animationsEnabled()) {
@@ -1294,7 +1286,7 @@ window.ReviewBoardRenderer = {
       if (this._isArrivalActive) return;
       this._rotationIndex++;
       if (this._rotationIndex >= this._shuffledBadges.length) {
-        this._shuffledBadges = this._shuffle(this._allBadges);
+        this._shuffledBadges = hdShuffle(this._allBadges);
         this._rotationIndex = 0;
       }
       if (animationsEnabled()) {
@@ -1317,7 +1309,7 @@ window.ReviewBoardRenderer = {
       this._isArrivalActive = false;
       if (!this._allBadges.find(b => b.employeeId === badge.employeeId)) {
         this._allBadges.push(badge);
-        this._shuffledBadges = this._shuffle(this._allBadges);
+        this._shuffledBadges = hdShuffle(this._allBadges);
       }
       if (this._arrivalQueue.length > 0) {
         const next = this._arrivalQueue.shift();
@@ -1360,7 +1352,7 @@ window.ReviewBoardRenderer = {
 
     allCells.forEach((cell, i) => {
       setTimeout(() => {
-        const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+        const flaps = cell.querySelectorAll(this.FLAP_PARTS);
         flaps.forEach(el => {
           el.style.background = divColor;
           el.style.color = '#111';
@@ -1410,7 +1402,7 @@ window.ReviewBoardRenderer = {
               const cell = this._cells[row][col];
               this._setChar(cell, targetChar);
               // Remove color wave from this tile with transition
-              const flaps = cell.querySelectorAll('.static-top, .static-bottom, .flap-top, .flap-bottom');
+              const flaps = cell.querySelectorAll(this.FLAP_PARTS);
               flaps.forEach(el => {
                 el.style.transition = 'background 300ms ease, color 300ms ease';
                 el.style.background = '';
@@ -1462,7 +1454,7 @@ window.ReviewBoardRenderer = {
 
     if (!this._allBadges.find(b => b.employeeId === badge.employeeId)) {
       this._allBadges.push(badge);
-      this._shuffledBadges = this._shuffle(this._allBadges);
+      this._shuffledBadges = hdShuffle(this._allBadges);
     }
 
     if (this._arrivalQueue.length > 0) {
@@ -1621,22 +1613,9 @@ window.ReviewBoardRenderer = {
     this._resizeHandler = () => this._sizeTiles();
     window.addEventListener('resize', this._resizeHandler);
 
-    // Fetch badges
+    // Fetch badges via shared BadgePool
     try {
-      let page = 1;
-      let badges = [];
-      while (true) {
-        const resp = await fetch('/api/orgchart?page=' + page + '&limit=100');
-        const data = await resp.json();
-        if (data.badges && data.badges.length) {
-          badges = badges.concat(data.badges);
-          if (badges.length >= (data.total || 0)) break;
-          page++;
-        } else {
-          break;
-        }
-      }
-      this._allBadges = badges;
+      this._allBadges = await BadgePool.fetchAll({ limit: 100 });
     } catch {
       this._allBadges = [];
     }

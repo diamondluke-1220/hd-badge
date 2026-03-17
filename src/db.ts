@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS badges (
 CREATE INDEX IF NOT EXISTS idx_badges_department ON badges(department);
 CREATE INDEX IF NOT EXISTS idx_badges_visible ON badges(is_visible);
 CREATE INDEX IF NOT EXISTS idx_badges_employee_id ON badges(employee_id);
+CREATE INDEX IF NOT EXISTS idx_badges_band_member ON badges(is_band_member);
+CREATE INDEX IF NOT EXISTS idx_badges_created_at ON badges(created_at);
+CREATE INDEX IF NOT EXISTS idx_badges_flagged ON badges(is_flagged);
 `;
 
 // Band member seed data — HD-00001 through HD-00005
@@ -96,12 +99,9 @@ let stmts: {
   hardDelete: ReturnType<Database['prepare']>;
   toggleVisibility: ReturnType<Database['prepare']>;
   checkEmployeeId: ReturnType<Database['prepare']>;
-  markPaid: ReturnType<Database['prepare']>;
-  unmarkPaid: ReturnType<Database['prepare']>;
-  markPrinted: ReturnType<Database['prepare']>;
-  unmarkPrinted: ReturnType<Database['prepare']>;
-  markFlagged: ReturnType<Database['prepare']>;
-  unmarkFlagged: ReturnType<Database['prepare']>;
+  togglePaid: ReturnType<Database['prepare']>;
+  togglePrinted: ReturnType<Database['prepare']>;
+  toggleFlagged: ReturnType<Database['prepare']>;
 };
 
 export function initDb(dbPath: string) {
@@ -150,12 +150,9 @@ export function initDb(dbPath: string) {
     hardDelete: db.prepare('DELETE FROM badges WHERE employee_id = $id'),
     toggleVisibility: db.prepare('UPDATE badges SET is_visible = CASE WHEN is_visible = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
     checkEmployeeId: db.prepare('SELECT 1 FROM badges WHERE employee_id = $id'),
-    markPaid: db.prepare("UPDATE badges SET is_paid = 1, paid_at = datetime('now') WHERE employee_id = $id"),
-    unmarkPaid: db.prepare('UPDATE badges SET is_paid = 0, paid_at = NULL WHERE employee_id = $id'),
-    markPrinted: db.prepare("UPDATE badges SET is_printed = 1, printed_at = datetime('now') WHERE employee_id = $id"),
-    unmarkPrinted: db.prepare('UPDATE badges SET is_printed = 0, printed_at = NULL WHERE employee_id = $id'),
-    markFlagged: db.prepare('UPDATE badges SET is_flagged = 1 WHERE employee_id = $id'),
-    unmarkFlagged: db.prepare('UPDATE badges SET is_flagged = 0 WHERE employee_id = $id'),
+    togglePaid: db.prepare("UPDATE badges SET is_paid = CASE WHEN is_paid = 1 THEN 0 ELSE 1 END, paid_at = CASE WHEN is_paid = 1 THEN NULL ELSE datetime('now') END WHERE employee_id = $id"),
+    togglePrinted: db.prepare("UPDATE badges SET is_printed = CASE WHEN is_printed = 1 THEN 0 ELSE 1 END, printed_at = CASE WHEN is_printed = 1 THEN NULL ELSE datetime('now') END WHERE employee_id = $id"),
+    toggleFlagged: db.prepare('UPDATE badges SET is_flagged = CASE WHEN is_flagged = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
   };
 
   // Migrate 4-digit band member IDs to 5-digit format (HD-0001 → HD-00001)
@@ -304,6 +301,7 @@ export function listBadges(options: {
   dateFrom?: string;
   dateTo?: string;
   hasPhoto?: boolean;
+  search?: string;
   page?: number;
   limit?: number;
   maxLimit?: number;
@@ -316,7 +314,7 @@ export function listBadges(options: {
   const offset = (page - 1) * limit;
 
   // Build dynamic WHERE clause for advanced filters
-  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division || options.recentFirst;
+  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division || options.recentFirst || options.search;
 
   if (hasAdvancedFilters || (options.includeHidden && options.department)) {
     const conditions: string[] = [];
@@ -359,6 +357,14 @@ export function listBadges(options: {
       conditions.push('has_photo = 1');
     } else if (options.hasPhoto === false) {
       conditions.push('has_photo = 0');
+    }
+
+    if (options.search) {
+      // Escape SQL LIKE wildcards in user input
+      const escaped = options.search.replace(/[%_]/g, ch => '\\' + ch);
+      const pattern = `%${escaped}%`;
+      conditions.push('(UPPER(name) LIKE UPPER($search) ESCAPE \'\\\' OR UPPER(employee_id) LIKE UPPER($search) ESCAPE \'\\\' OR UPPER(department) LIKE UPPER($search) ESCAPE \'\\\')');
+      params.$search = pattern;
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -409,36 +415,18 @@ export function toggleVisibility(employeeId: string): boolean {
 }
 
 export function togglePaid(employeeId: string): boolean {
-  const badge = getBadge(employeeId);
-  if (!badge) return false;
-  if (badge.is_paid) {
-    stmts.unmarkPaid.run({ $id: employeeId });
-  } else {
-    stmts.markPaid.run({ $id: employeeId });
-  }
-  return true;
+  const result = stmts.togglePaid.run({ $id: employeeId });
+  return result.changes > 0;
 }
 
 export function togglePrinted(employeeId: string): boolean {
-  const badge = getBadge(employeeId);
-  if (!badge) return false;
-  if (badge.is_printed) {
-    stmts.unmarkPrinted.run({ $id: employeeId });
-  } else {
-    stmts.markPrinted.run({ $id: employeeId });
-  }
-  return true;
+  const result = stmts.togglePrinted.run({ $id: employeeId });
+  return result.changes > 0;
 }
 
 export function toggleFlagged(employeeId: string): boolean {
-  const badge = getBadge(employeeId);
-  if (!badge) return false;
-  if (badge.is_flagged) {
-    stmts.unmarkFlagged.run({ $id: employeeId });
-  } else {
-    stmts.markFlagged.run({ $id: employeeId });
-  }
-  return true;
+  const result = stmts.toggleFlagged.run({ $id: employeeId });
+  return result.changes > 0;
 }
 
 export function setHasPhoto(employeeId: string, hasPhoto: boolean): boolean {
@@ -462,41 +450,41 @@ export function getStats(): {
   newestHire: { name: string; department: string; createdAt: string } | null;
   sparkline: { date: string; count: number }[];
 } {
-  const visible = (stmts.countVisible.get() as { count: number }).count;
-  const total = (db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number }).count;
-  const bandMembers = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 1').get() as { count: number }).count;
-  const flaggedCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1').get() as { count: number }).count;
-  const byDeptRows = stmts.countByDept.all() as { department: string; count: number }[];
-  const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
+  return db.transaction(() => {
+    const visible = (stmts.countVisible.get() as { count: number }).count;
+    const total = (db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number }).count;
+    const bandMembers = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 1').get() as { count: number }).count;
+    const flaggedCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1').get() as { count: number }).count;
+    const byDeptRows = stmts.countByDept.all() as { department: string; count: number }[];
+    const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
 
-  // Newest hire with full details (prefer non-band, fall back to any)
-  const newestRow = db.prepare(
-    'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'
-  ).get() as { name: string; department: string; created_at: string } | null;
+    const newestRow = db.prepare(
+      'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'
+    ).get() as { name: string; department: string; created_at: string } | null;
 
-  // Sparkline: daily badge creation counts for last 30 days
-  const sparklineRows = db.prepare(
-    `SELECT date(created_at) as date, COUNT(*) as count
-     FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-30 days')
-     GROUP BY date(created_at) ORDER BY date ASC`
-  ).all() as { date: string; count: number }[];
+    const sparklineRows = db.prepare(
+      `SELECT date(created_at) as date, COUNT(*) as count
+       FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-30 days')
+       GROUP BY date(created_at) ORDER BY date ASC`
+    ).all() as { date: string; count: number }[];
 
-  const byDepartment: Record<string, number> = {};
-  for (const row of byDeptRows) {
-    byDepartment[row.department] = row.count;
-  }
+    const byDepartment: Record<string, number> = {};
+    for (const row of byDeptRows) {
+      byDepartment[row.department] = row.count;
+    }
 
-  return {
-    totalBadges: total,
-    visible,
-    hiddenCount: total - visible,
-    bandMembers,
-    flaggedCount,
-    byDepartment,
-    newest: newest?.employee_id || null,
-    newestHire: newestRow ? { name: newestRow.name, department: newestRow.department, createdAt: newestRow.created_at } : null,
-    sparkline: sparklineRows,
-  };
+    return {
+      totalBadges: total,
+      visible,
+      hiddenCount: total - visible,
+      bandMembers,
+      flaggedCount,
+      byDepartment,
+      newest: newest?.employee_id || null,
+      newestHire: newestRow ? { name: newestRow.name, department: newestRow.department, createdAt: newestRow.created_at } : null,
+      sparkline: sparklineRows,
+    };
+  })();
 }
 
 /** Get analytics data for admin dashboard */
@@ -511,31 +499,32 @@ export function getAnalytics(): {
   customTitleCount: number;
   fanBadgeCount: number;
 } {
-  const topSongs = db.prepare(
-    'SELECT song as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY song ORDER BY count DESC LIMIT 10'
-  ).all() as { name: string; count: number }[];
+  return db.transaction(() => {
+    const topSongs = db.prepare(
+      'SELECT song as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY song ORDER BY count DESC LIMIT 10'
+    ).all() as { name: string; count: number }[];
 
-  const topTitles = db.prepare(
-    'SELECT title as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY title ORDER BY count DESC LIMIT 10'
-  ).all() as { name: string; count: number }[];
+    const topTitles = db.prepare(
+      'SELECT title as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY title ORDER BY count DESC LIMIT 10'
+    ).all() as { name: string; count: number }[];
 
-  const topDepartments = db.prepare(
-    'SELECT department as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY department ORDER BY count DESC LIMIT 10'
-  ).all() as { name: string; count: number }[];
+    const topDepartments = db.prepare(
+      'SELECT department as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY department ORDER BY count DESC LIMIT 10'
+    ).all() as { name: string; count: number }[];
 
-  const paidCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_paid = 1 AND is_band_member = 0').get() as { count: number }).count;
-  const fanBadgeCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 0').get() as { count: number }).count;
-  const unpaidCount = fanBadgeCount - paidCount;
+    const paidCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_paid = 1 AND is_band_member = 0').get() as { count: number }).count;
+    const fanBadgeCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 0').get() as { count: number }).count;
+    const unpaidCount = fanBadgeCount - paidCount;
 
-  const photoCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE has_photo = 1 AND is_band_member = 0').get() as { count: number }).count;
-  const noPhotoCount = fanBadgeCount - photoCount;
+    const photoCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE has_photo = 1 AND is_band_member = 0').get() as { count: number }).count;
+    const noPhotoCount = fanBadgeCount - photoCount;
 
-  // Count titles that appear only once (likely custom entries)
-  const customTitleCount = (db.prepare(
-    'SELECT COUNT(*) as count FROM (SELECT title FROM badges WHERE is_band_member = 0 GROUP BY title HAVING COUNT(*) = 1)'
-  ).get() as { count: number }).count;
+    const customTitleCount = (db.prepare(
+      'SELECT COUNT(*) as count FROM (SELECT title FROM badges WHERE is_band_member = 0 GROUP BY title HAVING COUNT(*) = 1)'
+    ).get() as { count: number }).count;
 
-  return { topSongs, topTitles, topDepartments, paidCount, unpaidCount, photoCount, noPhotoCount, customTitleCount, fanBadgeCount };
+    return { topSongs, topTitles, topDepartments, paidCount, unpaidCount, photoCount, noPhotoCount, customTitleCount, fanBadgeCount };
+  })();
 }
 
 /** Export all badges as an array (for CSV backup) */
