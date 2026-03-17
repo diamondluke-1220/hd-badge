@@ -101,7 +101,10 @@ docker pull ghcr.io/diamondluke-1220/hd-badge:latest
 
 ```
 src/
-  server.ts          # Hono server, routes, SSE, captive portal
+  server.ts          # Hono server, middleware, SSE, Playwright render, route wiring
+  routes/portal.ts   # Captive portal detection + clearance routes
+  routes/public.ts   # Public API (badge CRUD, org chart, images)
+  routes/admin.ts    # Admin API (management, demo, presentation, export)
   db.ts              # SQLite schema, queries, migrations, band member seeding
   demo.ts            # Demo mode (test badge generation, cleanup)
   logger.ts          # Ring buffer logger (200 entries, categories)
@@ -116,12 +119,13 @@ public/
   js/app.js            # Badge editor, popover system, renderer switching, init
   js/live-viz.js       # Live visualizations: SSE, ticker, animations, stats panel
   js/badge-render.js   # Badge DOM rendering (departments, titles, waveforms, access levels)
-  js/shared.js         # Shared constants and utilities across views
+  js/shared.js         # Shared constants, utilities, window.HD namespace
   js/badge-pool.js     # Badge data pool for view renderers
   js/view-grid.js      # Grid view (default, odometer counter)
   js/view-reviewboard.js # AI Review (split-flap text grid, headshot tiles)
   js/view-dendro.js    # D3 dendrogram tree view
-  js/view-arcade.js    # Arcade fighting game select view
+  js/view-arcade.js    # Arcade fighting game select view (layout, rotation, cursor)
+  js/arcade-cinematic.js # VS cinematic system (fights, specials, effects)
   js/presentation.js   # Presentation mode client
   js/presentation-shims.js # Shims for presentation route compatibility
   css/               # App styles, badge styles, view-specific styles
