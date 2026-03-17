@@ -285,6 +285,18 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       });
     }
 
+    // Hide all page UI so only the badge element is captured
+    await page.evaluate(() => {
+      document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
+        (el as HTMLElement).style.display = 'none';
+      });
+      const capture = document.getElementById('badgeCapture');
+      if (capture) {
+        capture.style.position = 'static';
+        capture.style.left = '0';
+      }
+    });
+
     const badgeEl = await page.$('#badge');
     if (!badgeEl) throw new Error('Badge element not found');
 
