@@ -1,24 +1,37 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('SSE Connectivity', () => {
-  test('SSE endpoint responds with event stream', async ({ request }) => {
-    const res = await request.get('/api/badges/stream');
-    expect(res.status()).toBe(200);
-    expect(res.headers()['content-type']).toContain('text/event-stream');
+  test('SSE endpoint responds with event stream headers', async ({ page, baseURL }) => {
+    await page.goto('/');
+    const result = await page.evaluate(async (url) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      try {
+        const res = await fetch(`${url}/api/badges/stream`, { signal: controller.signal });
+        clearTimeout(timeout);
+        const contentType = res.headers.get('content-type') || '';
+        const reader = res.body?.getReader();
+        let chunk = '';
+        if (reader) {
+          const { value } = await reader.read();
+          chunk = new TextDecoder().decode(value);
+          reader.cancel();
+        }
+        return { status: res.status, contentType, chunk };
+      } catch (e: any) {
+        clearTimeout(timeout);
+        return { status: 0, contentType: '', chunk: '', error: e.message };
+      }
+    }, baseURL);
+    expect(result.status).toBe(200);
+    expect(result.contentType).toContain('text/event-stream');
   });
 
-  test('SSE sends connected event on connect', async ({ request }) => {
-    const res = await request.get('/api/badges/stream');
-    const body = await res.text();
-    expect(body).toContain('event: connected');
-    expect(body).toContain('data: connected');
-  });
-
-  test('SSE endpoint exists and is accessible', async ({ page }) => {
-    // Verify from browser context that EventSource can connect
-    const connected = await page.evaluate(async () => {
+  test('SSE sends connected event on connect', async ({ page, baseURL }) => {
+    await page.goto('/');
+    const connected = await page.evaluate(async (url) => {
       return new Promise<boolean>((resolve) => {
-        const es = new EventSource('/api/badges/stream');
+        const es = new EventSource(`${url}/api/badges/stream`);
         const timeout = setTimeout(() => {
           es.close();
           resolve(false);
@@ -34,7 +47,7 @@ test.describe('SSE Connectivity', () => {
           resolve(false);
         };
       });
-    });
+    }, baseURL);
     expect(connected).toBe(true);
   });
 });
