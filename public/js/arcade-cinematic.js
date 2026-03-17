@@ -774,7 +774,8 @@
         bolt.setAttribute('fill', 'none');
         bolt.setAttribute('stroke', color);
         bolt.setAttribute('stroke-width', '5');
-        bolt.setAttribute('filter', 'url(#lightning-glow)');
+        const filterId = `lightning-glow-${Date.now()}-${b}`;
+        bolt.setAttribute('filter', `url(#${filterId})`);
         bolt.setAttribute('stroke-linecap', 'round');
 
         // White-hot core
@@ -785,9 +786,9 @@
         core.setAttribute('stroke-width', '2.5');
         core.setAttribute('stroke-linecap', 'round');
 
-        // SVG filter for glow
+        // SVG filter for glow (unique ID per bolt to avoid collisions)
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        defs.innerHTML = `<filter id="lightning-glow"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+        defs.innerHTML = `<filter id="${filterId}"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
 
         svg.appendChild(defs);
         svg.appendChild(bolt);

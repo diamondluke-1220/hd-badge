@@ -90,6 +90,7 @@ app.use('*', async (c, next) => {
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
+    "frame-ancestors 'none'",
   ].join('; '));
 });
 
@@ -320,6 +321,7 @@ interface SSEClient {
 }
 
 const sseClients = new Set<SSEClient>();
+const MAX_SSE_CLIENTS = 50;
 
 function sseWrite(client: SSEClient, event: string, data: string) {
   client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
@@ -358,6 +360,13 @@ initDemo({
 initPresentation({ broadcast: broadcastSSE });
 
 function handleSSEDirect(): Response {
+  if (sseClients.size >= MAX_SSE_CLIENTS) {
+    return new Response(JSON.stringify({ success: false, error: 'Too many live connections. Try again later.' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+    });
+  }
+
   const encoder = new TextEncoder();
   let clientRef: SSEClient | null = null;
 
