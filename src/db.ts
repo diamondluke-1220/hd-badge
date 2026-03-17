@@ -2,7 +2,7 @@
 // Uses bun:sqlite in WAL mode following Bagel Commander patterns
 
 import { Database } from 'bun:sqlite';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { existsSync, renameSync } from 'fs';
 import { join } from 'path';
 
@@ -83,6 +83,11 @@ function getAllKnownDepts(): string[] {
   return Object.values(DIVISION_DEPTS).flat();
 }
 
+/** Hash a delete token with SHA-256 for storage */
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
 let db: Database;
 
 // Prepared statements (cached after init)
@@ -102,28 +107,75 @@ let stmts: {
   togglePaid: ReturnType<Database['prepare']>;
   togglePrinted: ReturnType<Database['prepare']>;
   toggleFlagged: ReturnType<Database['prepare']>;
+  setHasPhoto: ReturnType<Database['prepare']>;
 };
+
+/** Run a migration only if its version hasn't been applied yet */
+function runMigration(version: number, description: string, fn: () => void) {
+  const applied = db.prepare('SELECT 1 FROM schema_versions WHERE version = ?').get(version);
+  if (applied) return;
+  fn();
+  db.prepare('INSERT INTO schema_versions (version, description, applied_at) VALUES (?, ?, datetime(\'now\'))').run(version, description);
+}
 
 export function initDb(dbPath: string) {
   db = new Database(dbPath);
   db.exec('PRAGMA journal_mode=WAL');
   db.exec(SCHEMA);
 
-  // Migrate: add payment/print columns if missing
-  const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
-  const colNames = new Set(cols.map(c => c.name));
-  if (!colNames.has('is_paid')) {
-    db.exec('ALTER TABLE badges ADD COLUMN is_paid INTEGER DEFAULT 0');
-    db.exec('ALTER TABLE badges ADD COLUMN paid_at TEXT');
-    db.exec('ALTER TABLE badges ADD COLUMN is_printed INTEGER DEFAULT 0');
-    db.exec('ALTER TABLE badges ADD COLUMN printed_at TEXT');
-  }
-  if (!colNames.has('is_flagged')) {
-    db.exec('ALTER TABLE badges ADD COLUMN is_flagged INTEGER DEFAULT 0');
-  }
-  if (!colNames.has('is_demo')) {
-    db.exec('ALTER TABLE badges ADD COLUMN is_demo INTEGER DEFAULT 0');
-  }
+  // Bootstrap schema versioning table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_versions (
+      version INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    )
+  `);
+
+  // --- Versioned Migrations ---
+
+  // v1: Payment and print tracking columns
+  runMigration(1, 'Add is_paid, paid_at, is_printed, printed_at columns', () => {
+    const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('is_paid')) {
+      db.exec('ALTER TABLE badges ADD COLUMN is_paid INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE badges ADD COLUMN paid_at TEXT');
+      db.exec('ALTER TABLE badges ADD COLUMN is_printed INTEGER DEFAULT 0');
+      db.exec('ALTER TABLE badges ADD COLUMN printed_at TEXT');
+    }
+  });
+
+  // v2: Flagged column
+  runMigration(2, 'Add is_flagged column', () => {
+    const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('is_flagged')) {
+      db.exec('ALTER TABLE badges ADD COLUMN is_flagged INTEGER DEFAULT 0');
+    }
+  });
+
+  // v3: Demo badge column
+  runMigration(3, 'Add is_demo column', () => {
+    const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('is_demo')) {
+      db.exec('ALTER TABLE badges ADD COLUMN is_demo INTEGER DEFAULT 0');
+    }
+  });
+
+  // v4: Hash plaintext delete tokens
+  runMigration(4, 'Hash existing plaintext delete_tokens with SHA-256', () => {
+    const rows = db.prepare('SELECT id, delete_token FROM badges WHERE delete_token IS NOT NULL').all() as { id: number; delete_token: string }[];
+    const update = db.prepare('UPDATE badges SET delete_token = $hash WHERE id = $id');
+    db.transaction(() => {
+      for (const row of rows) {
+        // Skip tokens that are already 64-char hex (already hashed)
+        if (/^[a-f0-9]{64}$/.test(row.delete_token)) continue;
+        update.run({ $hash: hashToken(row.delete_token), $id: row.id });
+      }
+    })();
+  });
 
   // Prepare all statements
   stmts = {
@@ -153,6 +205,7 @@ export function initDb(dbPath: string) {
     togglePaid: db.prepare("UPDATE badges SET is_paid = CASE WHEN is_paid = 1 THEN 0 ELSE 1 END, paid_at = CASE WHEN is_paid = 1 THEN NULL ELSE datetime('now') END WHERE employee_id = $id"),
     togglePrinted: db.prepare("UPDATE badges SET is_printed = CASE WHEN is_printed = 1 THEN 0 ELSE 1 END, printed_at = CASE WHEN is_printed = 1 THEN NULL ELSE datetime('now') END WHERE employee_id = $id"),
     toggleFlagged: db.prepare('UPDATE badges SET is_flagged = CASE WHEN is_flagged = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
+    setHasPhoto: db.prepare('UPDATE badges SET has_photo = $photo WHERE employee_id = $id'),
   };
 
   // Migrate 4-digit band member IDs to 5-digit format (HD-0001 → HD-00001)
@@ -201,7 +254,7 @@ function seedBandMembers() {
       $access_level: m.access,
       $access_css: m.css,
       $source: 'band',
-      $delete_token: randomUUID(),
+      $delete_token: hashToken(randomUUID()),
       $has_photo: 0,
       $is_band_member: 1,
       $photo_public: 1,
@@ -280,7 +333,7 @@ export function createBadge(input: BadgeInput): { employeeId: string; deleteToke
     $access_level: input.accessLevel,
     $access_css: input.accessCss,
     $source: input.source || 'web',
-    $delete_token: deleteToken,
+    $delete_token: hashToken(deleteToken),
     $has_photo: input.hasPhoto ? 1 : 0,
     $is_band_member: 0,
     $photo_public: input.photoPublic ? 1 : 0,
@@ -400,7 +453,7 @@ export function listBadges(options: {
 }
 
 export function softDeleteBadge(employeeId: string, token: string): boolean {
-  const result = stmts.softDelete.run({ $id: employeeId, $token: token });
+  const result = stmts.softDelete.run({ $id: employeeId, $token: hashToken(token) });
   return result.changes > 0;
 }
 
@@ -432,7 +485,7 @@ export function toggleFlagged(employeeId: string): boolean {
 export function setHasPhoto(employeeId: string, hasPhoto: boolean): boolean {
   const badge = getBadge(employeeId);
   if (!badge) return false;
-  db.prepare('UPDATE badges SET has_photo = $photo WHERE employee_id = $id').run({
+  stmts.setHasPhoto.run({
     $photo: hasPhoto ? 1 : 0,
     $id: employeeId,
   });
