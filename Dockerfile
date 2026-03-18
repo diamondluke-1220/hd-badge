@@ -1,6 +1,11 @@
 # Help Desk Badge App — Docker Build
 FROM oven/bun:1
 
+LABEL org.opencontainers.image.title="HD Badge" \
+      org.opencontainers.image.description="Help Desk Badge App — employee badge generator for the band" \
+      org.opencontainers.image.url="https://github.com/diamondluke-1220/hd-badge" \
+      org.opencontainers.image.icon="/app/public/img/hdbadge-logo.png"
+
 WORKDIR /app
 
 # Install system dependencies for Playwright Chromium

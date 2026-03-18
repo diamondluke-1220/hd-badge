@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <linearGradient id="badgeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0D2B5E"/>
+      <stop offset="100%" stop-color="#0A1F3F"/>
+    </linearGradient>
+    <linearGradient id="keyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#142850"/>
+      <stop offset="100%" stop-color="#0A1A3A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background - deep navy -->
+  <rect width="512" height="512" rx="64" fill="#060E1F"/>
+
+  <!-- Lanyard string -->
+  <line x1="256" y1="0" x2="256" y2="82" stroke="#2E7DFF" stroke-width="3" stroke-opacity="0.6"/>
+
+  <!-- Badge body - slightly tilted for punk attitude -->
+  <g transform="rotate(-3, 256, 280)" filter="url(#shadow)">
+    <!-- Main badge shape -->
+    <rect x="120" y="88" width="272" height="378" rx="18" fill="url(#badgeGrad)" stroke="#2E7DFF" stroke-width="2"/>
+
+    <!-- Top accent stripe (matches UI) -->
+    <rect x="120" y="88" width="272" height="8" rx="4" fill="#2E7DFF"/>
+    <!-- Rounded top corners overlap fix -->
+    <rect x="120" y="92" width="272" height="4" fill="#2E7DFF"/>
+
+    <!-- Badge inner border -->
+    <rect x="132" y="108" width="248" height="346" rx="10" fill="none" stroke="#2E7DFF" stroke-width="0.75" stroke-opacity="0.3"/>
+
+    <!-- Lanyard hole -->
+    <rect x="232" y="100" width="48" height="18" rx="9" fill="#060E1F" stroke="#2E7DFF" stroke-width="1.5" stroke-opacity="0.5"/>
+
+    <!-- Photo placeholder area with keyboard keys -->
+    <rect x="158" y="140" width="196" height="130" rx="8" fill="#060E1F" stroke="#1A3A6A" stroke-width="1.5"/>
+
+    <!-- Keyboard key "H" -->
+    <g transform="translate(166, 147)">
+      <rect width="86" height="116" rx="10" fill="url(#keyGrad)" stroke="#2E7DFF" stroke-width="1.5" stroke-opacity="0.5"/>
+      <!-- Key shine -->
+      <rect x="4" y="4" width="78" height="20" rx="6" fill="white" fill-opacity="0.04"/>
+      <text x="43" y="78" text-anchor="middle" fill="#F5E6C8" font-family="'Permanent Marker', 'Marker Felt', cursive" font-size="62" font-weight="bold">H</text>
+    </g>
+
+    <!-- Keyboard key "D" -->
+    <g transform="translate(260, 147)">
+      <rect width="86" height="116" rx="10" fill="url(#keyGrad)" stroke="#2E7DFF" stroke-width="1.5" stroke-opacity="0.5"/>
+      <!-- Key shine -->
+      <rect x="4" y="4" width="78" height="20" rx="6" fill="white" fill-opacity="0.04"/>
+      <text x="43" y="78" text-anchor="middle" fill="#F5E6C8" font-family="'Permanent Marker', 'Marker Felt', cursive" font-size="62" font-weight="bold">D</text>
+    </g>
+
+    <!-- "BADGE" text in gold accent -->
+    <text x="256" y="318" text-anchor="middle" fill="#CA8A04" font-family="'Permanent Marker', 'Marker Felt', cursive" font-size="36" letter-spacing="10">BADGE</text>
+
+    <!-- Thin gold rule under BADGE -->
+    <line x1="170" y1="330" x2="342" y2="330" stroke="#CA8A04" stroke-width="1" stroke-opacity="0.4"/>
+
+    <!-- Barcode-style lines in blue accent -->
+    <g transform="translate(170, 350)" fill="#2E7DFF" fill-opacity="0.5">
+      <rect x="0" y="0" width="3" height="28"/>
+      <rect x="6" y="0" width="1.5" height="28"/>
+      <rect x="11" y="0" width="4" height="28"/>
+      <rect x="18" y="0" width="2" height="28"/>
+      <rect x="23" y="0" width="3" height="28"/>
+      <rect x="29" y="0" width="1.5" height="28"/>
+      <rect x="34" y="0" width="4" height="28"/>
+      <rect x="41" y="0" width="2" height="28"/>
+      <rect x="46" y="0" width="3" height="28"/>
+      <rect x="52" y="0" width="1.5" height="28"/>
+      <rect x="57" y="0" width="4" height="28"/>
+      <rect x="64" y="0" width="2" height="28"/>
+      <rect x="69" y="0" width="3" height="28"/>
+      <rect x="75" y="0" width="1.5" height="28"/>
+      <rect x="80" y="0" width="4" height="28"/>
+      <rect x="87" y="0" width="2" height="28"/>
+      <rect x="92" y="0" width="3" height="28"/>
+      <rect x="98" y="0" width="1.5" height="28"/>
+      <rect x="103" y="0" width="4" height="28"/>
+      <rect x="110" y="0" width="2" height="28"/>
+      <rect x="115" y="0" width="3" height="28"/>
+      <rect x="121" y="0" width="1.5" height="28"/>
+      <rect x="126" y="0" width="4" height="28"/>
+      <rect x="133" y="0" width="2" height="28"/>
+      <rect x="138" y="0" width="3" height="28"/>
+      <rect x="144" y="0" width="1.5" height="28"/>
+      <rect x="149" y="0" width="4" height="28"/>
+      <rect x="156" y="0" width="2" height="28"/>
+      <rect x="161" y="0" width="3" height="28"/>
+      <rect x="167" y="0" width="1.5" height="28"/>
+    </g>
+
+    <!-- ID number in cream -->
+    <text x="256" y="405" text-anchor="middle" fill="#F5E6C8" fill-opacity="0.85" font-family="'Courier New', monospace" font-size="15">HD-00000</text>
+
+    <!-- Bottom accent stripe (matches UI) -->
+    <rect x="120" y="458" width="272" height="8" rx="4" fill="#2E7DFF"/>
+    <rect x="120" y="458" width="272" height="4" fill="#2E7DFF"/>
+
+    <!-- VIP stamp accent -->
+    <g transform="translate(340, 430) rotate(-12)">
+      <rect x="-28" y="-14" width="56" height="28" rx="4" fill="none" stroke="#CA8A04" stroke-width="2" stroke-opacity="0.7"/>
+      <text x="0" y="6" text-anchor="middle" fill="#CA8A04" fill-opacity="0.8" font-family="'Courier New', monospace" font-size="16" font-weight="bold" letter-spacing="3">VIP</text>
+    </g>
+  </g>
+</svg>

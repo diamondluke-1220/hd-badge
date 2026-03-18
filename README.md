@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/img/hdbadge-logo.png" alt="HD Badge" width="128">
+</p>
+
 # Help Desk Badge Generator
 
 Employee badge creator for [Help Desk](https://open.spotify.com/artist/64AtvxMQy2FsyDOX0zVfke), a comedy/office-themed punk band from Madison, WI. Fans create custom corporate ID badges at live shows, pick a department and job title, and join the company org chart.
