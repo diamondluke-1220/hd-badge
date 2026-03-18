@@ -36,7 +36,6 @@ const TITLES = [
 ];
 
 const ACCESS_LEVELS = [
-  { label: 'ALL ACCESS', css: 'all-access' },
   { label: 'PAPER JAM CLEARANCE', css: 'paper-jam' },
   { label: 'RESET AUTHORIZED', css: 'reset' },
   { label: 'COFFEE MACHINE ELITE', css: 'coffee' },

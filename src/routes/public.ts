@@ -11,6 +11,25 @@ import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
 import { log } from '../logger';
 
+// Band-exclusive values — fans cannot use these (enforced on create)
+const RESERVED_DEPTS = new Set([
+  'TICKET ESCALATION BUREAU',
+  'AUDIO ENGINEERING DIVISION',
+  'DEPT. OF PERCUSSIVE MAINTENANCE',
+  'INFRASTRUCTURE & POWER CHORDS',
+  'LOW FREQUENCY OPERATIONS',
+]);
+const RESERVED_TITLES = new Set([
+  'CHIEF ESCALATION OFFICER',
+  'CHIEF AUDIO ARCHITECT',
+  'CHIEF IMPACT OFFICER',
+  'VP OF POWER DISTRIBUTION',
+  'VP OF BOTTOM LINE OPERATIONS',
+]);
+const RESERVED_ACCESS = new Set([
+  'ALL ACCESS',
+]);
+
 interface PublicDeps {
   getClientIp: (c: any) => string;
   markPortalCleared: (ip: string) => void;
@@ -60,6 +79,20 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
     if (!isNameClean(name)) {
       return c.json({ success: false, error: 'HR has flagged your name for review.' }, 400);
+    }
+
+    // Block band-exclusive departments, titles, and access levels
+    const deptUpper = department.trim().toUpperCase();
+    const titleUpper = title.trim().toUpperCase();
+    const accessUpper = accessLevel.trim().toUpperCase();
+    if (RESERVED_DEPTS.has(deptUpper)) {
+      return c.json({ success: false, error: 'That department is reserved for executive staff.' }, 400);
+    }
+    if (RESERVED_TITLES.has(titleUpper)) {
+      return c.json({ success: false, error: 'That title is reserved for executive staff.' }, 400);
+    }
+    if (RESERVED_ACCESS.has(accessUpper)) {
+      return c.json({ success: false, error: 'ALL ACCESS clearance requires executive authorization.' }, 400);
     }
 
     try {
