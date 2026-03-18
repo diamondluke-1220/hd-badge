@@ -230,6 +230,7 @@
         overlay.classList.add('slash-fire');
         const vsText = overlay.querySelector('.arcade-vs-text');
         if (vsText) vsText.classList.add('slam');
+        if (window.ArcadeSFX) ArcadeSFX.play('vsSlam');
       });
 
       beat(6500, () => {
@@ -241,6 +242,7 @@
           const bossWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
           if (bossWrap) {
             bossWrap.classList.add('boss-electric-entrance');
+            if (window.ArcadeSFX) ArcadeSFX.play('bossEntrance');
             // Continuous lightning from slide-in until quote ends (~4s duration)
             this._spawnBossArcSparks(overlay, bossWrap, '#2E7DFF', 4000);
             // Remove electric effect before FIGHT!! flash
@@ -281,6 +283,7 @@
         overlay.appendChild(fightEl);
         fightEl.getBoundingClientRect();
         fightEl.classList.add('active');
+        if (window.ArcadeSFX) ArcadeSFX.play('fightStart');
         setVSAnnouncer('FIGHT!');
         beat(13000, () => fightEl.remove());
       });
@@ -556,6 +559,12 @@
     const HITSTOP = { light: 0, medium: 0, heavy: 150, ko: 280 };
 
     const doHit = (spark, portrait, weight) => {
+      // Sound effect based on hit weight
+      if (window.ArcadeSFX) {
+        if (weight === 'ko') ArcadeSFX.play('koImpact');
+        else if (weight === 'heavy') ArcadeSFX.play('heavyHit');
+        else ArcadeSFX.play('lightHit');
+      }
       // Randomize flash position within portrait bounds
       const randX = 10 + Math.floor(Math.random() * 80);
       const randY = 10 + Math.floor(Math.random() * 80);
@@ -722,6 +731,7 @@
           const oppWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
           if (oppWrap) {
             oppWrap.classList.add('stunned');
+            if (window.ArcadeSFX) ArcadeSFX.play('stun');
             const stars = document.createElement('div');
             stars.className = 'arcade-vs-stun-stars';
             stars.innerHTML = '<span class="arcade-vs-stun-stars-icons">\u2B50\u{1F4AB}\u2B50</span><span class="arcade-vs-stun-stars-label">STUNNED</span>';
@@ -974,6 +984,8 @@
     // Screen darken for dramatic isolation
     const darken = overlay.querySelector('.arcade-vs-darken-overlay');
     if (darken) darken.classList.add('active');
+    // Charge whoosh sound
+    if (window.ArcadeSFX) ArcadeSFX.play('whoosh');
   },
 
   _triggerSpecialMove(overlay, color, opponent) {
@@ -995,6 +1007,8 @@
       setTimeout(() => rightSide.classList.remove('special-move-windup'), 600);
     }
 
+    // Boom sound on release
+    if (window.ArcadeSFX) ArcadeSFX.play('boom');
     // Speed lines on release
     const speedLines = overlay.querySelector('.arcade-vs-speed-lines');
     if (speedLines) {

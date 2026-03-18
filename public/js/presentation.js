@@ -51,6 +51,8 @@
   // ─── Init ───────────────────────────────────────────────
 
   function init() {
+    // Mute arcade sound effects in presentation mode (band is playing live)
+    if (window.ArcadeSFX) ArcadeSFX.setMuted(true);
     connectSSE();
     // Check if presentation is already in progress (page refresh / reconnect)
     fetchCurrentState();

@@ -534,6 +534,7 @@ window.ArcadeRenderer = {
         }
 
         slot.classList.add('cursor-active');
+        if (window.ArcadeSFX) ArcadeSFX.play('cursorTick');
 
         // Tick pulse on announcer bar
         if (this._announcer) {
