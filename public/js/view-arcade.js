@@ -69,8 +69,8 @@ window.ArcadeRenderer = {
   _BOSS_MOVES: {
     'HD-00001': 'TICKET ESCALATION',
     'HD-00002': 'FEEDBACK LOOP',
-    'HD-00003': 'PERCUSSIVE MAINTENANCE',
-    'HD-00004': 'POWER SURGE',
+    'HD-00003': 'CLICK TRACK OF DOOM',
+    'HD-00004': '1000 YARD STARE',
     'HD-00005': 'LOW END THEORY',
   },
 
@@ -454,6 +454,14 @@ window.ArcadeRenderer = {
     }
   },
 
+  _clearFightResults() {
+    this._container.querySelectorAll('.arcade-slot.fight-winner, .arcade-slot.fight-loser').forEach(slot => {
+      slot.classList.remove('fight-winner', 'fight-loser');
+      const label = slot.querySelector('.arcade-slot-result');
+      if (label) label.remove();
+    });
+  },
+
   _resumeRotation() {
     this._stopRotation();
     const interval = animationsEnabled() ? 18000 : 3000;
@@ -465,6 +473,8 @@ window.ArcadeRenderer = {
       if (this._rotationIndex >= this._shuffledBadges.length) {
         this._shuffledBadges = hdShuffle(this._allBadges);
         this._rotationIndex = 0;
+        // New round — clear all fight result markers
+        this._clearFightResults();
       }
 
       this._showVSMatchup();
@@ -487,24 +497,20 @@ window.ArcadeRenderer = {
 
     this._setAnnouncer('SELECTING FIGHTER...');
 
-    // Build deceleration schedule: ~6.5s total (smooth deceleration, snappy finish)
+    // Build deceleration schedule: smooth exponential curve
+    // Fast spin (40ms) → gradual slowdown → final crawl, no jarring jumps
     const steps = [];
     let t = 0;
+    let interval = 40;
+    const maxTime = 5200; // cursor animation budget before landing
 
-    // Phase 1: rapid cycling (100ms intervals, 10 steps = 1.0s)
-    for (let i = 0; i < 10; i++) { steps.push(t); t += 100; }
-    // Phase 2: fast (150ms intervals, 8 steps = 1.2s)
-    for (let i = 0; i < 8; i++) { steps.push(t); t += 150; }
-    // Phase 3: easing (250ms intervals, 4 steps = 1.0s)
-    for (let i = 0; i < 4; i++) { steps.push(t); t += 250; }
-    // Phase 4: slowing (375ms intervals, 3 steps = 1.125s)
-    for (let i = 0; i < 3; i++) { steps.push(t); t += 375; }
-    // Phase 5: heavy (450ms intervals, 2 steps = 0.9s)
-    for (let i = 0; i < 2; i++) { steps.push(t); t += 450; }
-    // Phase 6: landing (525ms intervals, 2 steps = 1.05s)
-    for (let i = 0; i < 2; i++) { steps.push(t); t += 525; }
+    while (t < maxTime) {
+      steps.push(t);
+      t += Math.round(interval);
+      interval *= 1.08;
+    }
     // Final land
-    const landTime = t + 500;
+    const landTime = t + 200;
 
     const targetSlot = this._container.querySelector(`[data-employee-id="${targetBadge.employeeId}"]`);
     const totalSteps = steps.length;
@@ -539,33 +545,55 @@ window.ArcadeRenderer = {
         // Pulse the matching division tab
         this._pulseDivisionTab(slot.dataset.division);
 
-        // Update spotlight during slow/crawl phases (last 10 steps)
-        if (idx >= totalSteps - 10) {
-          const eid = slot.dataset.employeeId;
-          const badge = this._allBadges.find(b => b.employeeId === eid);
-          if (badge) this._updateSpotlight(badge);
-        }
+        // Update spotlight on every step
+        const eid = slot.dataset.employeeId;
+        const badge = this._allBadges.find(b => b.employeeId === eid);
+        if (badge) this._updateSpotlight(badge);
       }, delay);
       this._timeouts.push(tid);
     });
 
-    // Final land on target
+    // Final land — highlight slot, dim surroundings around spotlight, add SELECTED
     const landTid = setTimeout(() => {
       this._container.querySelectorAll('.arcade-slot.cursor-active').forEach(s => s.classList.remove('cursor-active'));
       if (targetSlot) {
         targetSlot.classList.add('cursor-active');
         targetSlot.classList.add('highlighted');
         targetSlot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        // Add SELECTED overlay on the slot
+        const selLabel = document.createElement('div');
+        selLabel.className = 'arcade-slot-result arcade-slot-selected-label';
+        selLabel.textContent = 'SELECTED';
+        targetSlot.appendChild(selLabel);
       }
 
-      // Update spotlight with landed badge
+      // Update spotlight with landed badge + add SELECTED state
       this._updateSpotlight(targetBadge);
+      const spot = this._container.querySelector('.arcade-spotlight');
+      if (spot) {
+        spot.classList.add('selection-focus');
+        // Add SELECTED text to spotlight
+        const spotLabel = document.createElement('div');
+        spotLabel.className = 'arcade-spotlight-selected-label';
+        spotLabel.textContent = 'SELECTED';
+        spot.appendChild(spotLabel);
+      }
 
       this._setAnnouncer(`${targetBadge.name.toUpperCase()} ENTERS THE RING`);
 
+      // Dramatic pause — let the selection breathe (2s) before fight begins
       const doneTid = setTimeout(() => {
+        // Clean up selection state before VS overlay takes over
+        if (spot) {
+          spot.classList.remove('selection-focus');
+          const spotSel = spot.querySelector('.arcade-spotlight-selected-label');
+          if (spotSel) spotSel.remove();
+        }
+        const selEl = targetSlot?.querySelector('.arcade-slot-selected-label');
+        if (selEl) selEl.remove();
         if (onLand) onLand();
-      }, 400);
+      }, 2000);
       this._timeouts.push(doneTid);
     }, landTime);
     this._timeouts.push(landTid);
@@ -643,6 +671,7 @@ window.ArcadeRenderer = {
     if (this._rotationIndex >= this._shuffledBadges.length) {
       this._shuffledBadges = hdShuffle(this._allBadges);
       this._rotationIndex = 0;
+      this._clearFightResults();
     }
     const currentBadge = this._shuffledBadges[this._rotationIndex];
     if (!currentBadge) return;
@@ -684,6 +713,7 @@ window.ArcadeRenderer = {
           if (this._rotationIndex >= this._shuffledBadges.length) {
             this._shuffledBadges = hdShuffle(this._allBadges);
             this._rotationIndex = 0;
+            this._clearFightResults();
           }
           this._showVSMatchup();
         }, 4000);
