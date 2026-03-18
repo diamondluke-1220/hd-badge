@@ -193,7 +193,8 @@ window.ArcadeRenderer = {
 
   async _fetchAllBadges() {
     const badges = await BadgePool.fetchAll({ limit: 100 });
-    this._allBadges = badges;
+    // Band members are bosses only — they appear as opponents, not as rotating fighters
+    this._allBadges = badges.filter(b => !b.isBandMember);
     badges.forEach(b => {
       if (b.isBandMember) this._bossBadges.push(b);
     });
@@ -357,9 +358,14 @@ window.ArcadeRenderer = {
     const color = DIVISION_ACCENT_COLORS[div] || '#ffd700';
     slot.style.setProperty('--slot-color', color);
 
+    // Band members use SNES pixel art portraits; fans use headshot API
+    const slotPhoto = (badge.isBandMember && this._BOSS_PORTRAITS[badge.employeeId])
+      ? this._BOSS_PORTRAITS[badge.employeeId]
+      : `/api/badge/${esc(badge.employeeId)}/headshot`;
+
     slot.innerHTML = `
       <div class="arcade-slot-photo-wrap">
-        <img class="arcade-slot-photo" src="/api/badge/${esc(badge.employeeId)}/headshot"
+        <img class="arcade-slot-photo" src="${esc(slotPhoto)}"
              alt="${esc(badge.name)}" loading="lazy"
              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
         <div class="arcade-slot-silhouette" style="display:none">?</div>
@@ -598,7 +604,10 @@ window.ArcadeRenderer = {
 
     const img = document.createElement('img');
     img.className = 'arcade-spotlight-photo';
-    img.src = `/api/badge/${esc(badge.employeeId)}/headshot`;
+    // Band members use SNES pixel art portraits
+    img.src = (badge.isBandMember && this._BOSS_PORTRAITS[badge.employeeId])
+      ? this._BOSS_PORTRAITS[badge.employeeId]
+      : `/api/badge/${esc(badge.employeeId)}/headshot`;
     img.alt = badge.name;
     img.onerror = () => { img.style.display = 'none'; if (silhouette) silhouette.style.display = 'flex'; };
     img.onload = () => { if (silhouette) silhouette.style.display = 'none'; };
@@ -708,8 +717,11 @@ window.ArcadeRenderer = {
     this._stopRotation();
     this._setAnnouncer('A NEW CONTENDER HAS ARRIVED!');
 
-    this._allBadges.push(badge);
-    if (badge.isBandMember) this._bossBadges.push(badge);
+    if (badge.isBandMember) {
+      this._bossBadges.push(badge);
+    } else {
+      this._allBadges.push(badge);
+    }
     this._shuffledBadges = hdShuffle(this._allBadges);
 
     const div = getDivisionForDept(badge.department, badge.isBandMember);
