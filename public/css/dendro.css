@@ -277,6 +277,39 @@ body.view-dendro .dendro-container {
   word-break: break-all;
 }
 
+/* ─── FX Off ───────────────────────────────────────────── */
+
+.fx-off .dendro-awaiting { animation: none; }
+.fx-off .dendro-arrival-glow { animation: none; }
+.fx-off .ping-ring { animation: none; }
+.fx-off .ping-photo { display: none; }
+.fx-off .dendro-packet { display: none; }
+.fx-off .dendro-router-led { animation: none; }
+.fx-off .dendro-cli-popup { display: none; }
+
+/* ─── Mobile: scale down CLI popups ───────────────────── */
+
+@media (max-width: 640px) {
+  .dendro-cli-popup {
+    font-size: 6px;
+    min-width: 100px;
+    max-width: 160px;
+  }
+  .dendro-cli-title {
+    font-size: 6px;
+  }
+  .dendro-cli-dot {
+    width: 4px;
+    height: 4px;
+  }
+  .dendro-cli-body {
+    padding: 3px 4px;
+  }
+  .dendro-cli-header {
+    padding: 2px 4px;
+  }
+}
+
 /* ─── Reduced Motion ───────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

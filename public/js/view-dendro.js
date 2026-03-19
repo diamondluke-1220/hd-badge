@@ -814,7 +814,7 @@ window.DendroRenderer = {
     if (this._packetTimer) clearInterval(this._packetTimer);
 
     const spawnPacket = () => {
-      if (this._isUserInteracting || !this._animLayer) return;
+      if (this._isUserInteracting || !this._animLayer || (typeof animationsEnabled === 'function' && !animationsEnabled())) return;
 
       // Pick a random visible link
       const links = this._g.selectAll('path.dendro-link').nodes();
@@ -889,7 +889,7 @@ window.DendroRenderer = {
     if (this._cliTimer) clearInterval(this._cliTimer);
 
     const spawnPopup = () => {
-      if (this._isUserInteracting || !this._svg) return;
+      if (this._isUserInteracting || !this._svg || (typeof animationsEnabled === 'function' && !animationsEnabled())) return;
 
       // Pick a random node (division or department — not employees to avoid clutter)
       const nodeEls = this._g.selectAll('g.dendro-node-division, g.dendro-node-department').nodes();

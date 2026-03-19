@@ -89,9 +89,19 @@ const CLICK_MAP = [
   { selector: '.waveform-sticker', field: 'song' },
 ];
 
+let _discoveryDone = false;
+
 function attachBadgeClickHandlers() {
   const previewArea = document.getElementById('badgePreviewArea');
   if (!previewArea) return;
+
+  // One-time discovery pulse — staggered outline flash across all editable elements
+  if (!_discoveryDone) {
+    _discoveryDone = true;
+    previewArea.classList.add('discover-pulse');
+    // Remove after animations complete (~2.4s delay + 1.2s anim)
+    setTimeout(() => previewArea.classList.remove('discover-pulse'), 4000);
+  }
 
   CLICK_MAP.forEach(({ selector, field }) => {
     const el = previewArea.querySelector(selector);
@@ -99,9 +109,10 @@ function attachBadgeClickHandlers() {
       el.style.cursor = 'pointer';
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        // Hide hint on first interaction
+        // Hide hint and stop pulse on first interaction
         const hint = document.getElementById('editHint');
         if (hint) hint.classList.add('hidden');
+        previewArea.classList.remove('discover-pulse');
         showPopover(el, field);
       });
     }
@@ -200,7 +211,9 @@ function positionPopover(popover, targetEl) {
 
   // Vertically center on the target field element, clamped to viewport
   const targetCenter = fieldRect.top + fieldRect.height / 2;
-  const top = Math.max(10, Math.min(targetCenter - 40, window.innerHeight - 420));
+  const popHeight = popover.offsetHeight || 450;
+  const maxTop = window.innerHeight - popHeight - 10;
+  const top = Math.max(10, Math.min(targetCenter - 40, maxTop));
 
   popover.style.left = left + 'px';
   popover.style.top = top + 'px';
@@ -362,13 +375,14 @@ function buildSongPopover() {
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="card-grid">${songCards}</div>
-      <div class="popover-divider"></div>
       <div class="popover-label">Waveform Style</div>
       <div class="wave-toggle">
         <button class="wave-btn${state.waveStyle === 'barcode' ? ' active' : ''}" data-style="barcode">Barcode</button>
         <button class="wave-btn${state.waveStyle === 'sticker' ? ' active' : ''}" data-style="sticker">Sticker</button>
       </div>
+      <div class="popover-divider"></div>
+      <div class="popover-label">Track</div>
+      <div class="card-grid">${songCards}</div>
     </div>`;
 }
 
@@ -1333,7 +1347,8 @@ function buildViewSwitcher() {
   // Insert after nav
   nav.after(switcher);
 
-  // Animation toggle handler
+  // Animation toggle handler — set initial fx-off class
+  if (!animationsEnabled()) document.body.classList.add('fx-off');
   document.getElementById('animToggleBtn').addEventListener('click', toggleAnimations);
 
   // View switch click handlers

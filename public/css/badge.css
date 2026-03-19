@@ -356,6 +356,7 @@
   color: #0A1F3F;
   letter-spacing: 2px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .badge .waveform-duration {
   font-family: 'JetBrains Mono', monospace;

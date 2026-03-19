@@ -839,12 +839,11 @@ window.ReviewBoardRenderer = {
       const boardGridH = this.ROWS * tileH + (this.ROWS - 1);
       let badgeTileH = Math.max(10, Math.floor(boardGridH / this.BADGE_ROWS));
       if (isMobile) {
-        // On mobile, size badge to fill remaining space after scaled board
+        // On mobile, cap badge panel to roughly match board height
         const boardScaledH = this._boardEl ? parseInt(this._boardEl.style.height) || 160 : 160;
-        const headerH = 30; // title row
-        const gapH = 12;
-        const remainingH = vh - headerH - boardScaledH - gapH - 16;
-        const badgeTileFromH = Math.floor(Math.max(remainingH, 200) / this.BADGE_ROWS);
+        // Badge panel should be at most ~1.1× the board height
+        const maxBadgeH = Math.round(boardScaledH * 1.1);
+        const badgeTileFromH = Math.floor(Math.max(maxBadgeH, 160) / this.BADGE_ROWS);
         // Also cap to viewport width
         const badgeTileFromW = Math.floor((vw - pad * 2 - 12 - (this.BADGE_COLS - 1)) / this.BADGE_COLS);
         badgeTileH = Math.min(badgeTileFromH, badgeTileFromW);

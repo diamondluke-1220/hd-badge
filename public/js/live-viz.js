@@ -151,6 +151,7 @@ function animationsEnabled() {
 
 function setAnimationsEnabled(enabled) {
   localStorage.setItem('hd-animations', enabled ? '1' : '0');
+  document.body.classList.toggle('fx-off', !enabled);
   const btn = document.getElementById('animToggleBtn');
   if (btn) {
     btn.classList.toggle('anim-on', enabled);
