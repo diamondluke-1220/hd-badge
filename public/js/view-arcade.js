@@ -502,15 +502,15 @@ window.ArcadeRenderer = {
 
   _CODEX_ENTRIES: {
     // Creatures
-    'The Phantom Printer': { type: 'creature', desc: 'A haunted office printer that feeds on misery and ink cartridges. Has been "out of toner" since 2019.', move: 'PAPER FEED FRENZY' },
-    'The Network Wizard': { type: 'creature', desc: 'Claims to know the dark arts of subnetting. Blames DNS for everything, and is right 60% of the time.', move: 'PACKET STORM' },
-    'Watercooler Will': { type: 'creature', desc: "Has a story for every occasion. None of them are short. He'll corner you for 45 minutes about his weekend.", move: 'ENDLESS ANECDOTE' },
-    'HR Nancy': { type: 'creature', desc: 'Enforces compliance with an iron fist wrapped in a mandatory training module. Her calendar is 98% blocked.', move: 'COMPLIANCE LOCKDOWN' },
-    'The Dirty Microwave': { type: 'creature', desc: 'Nobody claims it. Nobody cleans it. The smell has its own HR file. Fish reheaters are its sworn allies.', move: 'HAZMAT EXPLOSION' },
-    'The MFA Guardian': { type: 'creature', desc: 'Demands a new code every 30 seconds. Has locked out the CEO twice. Shows no remorse.', move: 'CODE SWITCH' },
-    'The Consultant': { type: 'creature', desc: 'Twice the pay, half the deliverables. Will recommend a strategy that you already tried last quarter.', move: 'BUDGET SLASH' },
-    'Sally in Accounting': { type: 'creature', desc: 'Controls the budget with surgical precision. Your expense report is already denied. This fight will be 1040-EZ.', move: 'EXPENSE DENIED' },
-    'THE INTERN': { type: 'intern', desc: "Just happy to be here. Has no badge access, no desk, and no idea what's happening. Brings great energy though.", move: 'UNPAID OVERTIME' },
+    'The Phantom Printer': { type: 'creature', desc: 'A haunted office printer that feeds on misery and ink cartridges. Has been "out of toner" since 2019. No one has ever successfully printed on the first try.', move: 'PAPER FEED FRENZY' },
+    'The Network Wizard': { type: 'creature', desc: "Claims to know the dark arts of subnetting. Blames DNS for everything, and is right 60% of the time. Nobody knows what he actually does, but nothing works without him.", move: 'PACKET STORM' },
+    'Watercooler Will': { type: 'creature', desc: "Has a story for every occasion. None of them are short. He'll corner you for 45 minutes about his weekend. There is no escape. There is only nodding.", move: 'ENDLESS ANECDOTE' },
+    'HR Nancy': { type: 'creature', desc: "Compliance isn't just mandatory — it's punishable by death. Enforces policy with an iron fist wrapped in a mandatory training module. Forget to fill out the forms properly and you'll soon realize what she's been training for.", move: 'COMPLIANCE LOCKDOWN' },
+    'The Dirty Microwave': { type: 'creature', desc: "Nobody claims it. Nobody cleans it. The smell has its own HR file. Fish reheaters are its sworn allies. The only thing worse than the smell are the passive-aggressive emails asking everyone to chip in and clean it.", move: 'HAZMAT EXPLOSION' },
+    'The MFA Guardian': { type: 'creature', desc: "Not an agent of chaos — a titan of entropy. A constantly rotating code that has no problem locking you out for good. Has locked out the CEO twice. Shows no remorse.", move: 'CODE SWITCH' },
+    'The Consultant': { type: 'creature', desc: "Twice the pay, half the deliverables. Will recommend a strategy that you already tried last quarter. The only thing nicer than his car is his golden parachute.", move: 'BUDGET SLASH' },
+    'Sally in Accounting': { type: 'creature', desc: "The most dangerous person in the building and she knows it. Runs the books with an iron abacus — every receipt, every decimal, every dime. 1040-EZ on the eyes but there's nothing easy about getting past her. Your expense report never stood a chance.", move: 'EXPENSE DENIED' },
+    'THE INTERN': { type: 'intern', desc: "Has a badge but no authority, a desk but no seniority, a fresh degree but no idea what's happening. Brings great energy though. 10/10 would hire again.", move: 'UNPAID OVERTIME' },
     // Bosses
     'Luke': { type: 'boss', desc: 'Chief Escalation Officer. Will escalate your ticket to himself, then close it. Band frontman. Please hold.', move: 'TICKET ESCALATION' },
     'Drew': { type: 'boss', desc: "Chief Audio Architect. His feedback isn't constructive — it's a 100-watt wall of sound. Wields a Flying V.", move: 'FEEDBACK LOOP' },
@@ -519,32 +519,18 @@ window.ArcadeRenderer = {
     'Adam': { type: 'boss', desc: 'VP of Bottom Line Operations. The low end is non-negotiable. Cuts budgets and bass lines with equal precision.', move: 'LOW END THEORY' },
   },
 
-  _getCodexDiscovered() {
-    try { return JSON.parse(localStorage.getItem('hd-codex') || '[]'); } catch { return []; }
-  },
-
-  _addCodexDiscovery(name) {
-    const discovered = this._getCodexDiscovered();
-    if (!discovered.includes(name)) {
-      discovered.push(name);
-      localStorage.setItem('hd-codex', JSON.stringify(discovered));
-    }
-  },
-
   _buildCodex() {
-    const discovered = this._getCodexDiscovered();
     const overlay = document.createElement('div');
     overlay.className = 'arcade-codex-overlay active';
 
     const sections = [
       { title: 'CREATURES', type: 'creature' },
-      { title: 'BOSSES', type: 'boss' },
       { title: 'OTHER', type: 'intern' },
+      { title: 'HELP DESK', type: 'boss' },
     ];
 
     let html = `<div class="arcade-codex-header">
       <span class="arcade-codex-title">CORPORATE CODEX</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#778899;">${discovered.length}/${Object.keys(this._CODEX_ENTRIES).length} DISCOVERED</span>
       <button class="arcade-codex-close">&times;</button>
     </div>`;
 
@@ -552,12 +538,11 @@ window.ArcadeRenderer = {
       const entries = Object.entries(this._CODEX_ENTRIES).filter(([, e]) => e.type === section.type);
       if (entries.length === 0) continue;
 
-      html += `<div class="arcade-codex-section"><div class="arcade-codex-section-title">${section.title}</div><div class="arcade-codex-grid">`;
+      const isBossSection = section.type === 'boss';
+      html += `<div class="arcade-codex-section"><div class="arcade-codex-section-title">${section.title}</div>`;
+      html += '<div class="arcade-codex-boss-grid">';
 
       for (const [name, entry] of entries) {
-        const found = discovered.includes(name);
-        const cls = found ? '' : ' undiscovered';
-        // Find portrait — bosses use SNES portraits, creatures use imageUrl
         let portrait = '';
         if (entry.type === 'boss') {
           const bossId = { Luke: 'HD-00001', Drew: 'HD-00002', Henry: 'HD-00003', Todd: 'HD-00004', Adam: 'HD-00005' }[name];
@@ -567,12 +552,18 @@ window.ArcadeRenderer = {
           portrait = creature ? creature.imageUrl : '';
         }
 
-        html += `<div class="arcade-codex-entry${cls}">
-          <img class="arcade-codex-portrait" src="${found ? esc(portrait) : ''}" alt="${found ? esc(name) : '???'}" onerror="this.style.display='none'">
+        const displayName = esc(name);
+        const portraitClass = isBossSection ? 'arcade-codex-band-portrait' : 'arcade-codex-creature-portrait';
+        const entryClass = isBossSection ? 'arcade-codex-entry arcade-codex-boss-entry arcade-codex-band' : 'arcade-codex-entry arcade-codex-boss-entry';
+
+        html += `<div class="${entryClass}">
+          <div class="arcade-codex-boss-portrait-wrap">
+            <img class="${portraitClass}" src="${esc(portrait)}" alt="${displayName}" onerror="this.style.display='none'">
+          </div>
           <div class="arcade-codex-info">
-            <div class="arcade-codex-name">${found ? esc(name) : '???'}</div>
-            <div class="arcade-codex-move">${found ? esc(entry.move) : '???'}</div>
-            <div class="arcade-codex-desc">${found ? esc(entry.desc) : 'Not yet encountered...'}</div>
+            <div class="arcade-codex-name">${displayName}</div>
+            <div class="arcade-codex-move">SPECIAL MOVE: ${esc(entry.move)}</div>
+            <div class="arcade-codex-desc">${esc(entry.desc)}</div>
           </div>
         </div>`;
       }

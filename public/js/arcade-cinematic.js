@@ -81,9 +81,6 @@
       if (this._recentBosses.length > 3) this._recentBosses.shift();
     }
 
-    // Record codex discovery
-    if (this._addCodexDiscovery) this._addCodexDiscovery(opponent.name);
-
     return opponent;
   },
 
