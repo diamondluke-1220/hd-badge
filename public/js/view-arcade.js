@@ -40,7 +40,7 @@ window.ArcadeRenderer = {
 
   // Boss creatures for VS battles — "Corporate Dread" illustrated art
   _CREATURES: [
-    { name: 'The Phantom Printer', tagline: 'PC LOAD LETTER.', move: 'PAPER JAM OF DOOM', imageUrl: '/images/arcade/phantom-printer.png' },
+    { name: 'The Phantom Printer', tagline: 'PC LOAD LETTER.', move: 'PAPER FEED FRENZY', imageUrl: '/images/arcade/phantom-printer.png' },
     { name: 'The Network Wizard', tagline: "It's always DNS.", move: 'PACKET STORM', imageUrl: '/images/arcade/network-wizard.png' },
     { name: 'Watercooler Will', tagline: 'Oh hey, quick question...', move: 'ENDLESS ANECDOTE', imageUrl: '/images/arcade/watercooler-will.png' },
     { name: 'HR Nancy', tagline: 'Just a quick mandatory training.', move: 'COMPLIANCE LOCKDOWN', imageUrl: '/images/arcade/hr-nancy.png' },
@@ -188,8 +188,13 @@ window.ArcadeRenderer = {
     this._resizeHandler = () => this._autoSizeGrid();
     window.addEventListener('resize', this._resizeHandler);
 
-    // Start rotation
-    this._startRotation();
+    // Attract mode on first load (once per session)
+    if (!window._arcadeAttractDone && animationsEnabled()) {
+      window._arcadeAttractDone = true;
+      this._playAttractMode();
+    } else {
+      this._startRotation();
+    }
   },
 
   async _fetchAllBadges() {
@@ -219,6 +224,7 @@ window.ArcadeRenderer = {
             <div class="arcade-spotlight-title"></div>
             <div class="arcade-spotlight-dept"></div>
           </div>
+          <button class="arcade-codex-btn" id="arcadeCodexBtn">CODEX</button>
         </div>
         <div class="arcade-announcer">
           <span class="arcade-announcer-text">INSERT COIN</span>
@@ -232,6 +238,10 @@ window.ArcadeRenderer = {
     this._gridPanel = this._container.querySelector('.arcade-grid');
     this._announcer = this._container.querySelector('.arcade-announcer-text');
     this._spotlight = this._container.querySelector('.arcade-spotlight');
+
+    // Codex button
+    const codexBtn = this._container.querySelector('#arcadeCodexBtn');
+    if (codexBtn) codexBtn.addEventListener('click', () => this._buildCodex());
 
     // Build tabs
     this._buildTabs();
@@ -445,6 +455,136 @@ window.ArcadeRenderer = {
       this._showVSMatchup();
     }, startDelay);
     this._timeouts.push(startTid);
+  },
+
+  // ─── Attract Mode (first load boot sequence) ────────────
+
+  _playAttractMode() {
+    const container = this._container.querySelector('.arcade-container');
+    if (!container) { this._startRotation(); return; }
+
+    // Add attract title overlay
+    const titleOverlay = document.createElement('div');
+    titleOverlay.className = 'arcade-attract-title';
+    titleOverlay.innerHTML = '<div class="arcade-attract-title-text">WELCOME TO THE<br>CORPORATE ARENA</div>';
+    container.appendChild(titleOverlay);
+
+    // Phase 1: Full brightness bg, show title
+    container.classList.add('attract-mode');
+    requestAnimationFrame(() => {
+      titleOverlay.style.transition = 'opacity 0.5s ease';
+      titleOverlay.style.opacity = '1';
+    });
+
+    // Phase 2: Dim background (2s)
+    const t1 = setTimeout(() => {
+      container.classList.remove('attract-mode');
+      container.classList.add('attract-dim');
+    }, 2000);
+
+    // Phase 3: Fade out title, reveal UI (3s)
+    const t2 = setTimeout(() => {
+      titleOverlay.style.opacity = '0';
+      container.classList.add('attract-reveal');
+    }, 3000);
+
+    // Phase 4: Clean up, start rotation (5s)
+    const t3 = setTimeout(() => {
+      titleOverlay.remove();
+      container.classList.remove('attract-dim', 'attract-reveal');
+      this._startRotation();
+    }, 5000);
+
+    this._timeouts.push(t1, t2, t3);
+  },
+
+  // ─── Codex (enemy bestiary) ─────────────────────────────
+
+  _CODEX_ENTRIES: {
+    // Creatures
+    'The Phantom Printer': { type: 'creature', desc: 'A haunted office printer that feeds on misery and ink cartridges. Has been "out of toner" since 2019.', move: 'PAPER FEED FRENZY' },
+    'The Network Wizard': { type: 'creature', desc: 'Claims to know the dark arts of subnetting. Blames DNS for everything, and is right 60% of the time.', move: 'PACKET STORM' },
+    'Watercooler Will': { type: 'creature', desc: "Has a story for every occasion. None of them are short. He'll corner you for 45 minutes about his weekend.", move: 'ENDLESS ANECDOTE' },
+    'HR Nancy': { type: 'creature', desc: 'Enforces compliance with an iron fist wrapped in a mandatory training module. Her calendar is 98% blocked.', move: 'COMPLIANCE LOCKDOWN' },
+    'The Dirty Microwave': { type: 'creature', desc: 'Nobody claims it. Nobody cleans it. The smell has its own HR file. Fish reheaters are its sworn allies.', move: 'HAZMAT EXPLOSION' },
+    'The MFA Guardian': { type: 'creature', desc: 'Demands a new code every 30 seconds. Has locked out the CEO twice. Shows no remorse.', move: 'CODE SWITCH' },
+    'The Consultant': { type: 'creature', desc: 'Twice the pay, half the deliverables. Will recommend a strategy that you already tried last quarter.', move: 'BUDGET SLASH' },
+    'Sally in Accounting': { type: 'creature', desc: 'Controls the budget with surgical precision. Your expense report is already denied. This fight will be 1040-EZ.', move: 'EXPENSE DENIED' },
+    'THE INTERN': { type: 'intern', desc: "Just happy to be here. Has no badge access, no desk, and no idea what's happening. Brings great energy though.", move: 'UNPAID OVERTIME' },
+    // Bosses
+    'Luke': { type: 'boss', desc: 'Chief Escalation Officer. Will escalate your ticket to himself, then close it. Band frontman. Please hold.', move: 'TICKET ESCALATION' },
+    'Drew': { type: 'boss', desc: "Chief Audio Architect. His feedback isn't constructive — it's a 100-watt wall of sound. Wields a Flying V.", move: 'FEEDBACK LOOP' },
+    'Henry': { type: 'boss', desc: 'Chief Impact Officer. Hits things professionally. His click track has ended careers and started mosh pits.', move: 'CLICK TRACK OF DOOM' },
+    'Todd': { type: 'boss', desc: 'VP of Power Distribution. Controls the infrastructure. His stare has rebooted servers and crushed spirits.', move: '1000 YARD STARE' },
+    'Adam': { type: 'boss', desc: 'VP of Bottom Line Operations. The low end is non-negotiable. Cuts budgets and bass lines with equal precision.', move: 'LOW END THEORY' },
+  },
+
+  _getCodexDiscovered() {
+    try { return JSON.parse(localStorage.getItem('hd-codex') || '[]'); } catch { return []; }
+  },
+
+  _addCodexDiscovery(name) {
+    const discovered = this._getCodexDiscovered();
+    if (!discovered.includes(name)) {
+      discovered.push(name);
+      localStorage.setItem('hd-codex', JSON.stringify(discovered));
+    }
+  },
+
+  _buildCodex() {
+    const discovered = this._getCodexDiscovered();
+    const overlay = document.createElement('div');
+    overlay.className = 'arcade-codex-overlay active';
+
+    const sections = [
+      { title: 'CREATURES', type: 'creature' },
+      { title: 'BOSSES', type: 'boss' },
+      { title: 'OTHER', type: 'intern' },
+    ];
+
+    let html = `<div class="arcade-codex-header">
+      <span class="arcade-codex-title">CORPORATE CODEX</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#778899;">${discovered.length}/${Object.keys(this._CODEX_ENTRIES).length} DISCOVERED</span>
+      <button class="arcade-codex-close">&times;</button>
+    </div>`;
+
+    for (const section of sections) {
+      const entries = Object.entries(this._CODEX_ENTRIES).filter(([, e]) => e.type === section.type);
+      if (entries.length === 0) continue;
+
+      html += `<div class="arcade-codex-section"><div class="arcade-codex-section-title">${section.title}</div><div class="arcade-codex-grid">`;
+
+      for (const [name, entry] of entries) {
+        const found = discovered.includes(name);
+        const cls = found ? '' : ' undiscovered';
+        // Find portrait — bosses use SNES portraits, creatures use imageUrl
+        let portrait = '';
+        if (entry.type === 'boss') {
+          const bossId = { Luke: 'HD-00001', Drew: 'HD-00002', Henry: 'HD-00003', Todd: 'HD-00004', Adam: 'HD-00005' }[name];
+          portrait = this._BOSS_PORTRAITS[bossId] || '';
+        } else {
+          const creature = this._CREATURES.find(c => c.name === name) || this._INTERNS.find(c => c.name === name);
+          portrait = creature ? creature.imageUrl : '';
+        }
+
+        html += `<div class="arcade-codex-entry${cls}">
+          <img class="arcade-codex-portrait" src="${found ? esc(portrait) : ''}" alt="${found ? esc(name) : '???'}" onerror="this.style.display='none'">
+          <div class="arcade-codex-info">
+            <div class="arcade-codex-name">${found ? esc(name) : '???'}</div>
+            <div class="arcade-codex-move">${found ? esc(entry.move) : '???'}</div>
+            <div class="arcade-codex-desc">${found ? esc(entry.desc) : 'Not yet encountered...'}</div>
+          </div>
+        </div>`;
+      }
+
+      html += '</div></div>';
+    }
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('.arcade-codex-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   },
 
   _stopRotation() {

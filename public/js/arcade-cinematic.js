@@ -10,15 +10,26 @@
 
   // Track recent opponents to prevent repeats
   _recentOpponents: [],
+  // Separate boss cooldown — must see 3 other bosses before repeat
+  _recentBosses: [],
+  // Track last 2 backgrounds to prevent repeats
+  _recentBackgrounds: [],
 
   _pickOpponent() {
     const t = window._testFight || {};
-    const roll = t.opponent === 'boss' ? 0 : t.opponent === 'creature' ? 0.5 : t.opponent === 'intern' ? 0.8 : Math.random();
+    const roll = t.opponent === 'boss' ? 0 : t.opponent === 'creature' ? 0.5 : t.opponent === 'intern' ? 0.95 : Math.random();
 
-    // 25% boss, 50% creature, 25% intern
-    if (roll < 0.25 && this._bossBadges.length > 0) {
-      let boss = this._bossBadges[Math.floor(Math.random() * this._bossBadges.length)];
-      if (t.bossId) boss = this._bossBadges.find(b => b.employeeId === t.bossId) || boss;
+    // 20% boss, 70% creature, 10% intern
+    if (roll < 0.20 && this._bossBadges.length > 0) {
+      let boss;
+      if (t.bossId) {
+        boss = this._bossBadges.find(b => b.employeeId === t.bossId) || this._bossBadges[0];
+      } else {
+        // Filter out bosses on cooldown (must see 3 other bosses before repeat)
+        const eligible = this._bossBadges.filter(b => !this._recentBosses.includes(b.employeeId));
+        const pool = eligible.length > 0 ? eligible : this._bossBadges;
+        boss = pool[Math.floor(Math.random() * pool.length)];
+      }
       const snesPortrait = this._BOSS_PORTRAITS[boss.employeeId];
       const fallbackUrl = `/api/badge/${boss.employeeId}/headshot`;
       opponent = {
@@ -31,7 +42,7 @@
         tagline: this._pickBossTagline(boss.employeeId),
         move: this._BOSS_MOVES[boss.employeeId] || 'EXECUTIVE ORDER',
       };
-    } else if (roll < 0.75) {
+    } else if (roll < 0.90) {
       // Pick creature, reroll if same as last 2
       let creature;
       if (t.creatureName) {
@@ -62,9 +73,16 @@
       };
     }
 
-    // Track last 2 opponents
+    // Track last 2 opponents (general) + last 3 bosses (separate cooldown)
     this._recentOpponents.push(opponent.name);
     if (this._recentOpponents.length > 2) this._recentOpponents.shift();
+    if (opponent.type === 'boss' && opponent._bossId) {
+      this._recentBosses.push(opponent._bossId);
+      if (this._recentBosses.length > 3) this._recentBosses.shift();
+    }
+
+    // Record codex discovery
+    if (this._addCodexDiscovery) this._addCodexDiscovery(opponent.name);
 
     return opponent;
   },
@@ -105,28 +123,37 @@
       const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#ffffff' : '#D4A843';
 
-      // Auto-clear test overrides after picking opponent (one-shot)
+      // Log test override info (actual deletion happens in _animateFight after mechanics read it)
       const _tf = window._testFight;
       if (_tf) {
-        delete window._testFight;
         console.log('[FIGHT TEST]', { opponent: opponent.type, name: opponent.name, move: opponent.move, winner });
       }
 
       // Pick background: bosses get corner-office (80%) or random, creatures pick from their pool
+      // Avoids last 2 backgrounds for variety
+      const pickFromPool = (pool) => {
+        const filtered = pool.filter(bg => !this._recentBackgrounds.includes(bg));
+        const choices = filtered.length > 0 ? filtered : pool;
+        return choices[Math.floor(Math.random() * choices.length)];
+      };
+
       let bgName = _tf && _tf.background ? _tf.background : null;
       if (!bgName) {
         if (opponent.type === 'boss') {
           bgName = Math.random() < 0.8
             ? this._BOSS_BACKGROUNDS._default
-            : this._BOSS_BACKGROUNDS._others[Math.floor(Math.random() * this._BOSS_BACKGROUNDS._others.length)];
+            : pickFromPool(this._BOSS_BACKGROUNDS._others);
         } else if (this._CREATURE_BACKGROUNDS[opponent.name]) {
           const pool = this._CREATURE_BACKGROUNDS[opponent.name];
-          bgName = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool;
+          bgName = Array.isArray(pool) ? pickFromPool(pool) : pool;
         } else {
-          bgName = this._BACKGROUNDS[this._bgIndex];
-          this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
+          bgName = pickFromPool(this._BACKGROUNDS);
         }
       }
+
+      // Track last 2 backgrounds
+      this._recentBackgrounds.push(bgName);
+      if (this._recentBackgrounds.length > 2) this._recentBackgrounds.shift();
 
       // Employee portrait src
       const empSrc = `/api/badge/${esc(badge.employeeId)}/headshot`;
@@ -625,6 +652,45 @@
     const beat = this._createBeat();
     let hitColorToggle = false;
 
+    // Combo counter tracking
+    let comboCount = 0;
+    let comboTarget = null; // which side is being hit consecutively
+    let comboEl = null;     // current combo counter DOM element
+
+    const updateCombo = (target) => {
+      if (target === comboTarget) {
+        comboCount++;
+      } else {
+        comboCount = 1;
+        comboTarget = target;
+      }
+      // Show counter at x2 and above
+      if (comboCount >= 2) {
+        // Remove previous counter
+        if (comboEl) comboEl.remove();
+        // Place counter on the ATTACKER's side (opposite of target)
+        const attackerSide = target === 'winner'
+          ? (winner === 'employee' ? overlay.querySelector('.arcade-vs-right') : overlay.querySelector('.arcade-vs-left'))
+          : (winner === 'employee' ? overlay.querySelector('.arcade-vs-left') : overlay.querySelector('.arcade-vs-right'));
+        if (attackerSide) {
+          comboEl = document.createElement('div');
+          comboEl.className = 'arcade-vs-combo-counter';
+          comboEl.textContent = `x${comboCount}`;
+          // Scale up for higher combos
+          if (comboCount >= 5) comboEl.classList.add('combo-hot');
+          attackerSide.appendChild(comboEl);
+          // Auto-fade after 800ms if no new hit
+          const fadeTimer = setTimeout(() => {
+            if (comboEl) { comboEl.classList.add('combo-fade'); }
+          }, 800);
+          this._timeouts.push(fadeTimer);
+        }
+      } else if (comboEl) {
+        comboEl.remove();
+        comboEl = null;
+      }
+    };
+
     // Hitstop tracking — medium gets a brief pause for punch variation
     const HITSTOP = { light: 0, medium: 50, heavy: 150, ko: 280 };
 
@@ -704,8 +770,8 @@
 
     // ── Fight mechanic decisions ─────────────────────────────
     const t = window._testFight || {};
-    // Comeback: employee-only, 30% when HP would be low
-    const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && winnerFinalHP < 25 && Math.random() < 0.3);
+    // Comeback: employee-only, 25% of employee wins
+    const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && Math.random() < 0.25);
     // Boss finisher: boss wins + 30% chance — special move as killing blow
     const doBossFinisher = t.doBossFinisher != null ? t.doBossFinisher : (winner === 'opponent' && isBoss && !doComeback && Math.random() < 0.3);
     // Stun interrupt: stun collides with special move charge (~20%)
@@ -720,6 +786,12 @@
     const stunTime = t.stunTime != null ? t.stunTime : (Math.random() < 0.55 ? 5000 : specialTime + 500);
     // Slugfest Act 3: 25% of non-comeback/non-finisher fights get rapid exchanges
     const doSlugfest = t.doSlugfest != null ? t.doSlugfest : (!doComeback && !doBossFinisher && Math.random() < 0.25);
+
+    // Auto-clear test overrides now that all mechanics have been read
+    if (window._testFight) {
+      console.log('[FIGHT TEST] Mechanics:', { doComeback, doBossFinisher, doStunInterrupt, doStun, stunTime, doSlugfest, specialTime });
+      delete window._testFight;
+    }
 
     // Jitter: ±150ms randomization per hit
     const jitter = () => Math.round((Math.random() - 0.5) * 300);
@@ -930,9 +1002,15 @@
     announcerBeats.filter(([, line]) => line !== null).forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
 
     // ── Stun Helper ────────────────────────────────────────
+    let _stunActive = false;
+    const _STUN_ANNOUNCER = [
+      'DROPS A ONE-LINER!', 'WHAT A BURN!', 'CRITICAL HIT TO THE EGO!',
+      'THE CROWD GOES WILD!', 'DEVASTATING VERBAL ATTACK!',
+    ];
     const fireStun = (duration) => {
+      _stunActive = true;
       const stunQuote = this._STUN_QUOTES[Math.floor(Math.random() * this._STUN_QUOTES.length)];
-      setVSAnnouncer(`${badge.name.toUpperCase()}: "${stunQuote}"`);
+      setVSAnnouncer(`${badge.name.toUpperCase()} ${_STUN_ANNOUNCER[Math.floor(Math.random() * _STUN_ANNOUNCER.length)]}`);
       if (window.ArcadeSFX) ArcadeSFX.play('quoteTaunt');
 
       const stunBubble = document.createElement('div');
@@ -951,27 +1029,31 @@
         oppWrap.appendChild(stars);
       }
 
-      beat(duration, () => {
+      // Use setTimeout (relative to now), not beat (relative to fight start)
+      const cleanupTid = setTimeout(() => {
+        _stunActive = false;
         const oppWrap2 = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
         if (oppWrap2) oppWrap2.classList.remove('stunned');
         const stars2 = oppWrap2?.querySelector('.arcade-vs-stun-stars');
         if (stars2) stars2.remove();
         stunBubble.classList.remove('visible');
-        beat(300, () => stunBubble.remove());
-      });
+        setTimeout(() => stunBubble.remove(), 300);
+      }, duration);
+      this._timeouts.push(cleanupTid);
     };
 
     // Comeback stun: employee fires stun during the near-death pause
     if (doComeback) {
-      beat(13800, () => fireStun(1100));
+      beat(13800, () => fireStun(2500));
     }
 
     // Stun interrupt: employee stuns mid-charge, canceling the special
     if (doStunInterrupt) {
-      beat(chargeStart + 500, () => fireStun(2000));
+      beat(chargeStart + 500, () => fireStun(2500));
     }
 
     // Regular stun (45% chance, variable timing)
+    // All stuns get 2500ms — enough to read the quote. Special charge waits for stun to clear.
     if (doStun) {
       beat(stunTime, () => fireStun(2500));
     }
@@ -999,10 +1081,24 @@
           this._triggerSpecialMove(overlay, oppColor, opponent);
         });
       } else {
-        // Normal special move
+        // Normal special move — delay charge if stun is still active
         beat(chargeStart, () => {
-          this._startSpecialMoveCharge(overlay);
-          setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+          const startCharge = () => {
+            this._startSpecialMoveCharge(overlay);
+            setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+          };
+          if (_stunActive) {
+            // Wait for stun to clear, then start charge
+            const waitTid = setInterval(() => {
+              if (!_stunActive) {
+                clearInterval(waitTid);
+                startCharge();
+              }
+            }, 100);
+            this._timeouts.push(waitTid);
+          } else {
+            startCharge();
+          }
         });
         beat(specialTime, () => {
           this._triggerSpecialMove(overlay, oppColor, opponent);
@@ -1080,8 +1176,12 @@
           setHP(loserFill, loserTrail, loserHP);
         }
         doHit(spark, portrait, hit.weight || 'light');
+        updateCombo(hit.target);
       });
     });
+
+    // Clean up combo counter before KO result
+    beat(18400, () => { if (comboEl) { comboEl.remove(); comboEl = null; } });
 
     // Loser portrait dims after K.O.
     beat(19000, () => {
@@ -1296,7 +1396,7 @@
     const SPECIAL_SFX = {
       'BUDGET SLASH': 'specialSlash',
       'HAZMAT EXPLOSION': 'specialMicrowave',
-      'PAPER JAM OF DOOM': 'specialPaper',
+      'PAPER FEED FRENZY': 'specialPaper',
       'PACKET STORM': 'specialPacket',
       'ENDLESS ANECDOTE': 'specialAnecdote',
       'COMPLIANCE LOCKDOWN': 'specialLockdown',
@@ -1392,7 +1492,7 @@
       }
     },
 
-    'PAPER JAM OF DOOM': function(overlay, fromEl, toEl, color) {
+    'PAPER FEED FRENZY': function(overlay, fromEl, toEl, color) {
       // Paper sheets flying from right to left, tumbling — big and far
       const overlayRect = overlay.getBoundingClientRect();
       const fromRect = fromEl.getBoundingClientRect();
@@ -1468,7 +1568,7 @@
           el.className = 'arcade-fx-bubble';
           const ySpread = (Math.random() - 0.5) * 180;
           const drift = (Math.random() - 0.5) * 70;
-          const size = 36 + Math.random() * 28;
+          const size = 48 + Math.random() * 32;
           el.textContent = bubbles[Math.floor(Math.random() * bubbles.length)];
           el.style.cssText = `
             left: ${x1}px; top: ${y1 + ySpread}px;
@@ -1511,7 +1611,7 @@
           el.className = 'arcade-fx-code';
           const x = 10 + Math.random() * 80; // 10-90% horizontal
           const ch = digits[Math.floor(Math.random() * digits.length)];
-          const size = 24 + Math.random() * 20;
+          const size = 32 + Math.random() * 24;
           const speed = 0.6 + Math.random() * 0.5;
           el.textContent = ch;
           el.style.cssText = `
@@ -1575,7 +1675,7 @@
       // Drop in the guitar sprite
       const amp = document.createElement('div');
       amp.className = 'arcade-fx-amp';
-      amp.innerHTML = '<img src="/images/arcade/drew-guitar.png" alt="" style="width:80px;height:auto;transform:scaleX(-1) rotate(-15deg);filter:drop-shadow(0 0 10px rgba(91,141,239,0.7));">';
+      amp.innerHTML = '<img src="/images/arcade/drew-guitar.png" alt="" style="width:140px;height:auto;transform:scaleX(-1) rotate(-15deg);filter:drop-shadow(0 0 12px rgba(91,141,239,0.8));">';
       amp.style.cssText = `left: ${ampX}px; top: ${ampY}px;`;
       overlay.appendChild(amp);
 
