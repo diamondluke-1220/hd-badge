@@ -47,12 +47,12 @@ window.ArcadeRenderer = {
     { name: 'The Dirty Microwave', tagline: 'WHO LEFT FISH IN HERE?!', move: 'HAZMAT EXPLOSION', imageUrl: '/images/arcade/dirty-microwave.png' },
     { name: 'The MFA Guardian', tagline: 'Enter your code. 3 seconds.', move: 'CODE SWITCH', imageUrl: '/images/arcade/mfa-guardian.png' },
     { name: 'The Consultant', tagline: "Twice the pay. Half the work.", move: 'BUDGET SLASH', imageUrl: '/images/arcade/the-consultant.png' },
+    { name: 'Sally in Accounting', tagline: "This fight will be 1040-EZ.", move: 'EXPENSE DENIED', imageUrl: '/images/arcade/sally-accounting.jpg' },
   ],
 
   // Intern opponents
   _INTERNS: [
     { name: 'THE INTERN', className: 'Unpaid Intern', tagline: "I'm just happy to be here.", move: 'UNPAID OVERTIME', imageUrl: '/images/arcade/unpaid-intern.png' },
-    { name: 'THE INTERN', className: 'Asst. Regional Manager', tagline: "That's my title.", move: 'DELEGATION', imageUrl: '/images/arcade/assistant-regional-manager.png' },
   ],
 
   // SNES pixel art portraits for boss opponents (band members)
@@ -129,27 +129,25 @@ window.ArcadeRenderer = {
   ],
 
   // Stage backgrounds for VS overlay only
-  _BACKGROUNDS: ['server-room', 'break-room', 'network-closet', 'front-entrance', 'meeting-room', 'cubicle-farm'],
+  _BACKGROUNDS: ['server-room', 'break-room', 'meeting-room', 'cubicle-farm', 'corner-office'],
 
-  // Creature/boss → preferred background mapping
+  // Creature → possible backgrounds (random pick from array)
   _CREATURE_BACKGROUNDS: {
-    'The Dirty Microwave': 'break-room',
-    'The Network Wizard': 'network-closet',
-    'The Phantom Printer': 'cubicle-farm',
-    'Watercooler Will': 'break-room',
-    'HR Nancy': 'meeting-room',
-    'The MFA Guardian': 'server-room',
-    'The Consultant': 'meeting-room',
-    'THE INTERN': 'cubicle-farm',
+    'The Dirty Microwave': ['break-room'],
+    'The Network Wizard': ['server-room'],
+    'The Phantom Printer': ['cubicle-farm', 'meeting-room'],
+    'Watercooler Will': ['break-room', 'cubicle-farm'],
+    'HR Nancy': ['meeting-room', 'cubicle-farm'],
+    'The MFA Guardian': ['server-room'],
+    'The Consultant': ['meeting-room', 'cubicle-farm'],
+    'Sally in Accounting': ['meeting-room', 'cubicle-farm'],
+    'THE INTERN': ['cubicle-farm', 'break-room'],
   },
 
-  // Boss band member → preferred background mapping
+  // Boss band members: 80% corner-office, 20% random other stage
   _BOSS_BACKGROUNDS: {
-    'HD-00001': 'server-room',      // Luke — server room
-    'HD-00002': 'meeting-room',     // Drew — meeting room
-    'HD-00003': 'cubicle-farm',     // Henry — cubicle farm
-    'HD-00004': 'network-closet',   // Todd — network closet
-    'HD-00005': 'server-room',      // Adam — server room
+    _default: 'corner-office',
+    _others: ['server-room', 'break-room', 'meeting-room', 'cubicle-farm'],
   },
 
   async init(container, stats) {
@@ -170,6 +168,9 @@ window.ArcadeRenderer = {
     this._rotationTick = 0;
     this._bgIndex = 0;
     this._isVSActive = false;
+
+    // Preload sample-based SFX
+    if (window.ArcadeSFX && ArcadeSFX.preload) ArcadeSFX.preload();
 
     // Initialize shared stats (ticker, donut)
     initRendererStats(stats);
@@ -561,6 +562,7 @@ window.ArcadeRenderer = {
         targetSlot.classList.add('cursor-active');
         targetSlot.classList.add('highlighted');
         targetSlot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (window.ArcadeSFX) ArcadeSFX.play('selectConfirm');
 
         // Add SELECTED overlay on the slot
         const selLabel = document.createElement('div');
@@ -654,14 +656,7 @@ window.ArcadeRenderer = {
   },
 
   _displayRotationBadge(badge) {
-    if (!animationsEnabled()) {
-      // FX off: just update spotlight, no cursor animation
-      this._updateSpotlight(badge);
-      const div = getDivisionForDept(badge.department, badge.isBandMember);
-      this._pulseDivisionTab(div);
-      this._highlightSlot(this._container.querySelector(`[data-employee-id="${badge.employeeId}"]`));
-      return;
-    }
+    // Cursor selection always runs — it's core UX, not decoration
     this._isVSActive = true;
     this._animateCursorSelect(badge, () => {
       this._isVSActive = false;

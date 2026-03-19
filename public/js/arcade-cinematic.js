@@ -8,15 +8,20 @@
 
   // ─── Pick Opponent ──────────────────────────────────────────
 
-  _pickOpponent() {
-    const roll = Math.random();
+  // Track recent opponents to prevent repeats
+  _recentOpponents: [],
 
-    if (roll < 0.4 && this._bossBadges.length > 0) {
-      const boss = this._bossBadges[Math.floor(Math.random() * this._bossBadges.length)];
-      // Use SNES pixel art portrait, with headshot API as fallback on 404
+  _pickOpponent() {
+    const t = window._testFight || {};
+    const roll = t.opponent === 'boss' ? 0 : t.opponent === 'creature' ? 0.5 : t.opponent === 'intern' ? 0.8 : Math.random();
+
+    // 25% boss, 50% creature, 25% intern
+    if (roll < 0.25 && this._bossBadges.length > 0) {
+      let boss = this._bossBadges[Math.floor(Math.random() * this._bossBadges.length)];
+      if (t.bossId) boss = this._bossBadges.find(b => b.employeeId === t.bossId) || boss;
       const snesPortrait = this._BOSS_PORTRAITS[boss.employeeId];
       const fallbackUrl = `/api/badge/${boss.employeeId}/headshot`;
-      return {
+      opponent = {
         type: 'boss',
         name: boss.name,
         _bossId: boss.employeeId,
@@ -27,8 +32,17 @@
         move: this._BOSS_MOVES[boss.employeeId] || 'EXECUTIVE ORDER',
       };
     } else if (roll < 0.75) {
-      const creature = this._CREATURES[Math.floor(Math.random() * this._CREATURES.length)];
-      return {
+      // Pick creature, reroll if same as last 2
+      let creature;
+      if (t.creatureName) {
+        creature = this._CREATURES.find(c => c.name === t.creatureName) || this._CREATURES[0];
+      } else {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          creature = this._CREATURES[Math.floor(Math.random() * this._CREATURES.length)];
+          if (!this._recentOpponents.includes(creature.name)) break;
+        }
+      }
+      opponent = {
         type: 'creature',
         name: creature.name,
         imageUrl: creature.imageUrl,
@@ -38,7 +52,7 @@
       };
     } else {
       const intern = this._INTERNS[Math.floor(Math.random() * this._INTERNS.length)];
-      return {
+      opponent = {
         type: 'intern',
         name: intern.name,
         imageUrl: intern.imageUrl,
@@ -47,13 +61,21 @@
         move: intern.move,
       };
     }
+
+    // Track last 2 opponents
+    this._recentOpponents.push(opponent.name);
+    if (this._recentOpponents.length > 2) this._recentOpponents.shift();
+
+    return opponent;
   },
 
   // ─── Determine Winner ───────────────────────────────────────
 
   _determineWinner(opponent) {
-    // Interns always lose
-    if (opponent.type === 'intern') return 'employee';
+    const t = window._testFight || {};
+    if (t.winner) return t.winner;
+    // Interns win 20% — rare upset
+    if (opponent.type === 'intern') return Math.random() < 0.2 ? 'opponent' : 'employee';
     // Band member bosses win 65% — they're harder to beat
     if (opponent.type === 'boss') return Math.random() < 0.65 ? 'opponent' : 'employee';
     // Creatures: 50/50
@@ -83,15 +105,27 @@
       const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#ffffff' : '#D4A843';
 
-      // Pick background: use opponent-specific mapping if available, else cycle
-      let bgName;
-      if (opponent.type === 'boss' && opponent._bossId && this._BOSS_BACKGROUNDS[opponent._bossId]) {
-        bgName = this._BOSS_BACKGROUNDS[opponent._bossId];
-      } else if (this._CREATURE_BACKGROUNDS[opponent.name]) {
-        bgName = this._CREATURE_BACKGROUNDS[opponent.name];
-      } else {
-        bgName = this._BACKGROUNDS[this._bgIndex];
-        this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
+      // Auto-clear test overrides after picking opponent (one-shot)
+      const _tf = window._testFight;
+      if (_tf) {
+        delete window._testFight;
+        console.log('[FIGHT TEST]', { opponent: opponent.type, name: opponent.name, move: opponent.move, winner });
+      }
+
+      // Pick background: bosses get corner-office (80%) or random, creatures pick from their pool
+      let bgName = _tf && _tf.background ? _tf.background : null;
+      if (!bgName) {
+        if (opponent.type === 'boss') {
+          bgName = Math.random() < 0.8
+            ? this._BOSS_BACKGROUNDS._default
+            : this._BOSS_BACKGROUNDS._others[Math.floor(Math.random() * this._BOSS_BACKGROUNDS._others.length)];
+        } else if (this._CREATURE_BACKGROUNDS[opponent.name]) {
+          const pool = this._CREATURE_BACKGROUNDS[opponent.name];
+          bgName = Array.isArray(pool) ? pool[Math.floor(Math.random() * pool.length)] : pool;
+        } else {
+          bgName = this._BACKGROUNDS[this._bgIndex];
+          this._bgIndex = (this._bgIndex + 1) % this._BACKGROUNDS.length;
+        }
       }
 
       // Employee portrait src
@@ -230,7 +264,10 @@
         overlay.classList.add('slash-fire');
         const vsText = overlay.querySelector('.arcade-vs-text');
         if (vsText) vsText.classList.add('slam');
-        if (window.ArcadeSFX) ArcadeSFX.play('vsSlam');
+        if (window.ArcadeSFX) {
+          ArcadeSFX.play('vsSlam');
+          ArcadeSFX.playDelayed('vsSlamAlt', 350);
+        }
       });
 
       beat(6500, () => {
@@ -242,7 +279,10 @@
           const bossWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
           if (bossWrap) {
             bossWrap.classList.add('boss-electric-entrance');
-            if (window.ArcadeSFX) ArcadeSFX.play('bossEntrance');
+            if (window.ArcadeSFX) {
+              ArcadeSFX.play('bossEntrance');
+              ArcadeSFX.playDelayed('bandEntrance', 300);
+            }
             // Continuous lightning from slide-in until quote ends (~4s duration)
             this._spawnBossArcSparks(overlay, bossWrap, '#2E7DFF', 4000);
             // Remove electric effect before FIGHT!! flash
@@ -273,6 +313,7 @@
         if (bubble && quote) {
           bubble.classList.add('visible');
           this._typewriterEffect(bubble, `"${quote}"`, 55);
+          if (window.ArcadeSFX) ArcadeSFX.play('quoteTaunt');
         }
       });
 
@@ -303,6 +344,8 @@
 
         const leftSide = overlay.querySelector('.arcade-vs-left');
         const rightSide = overlay.querySelector('.arcade-vs-right');
+
+        if (window.ArcadeSFX) ArcadeSFX.play('winner');
 
         if (winner === 'employee') {
           // Winner text under employee (left)
@@ -508,6 +551,33 @@
     'TICKET CLOSED!',
   ],
 
+  _FIGHT_LINES_COMEBACK_SHOCK: [
+    "IT'S OVER... WAIT!",
+    'IMPOSSIBLE!',
+    'DOWN BUT NOT OUT?!',
+    'THAT SHOULD HAVE ENDED IT!',
+    'HOW ARE THEY STILL STANDING?!',
+  ],
+
+  _FIGHT_LINES_COMEBACK_RALLY: [
+    'FROM THE BRINK!',
+    'AN INCREDIBLE COMEBACK!',
+    'THEY JUST CITED THE EMPLOYEE HANDBOOK!',
+    'EMERGENCY OVERTIME ACTIVATED!',
+    'SECOND WIND FROM THE BREAK ROOM!',
+  ],
+
+  _CREATURE_FIGHT_LINES: {
+    'The Phantom Printer': ['PAPER FLYING EVERYWHERE!', 'TONER LEVELS CRITICAL!', 'PC LOAD LETTER INTENSIFIES!'],
+    'The Network Wizard': ['PACKETS DROPPING!', 'LATENCY SPIKING!', 'DNS IS DEFINITELY THE PROBLEM!'],
+    'Watercooler Will': ['STILL TALKING!', 'NOBODY ASKED, WILL!', 'THE ANECDOTE CONTINUES!'],
+    'HR Nancy': ['MANDATORY TRAINING IN PROGRESS!', 'COMPLIANCE VIOLATION DETECTED!', 'FORM 27B REQUIRED!'],
+    'The Dirty Microwave': ['SOMETHING IS DEFINITELY BURNING!', 'THE SMELL IS SPREADING!', 'WHO MICROWAVED FISH?!'],
+    'The MFA Guardian': ['CODE EXPIRED! ENTER A NEW ONE!', 'AUTHENTICATING... DENIED!', 'TOO MANY ATTEMPTS!'],
+    'The Consultant': ['BILLABLE HOURS INCREASING!', "THAT'LL COST EXTRA!", 'SCOPE CREEP DETECTED!'],
+    'Sally in Accounting': ['RECEIPT REQUIRED!', 'SUBMIT YOUR TIME!', 'OVER BUDGET!', 'THAT LINE ITEM IS FLAGGED!'],
+  },
+
   _animateFight(overlay, winner, badge, opponent, empColor, oppColor, setVSAnnouncer) {
     const hpContainer = overlay.querySelector('.arcade-vs-hp-container');
     if (!hpContainer) return;
@@ -555,8 +625,8 @@
     const beat = this._createBeat();
     let hitColorToggle = false;
 
-    // Hitstop tracking
-    const HITSTOP = { light: 0, medium: 0, heavy: 150, ko: 280 };
+    // Hitstop tracking — medium gets a brief pause for punch variation
+    const HITSTOP = { light: 0, medium: 50, heavy: 150, ko: 280 };
 
     const doHit = (spark, portrait, weight) => {
       // Sound effect based on hit weight
@@ -628,65 +698,197 @@
     let winnerHP = 100;
     let loserHP = 100;
     const winnerFinalHP = 15 + Math.floor(Math.random() * 25);
-    const doStun = Math.random() < 0.5; // 50% chance of employee stun quote
-    // Map sides to winner/loser targets regardless of fight outcome
     const empTarget = winner === 'employee' ? 'winner' : 'loser';
     const oppTarget = winner === 'employee' ? 'loser' : 'winner';
+    const isBoss = opponent.type === 'boss';
 
-    // Act 1: Even exchange (0-5s) — 8 hits, tighter spacing
-    const allHits = [
-      { delay: 500,  target: 'loser',  dmg: 7,  weight: 'light' },
-      { delay: 1100, target: 'winner', dmg: 8,  weight: 'light' },
-      { delay: 1700, target: 'loser',  dmg: 6,  weight: 'light' },
-      { delay: 2300, target: 'winner', dmg: 7,  weight: 'light' },
-      { delay: 2900, target: 'loser',  dmg: 8,  weight: 'medium' },
-      { delay: 3500, target: 'winner', dmg: 6,  weight: 'light' },
-      { delay: 4000, target: 'loser',  dmg: 7,  weight: 'light' },
-      { delay: 4600, target: 'winner', dmg: 5,  weight: 'light' },
-    ];
+    // ── Fight mechanic decisions ─────────────────────────────
+    const t = window._testFight || {};
+    // Comeback: employee-only, 30% when HP would be low
+    const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && winnerFinalHP < 25 && Math.random() < 0.3);
+    // Boss finisher: boss wins + 30% chance — special move as killing blow
+    const doBossFinisher = t.doBossFinisher != null ? t.doBossFinisher : (winner === 'opponent' && isBoss && !doComeback && Math.random() < 0.3);
+    // Stun interrupt: stun collides with special move charge (~20%)
+    const doStunInterrupt = t.doStunInterrupt != null ? t.doStunInterrupt : (!doComeback && !doBossFinisher && Math.random() < 0.2);
+    // Regular stun: 45% if no interrupt/comeback/finisher
+    const doStun = t.doStun != null ? t.doStun : (!doComeback && !doStunInterrupt && Math.random() < 0.45);
+    // Special move timing: vary between 8-9.5s (charge starts 1.2s before)
+    const specialTime = 8000 + Math.floor(Math.random() * 1500);
+    const chargeLeadTime = 1200;
+    const chargeStart = specialTime - chargeLeadTime; // 6800-8300ms
+    // Stun timing: early (5s) or late (after special releases + 500ms buffer)
+    const stunTime = t.stunTime != null ? t.stunTime : (Math.random() < 0.55 ? 5000 : specialTime + 500);
+    // Slugfest Act 3: 25% of non-comeback/non-finisher fights get rapid exchanges
+    const doSlugfest = t.doSlugfest != null ? t.doSlugfest : (!doComeback && !doBossFinisher && Math.random() < 0.25);
 
-    // Act 2: depends on stun trigger
-    const act2Hits = doStun ? [
-      // Stun combo: employee hits opponent (5.6-7.0s) — 6 hits
-      { delay: 5600, target: oppTarget, dmg: 5, weight: 'light' },
-      { delay: 5870, target: oppTarget, dmg: 6, weight: 'light' },
-      { delay: 6140, target: oppTarget, dmg: 7, weight: 'medium' },
-      { delay: 6410, target: oppTarget, dmg: 6, weight: 'light' },
-      { delay: 6680, target: oppTarget, dmg: 7, weight: 'light' },
-      { delay: 6950, target: oppTarget, dmg: 8, weight: 'medium' },
-      // Special move hit (8.5s) — always hits employee
-      { delay: 8500, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
-      // Rally (9.3-10.5s)
-      { delay: 9300,  target: 'winner', dmg: 5, weight: 'light' },
-      { delay: 9900,  target: 'loser',  dmg: 7, weight: 'light' },
-      { delay: 10500, target: 'winner', dmg: 6, weight: 'medium' },
-    ] : [
-      // No stun: alternating exchange (5.3-10.5s) — 8 hits
-      { delay: 5300,  target: 'loser',  dmg: 8,  weight: 'medium' },
-      { delay: 5900,  target: 'winner', dmg: 7,  weight: 'light' },
-      { delay: 6500,  target: 'loser',  dmg: 6,  weight: 'light' },
-      { delay: 7100,  target: 'loser',  dmg: 10, weight: 'medium' },
-      // Special move hit — always hits employee
-      { delay: 8500,  target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
-      // Rally
-      { delay: 9300,  target: 'winner', dmg: 5,  weight: 'light' },
-      { delay: 9900,  target: 'loser',  dmg: 7,  weight: 'light' },
-      { delay: 10500, target: 'winner', dmg: 8,  weight: 'medium' },
-    ];
+    // Jitter: ±150ms randomization per hit
+    const jitter = () => Math.round((Math.random() - 0.5) * 300);
 
-    // Act 3: Escalation + finish (11.2-18.5s) — 8 hits + KO
-    const act3Hits = [
-      { delay: 11200, target: 'loser',  dmg: 8,  weight: 'medium' },
-      { delay: 11900, target: 'winner', dmg: 6,  weight: 'light' },
-      { delay: 12600, target: 'loser',  dmg: 10, weight: 'medium' },
-      { delay: 13400, target: 'loser',  dmg: 7,  weight: 'light' },
-      { delay: 14200, target: 'winner', dmg: 5,  weight: 'light' },
-      { delay: 15000, target: 'loser',  dmg: 12, weight: 'heavy' },
-      { delay: 15900, target: 'winner', dmg: 4,  weight: 'light' },
-      { delay: 16800, target: 'loser',  dmg: 14, weight: 'heavy' },
-      // KO blow
-      { delay: 18500, target: 'loser',  dmg: 999, weight: 'ko', final: true },
-    ];
+    // ── Act 1: Even exchange (0-5s) ──────────────────────────
+    // Occasionally includes a momentum run (3 consecutive hits to one side)
+    const doMomentum = t.doMomentum != null ? t.doMomentum : Math.random() < 0.35;
+    const momentumTarget = Math.random() < 0.5 ? 'loser' : 'winner';
+    let allHits;
+    if (doMomentum) {
+      // Momentum run: 3 hits to one side in the middle of Act 1
+      allHits = [
+        { delay: 500  + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 1100 + jitter(), target: 'winner', dmg: 8,  weight: 'light' },
+        // Momentum run — 3 consecutive hits
+        { delay: 1800 + jitter(), target: momentumTarget, dmg: 6, weight: 'light' },
+        { delay: 2100 + jitter(), target: momentumTarget, dmg: 7, weight: 'medium' },
+        { delay: 2400 + jitter(), target: momentumTarget, dmg: 8, weight: 'medium' },
+        // Other side answers back
+        { delay: 3200 + jitter(), target: momentumTarget === 'loser' ? 'winner' : 'loser', dmg: 9, weight: 'medium' },
+        { delay: 3800 + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        { delay: 4600 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+      ];
+    } else {
+      allHits = [
+        { delay: 500  + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 1100 + jitter(), target: 'winner', dmg: 8,  weight: 'light' },
+        { delay: 1700 + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        { delay: 2300 + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
+        { delay: 2900 + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 3500 + jitter(), target: 'winner', dmg: 6,  weight: 'light' },
+        { delay: 4000 + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 4600 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+      ];
+    }
+
+    // Double-tap combos: ~20% of light hits get a follow-up 120ms later
+    const doubleTaps = [];
+    allHits.forEach(h => {
+      if (h.weight === 'light' && Math.random() < 0.2) {
+        doubleTaps.push({ delay: h.delay + 120, target: h.target, dmg: 3, weight: 'light' });
+      }
+    });
+    allHits.push(...doubleTaps);
+
+    // ── Act 2: Stun / Special / Rally (5-11s) ────────────────
+    let act2Hits;
+    if (doStunInterrupt) {
+      // Stun interrupt: exchange → boss starts charging → employee stuns → special fizzles
+      // Stun fires at chargeStart + 500ms (mid-charge), special reduced to glancing blow
+      const postInterrupt = specialTime + 500;
+      act2Hits = [
+        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
+        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        // Special fires as glancing blow
+        { delay: specialTime, target: empTarget, dmg: 10, weight: 'medium', isSpecial: true },
+        // Post-interrupt: employee capitalizes on stunned opponent
+        { delay: postInterrupt + jitter(),       target: oppTarget, dmg: 6, weight: 'light' },
+        { delay: postInterrupt + 400 + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
+        { delay: postInterrupt + 800 + jitter(), target: oppTarget, dmg: 5, weight: 'light' },
+        { delay: postInterrupt + 1200 + jitter(), target: 'winner', dmg: 6, weight: 'light' },
+      ];
+    } else if (doStun && stunTime <= 5000) {
+      // Early stun (5s): stun combo (5.6-7s) → clear gap → special (8-9.5s) → rally
+      act2Hits = [
+        { delay: 5600 + jitter(), target: oppTarget, dmg: 5, weight: 'light' },
+        { delay: 5870 + jitter(), target: oppTarget, dmg: 6, weight: 'light' },
+        { delay: 6140 + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
+        { delay: 6410 + jitter(), target: oppTarget, dmg: 6, weight: 'light' },
+        { delay: 6680 + jitter(), target: oppTarget, dmg: 7, weight: 'light' },
+        // Gap before special charge starts (~800ms+)
+        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
+        // Rally after special
+        { delay: specialTime + 800  + jitter(), target: 'winner', dmg: 5, weight: 'light' },
+        { delay: specialTime + 1400 + jitter(), target: 'loser',  dmg: 7, weight: 'light' },
+        { delay: specialTime + 2000 + jitter(), target: 'winner', dmg: 6, weight: 'medium' },
+      ];
+    } else if (doStun) {
+      // Late stun (after special): exchange → special → stun combo
+      // Cap combo end at 10500ms to avoid Act 3 overlap
+      const comboStart = stunTime;
+      act2Hits = [
+        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
+        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        { delay: 7100  + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
+        // Stun fires 500ms after special, combo on stunned opponent
+        { delay: Math.min(comboStart, 10200) + jitter(),       target: oppTarget, dmg: 5, weight: 'light' },
+        { delay: Math.min(comboStart + 270, 10400) + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
+        { delay: Math.min(comboStart + 540, 10600),            target: oppTarget, dmg: 6, weight: 'light' },
+        { delay: Math.min(comboStart + 800, 10800),            target: oppTarget, dmg: 8, weight: 'medium' },
+      ];
+    } else {
+      // No stun: alternating exchange
+      act2Hits = [
+        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
+        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        { delay: 7100  + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
+        { delay: specialTime + 800  + jitter(), target: 'winner', dmg: 5, weight: 'light' },
+        { delay: specialTime + 1400 + jitter(), target: 'loser',  dmg: 7, weight: 'light' },
+        { delay: specialTime + 2000 + jitter(), target: 'winner', dmg: 8, weight: 'medium' },
+      ];
+    }
+
+    // ── Act 3: Escalation + Finish (11-18.5s) ────────────────
+    let act3Hits;
+    if (doComeback) {
+      // Near-death comeback (employee only): gradual beatdown → stun pause → rally
+      act3Hits = [
+        { delay: 11200 + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 11900 + jitter(), target: 'winner', dmg: 12, weight: 'medium' },
+        { delay: 12400 + jitter(), target: 'winner', dmg: 14, weight: 'heavy' },
+        { delay: 12900 + jitter(), target: 'winner', dmg: 12, weight: 'medium' },
+        { delay: 13400,           target: 'winner', dmg: 16, weight: 'heavy' },
+        // ~1.5s pause — employee stun fires here
+        { delay: 15000 + jitter(), target: 'loser',  dmg: 14, weight: 'heavy' },
+        { delay: 15300 + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+        { delay: 15600 + jitter(), target: 'loser',  dmg: 12, weight: 'heavy' },
+        { delay: 16800 + jitter(), target: 'loser',  dmg: 14, weight: 'heavy' },
+        { delay: 18500, target: 'loser', dmg: 999, weight: 'ko', final: true },
+      ];
+    } else if (doBossFinisher) {
+      // Boss finisher: escalation → boss charges special again → special KO
+      act3Hits = [
+        { delay: 11200 + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 11900 + jitter(), target: 'winner', dmg: 6,  weight: 'light' },
+        { delay: 12600 + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+        { delay: 13400 + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 14200 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+        { delay: 15000 + jitter(), target: 'loser',  dmg: 12, weight: 'heavy' },
+        // Boss charges for finisher at 16.5s, fires at 17.5s
+        // KO happens on finisher release (handled separately below)
+        { delay: 18500, target: 'loser', dmg: 999, weight: 'ko', final: true, isFinisher: true },
+      ];
+    } else if (doSlugfest) {
+      // Slugfest: rapid back-and-forth with increasing intensity
+      act3Hits = [
+        { delay: 11200 + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+        { delay: 11600 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+        { delay: 12000 + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 12400 + jitter(), target: 'winner', dmg: 6,  weight: 'light' },
+        { delay: 12800 + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 13200 + jitter(), target: 'winner', dmg: 7,  weight: 'medium' },
+        { delay: 13600 + jitter(), target: 'loser',  dmg: 9,  weight: 'medium' },
+        { delay: 14000 + jitter(), target: 'winner', dmg: 8,  weight: 'medium' },
+        { delay: 14500 + jitter(), target: 'loser',  dmg: 10, weight: 'heavy' },
+        { delay: 15000 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+        { delay: 15800 + jitter(), target: 'loser',  dmg: 12, weight: 'heavy' },
+        { delay: 16800 + jitter(), target: 'loser',  dmg: 14, weight: 'heavy' },
+        { delay: 18500, target: 'loser', dmg: 999, weight: 'ko', final: true },
+      ];
+    } else {
+      // Standard Act 3
+      act3Hits = [
+        { delay: 11200 + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+        { delay: 11900 + jitter(), target: 'winner', dmg: 6,  weight: 'light' },
+        { delay: 12600 + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+        { delay: 13400 + jitter(), target: 'loser',  dmg: 7,  weight: 'light' },
+        { delay: 14200 + jitter(), target: 'winner', dmg: 5,  weight: 'light' },
+        { delay: 15000 + jitter(), target: 'loser',  dmg: 12, weight: 'heavy' },
+        { delay: 15900 + jitter(), target: 'winner', dmg: 4,  weight: 'light' },
+        { delay: 16800 + jitter(), target: 'loser',  dmg: 14, weight: 'heavy' },
+        { delay: 18500, target: 'loser', dmg: 999, weight: 'ko', final: true },
+      ];
+    }
 
     allHits.push(...act2Hits, ...act3Hits);
 
@@ -701,67 +903,125 @@
     const winnerScale = (100 - winnerFinalHP) / (runWinnerDmg || 1);
     const loserScale = 100 / (runLoserDmg || 1);
 
+    // Opponent-specific announcer lines (50% chance to use when available)
+    const oppLines = this._CREATURE_FIGHT_LINES[opponent.name];
+    const pickOppLine = () => oppLines && Math.random() < 0.5
+      ? oppLines[Math.floor(Math.random() * oppLines.length)]
+      : pickLine(this._FIGHT_LINES_EVEN);
+
     // Announcer beats
-    [
-      [800, pickLine(this._FIGHT_LINES_EVEN)],
-      [3000, pickLine(this._FIGHT_LINES_EVEN)],
-      [5500, doStun ? `${badge.name.toUpperCase()} DROPS A ONE-LINER!` : pickLine(this._FIGHT_LINES_EVEN)],
-      [7500, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
+    const announcerBeats = [
+      [800, pickOppLine()],
+      [3000, pickOppLine()],
+      [5500, (doStun && stunTime <= 5000) ? `${badge.name.toUpperCase()} DROPS A ONE-LINER!` : pickOppLine()],
+      [7500, (chargeStart <= 7500 && chargeStart + chargeLeadTime >= 7500) ? null : `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
       [9800, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
-      [12000, pickLine(this._FIGHT_LINES_EVEN)],
+      [12000, pickOppLine()],
       [15000, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
       [17500, pickLine(this._FIGHT_LINES_FINISH)],
-    ].forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
+    ];
+    // Comeback announcer lines
+    if (doComeback) {
+      announcerBeats.push(
+        [13600, pickLine(this._FIGHT_LINES_COMEBACK_SHOCK)],
+        [14800, pickLine(this._FIGHT_LINES_COMEBACK_RALLY)]
+      );
+    }
+    announcerBeats.filter(([, line]) => line !== null).forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
 
-    // Employee stun quote mechanic (50% chance)
-    if (doStun) {
-      beat(5000, () => {
-        const stunQuote = this._STUN_QUOTES[Math.floor(Math.random() * this._STUN_QUOTES.length)];
-        setVSAnnouncer(`${badge.name.toUpperCase()}: "${stunQuote}"`);
+    // ── Stun Helper ────────────────────────────────────────
+    const fireStun = (duration) => {
+      const stunQuote = this._STUN_QUOTES[Math.floor(Math.random() * this._STUN_QUOTES.length)];
+      setVSAnnouncer(`${badge.name.toUpperCase()}: "${stunQuote}"`);
+      if (window.ArcadeSFX) ArcadeSFX.play('quoteTaunt');
 
-        // Show stun bubble (positioned via CSS, same style as opponent quote)
-        {
-          const stunBubble = document.createElement('div');
-          stunBubble.className = 'arcade-vs-stun-bubble';
-          overlay.appendChild(stunBubble);
-          this._typewriterEffect(stunBubble, stunQuote, 40);
-          requestAnimationFrame(() => stunBubble.classList.add('visible'));
+      const stunBubble = document.createElement('div');
+      stunBubble.className = 'arcade-vs-stun-bubble';
+      overlay.appendChild(stunBubble);
+      this._typewriterEffect(stunBubble, stunQuote, 40);
+      requestAnimationFrame(() => stunBubble.classList.add('visible'));
 
-          // Stun the opponent — centered in portrait with STUNNED label
-          const oppWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
-          if (oppWrap) {
-            oppWrap.classList.add('stunned');
-            if (window.ArcadeSFX) ArcadeSFX.play('stun');
-            const stars = document.createElement('div');
-            stars.className = 'arcade-vs-stun-stars';
-            stars.innerHTML = '<span class="arcade-vs-stun-stars-icons">\u2B50\u{1F4AB}\u2B50</span><span class="arcade-vs-stun-stars-label">STUNNED</span>';
-            oppWrap.appendChild(stars);
-          }
+      const oppWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+      if (oppWrap) {
+        oppWrap.classList.add('stunned');
+        if (window.ArcadeSFX) ArcadeSFX.play('stun');
+        const stars = document.createElement('div');
+        stars.className = 'arcade-vs-stun-stars';
+        stars.innerHTML = '<span class="arcade-vs-stun-stars-icons">\u2B50\u{1F4AB}\u2B50</span><span class="arcade-vs-stun-stars-label">STUNNED</span>';
+        oppWrap.appendChild(stars);
+      }
 
-          // Remove stun after 2.5s
-          beat(2500, () => {
-            const oppWrap2 = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
-            if (oppWrap2) oppWrap2.classList.remove('stunned');
-            const stars2 = oppWrap2?.querySelector('.arcade-vs-stun-stars');
-            if (stars2) stars2.remove();
-            stunBubble.classList.remove('visible');
-            beat(300, () => stunBubble.remove());
-          });
-        }
+      beat(duration, () => {
+        const oppWrap2 = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+        if (oppWrap2) oppWrap2.classList.remove('stunned');
+        const stars2 = oppWrap2?.querySelector('.arcade-vs-stun-stars');
+        if (stars2) stars2.remove();
+        stunBubble.classList.remove('visible');
+        beat(300, () => stunBubble.remove());
       });
+    };
+
+    // Comeback stun: employee fires stun during the near-death pause
+    if (doComeback) {
+      beat(13800, () => fireStun(1100));
+    }
+
+    // Stun interrupt: employee stuns mid-charge, canceling the special
+    if (doStunInterrupt) {
+      beat(chargeStart + 500, () => fireStun(2000));
+    }
+
+    // Regular stun (45% chance, variable timing)
+    if (doStun) {
+      beat(stunTime, () => fireStun(2500));
     }
 
     // Special move — charge buildup then release (bosses + creatures, not interns)
     if (opponent.type !== 'intern' && opponent.move) {
-      const chargeTime = doStun ? 7300 : 6800;
-      const releaseTime = 8200;
-      beat(chargeTime, () => {
+      if (doStunInterrupt) {
+        // Stun interrupt: boss starts charging, employee stuns, special fizzles
+        beat(chargeStart, () => {
+          this._startSpecialMoveCharge(overlay);
+          setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+        });
+        // Stun fires mid-charge — cancel charge aura 200ms after stun appears
+        beat(chargeStart + 700, () => {
+          const classEl = overlay.querySelector('.arcade-vs-right .arcade-vs-fighter-class');
+          if (classEl) classEl.classList.remove('special-move-charging');
+          const portrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+          if (portrait) portrait.classList.remove('special-move-charge-aura');
+          const darken = overlay.querySelector('.arcade-vs-darken-overlay');
+          if (darken) darken.classList.remove('active');
+          setVSAnnouncer('INTERRUPTED! THE SPECIAL FIZZLES!');
+        });
+        // Reduced-power release (glancing blow)
+        beat(specialTime, () => {
+          this._triggerSpecialMove(overlay, oppColor, opponent);
+        });
+      } else {
+        // Normal special move
+        beat(chargeStart, () => {
+          this._startSpecialMoveCharge(overlay);
+          setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+        });
+        beat(specialTime, () => {
+          this._triggerSpecialMove(overlay, oppColor, opponent);
+          setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
+        });
+      }
+    }
+
+    // Boss finisher — second special move as killing blow in Act 3
+    if (doBossFinisher && opponent.move) {
+      beat(16500, () => {
         this._startSpecialMoveCharge(overlay);
-        setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+        setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING... FINISHING MOVE!`);
       });
-      beat(releaseTime, () => {
+      beat(17800, () => {
         this._triggerSpecialMove(overlay, oppColor, opponent);
-        setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
+        setVSAnnouncer(pickLine([
+          'FINISHING MOVE!', 'EXECUTIVE DECISION!', 'NO APPEALS!', 'MEETING ADJOURNED... PERMANENTLY!'
+        ]));
       });
     }
 
@@ -778,16 +1038,23 @@
           setHP(loserFill, loserTrail, 0);
 
           // Determine which portrait/spark to hit
-          const spark = loserSpark;
-          const portrait = winner === 'employee' ? rightPortrait : leftPortrait;
-          doHit(spark, portrait, 'ko');
+          // Boss finisher: special FX IS the KO — skip regular hit visual
+          if (!hit.isFinisher) {
+            const spark = loserSpark;
+            const portrait = winner === 'employee' ? rightPortrait : leftPortrait;
+            doHit(spark, portrait, 'ko');
+          } else {
+            // Play KO sound only (special FX handles the visual)
+            if (window.ArcadeSFX) ArcadeSFX.play('koImpact');
+          }
 
           // Camera zoom on KO
           overlay.classList.remove('ko-slowdown');
           overlay.classList.add('ko-zoom');
 
           // K.O. text
-          const loserSide = spark.closest('.arcade-vs-side');
+          const koSpark = loserSpark;
+          const loserSide = koSpark.closest('.arcade-vs-side');
           if (loserSide) {
             const koEl = document.createElement('div');
             koEl.className = 'arcade-vs-ko-text';
@@ -1025,11 +1292,35 @@
     const empPortrait = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
     if (!bossPortrait || !empPortrait) return;
 
+    // Move-specific SFX mapping
+    const SPECIAL_SFX = {
+      'BUDGET SLASH': 'specialSlash',
+      'HAZMAT EXPLOSION': 'specialMicrowave',
+      'PAPER JAM OF DOOM': 'specialPaper',
+      'PACKET STORM': 'specialPacket',
+      'ENDLESS ANECDOTE': 'specialAnecdote',
+      'COMPLIANCE LOCKDOWN': 'specialLockdown',
+      'CODE SWITCH': 'specialCode',
+      'EXPENSE DENIED': 'specialLockdown',
+    };
+    const BOSS_SFX = {
+      'HD-00002': 'specialFeedback',   // Drew — Feedback Loop
+      'HD-00003': 'specialDrumhit',    // Henry — Click Track of Doom
+      'HD-00004': 'laserFire',         // Todd — 1000 Yard Stare
+    };
+
     if (opponentType === 'boss') {
       // Band members: check for boss-specific effects, default to music notes
       const bossLauncher = opponent._bossId && this._BOSS_SPECIAL_FX[opponent._bossId];
       if (bossLauncher) {
         bossLauncher.call(this, overlay, bossPortrait, empPortrait, color);
+        // Boss-specific SFX
+        const bossSfx = BOSS_SFX[opponent._bossId];
+        if (bossSfx && window.ArcadeSFX) {
+          ArcadeSFX.play(bossSfx);
+          // Todd laser: delayed impact sound
+          if (opponent._bossId === 'HD-00004') ArcadeSFX.playDelayed('laserImpact', 600);
+        }
       } else {
         this._launchMusicNotes(overlay, bossPortrait, empPortrait, color);
       }
@@ -1039,6 +1330,9 @@
       const launcher = this._CREATURE_SPECIAL_FX[moveName];
       if (launcher) {
         launcher.call(this, overlay, bossPortrait, empPortrait, color);
+        // Creature-specific SFX
+        const creatureSfx = SPECIAL_SFX[moveName];
+        if (creatureSfx && window.ArcadeSFX) ArcadeSFX.play(creatureSfx);
       } else {
         this._launchLightning(overlay, bossPortrait, empPortrait, color);
       }
@@ -1231,6 +1525,32 @@
         }, i * 45);
       }
     },
+
+    'EXPENSE DENIED': function(overlay, fromEl, toEl, color) {
+      // Red "DENIED" stamps slamming across the screen
+      const stamps = ['DENIED', 'REJECTED', 'OVER BUDGET', 'SEE ME', 'NO', 'FLAGGED'];
+      const count = 10;
+      overlay.classList.add('lightning-flash');
+      setTimeout(() => overlay.classList.remove('lightning-flash'), 150);
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          const el = document.createElement('div');
+          el.className = 'arcade-fx-denied-stamp';
+          el.textContent = stamps[Math.floor(Math.random() * stamps.length)];
+          const x = 10 + Math.random() * 80;
+          const y = 10 + Math.random() * 80;
+          const rot = -25 + Math.random() * 50;
+          const size = 28 + Math.random() * 20;
+          el.style.cssText = `
+            left: ${x}%; top: ${y}%;
+            font-size: ${size}px;
+            --stamp-rot: ${rot}deg;
+          `;
+          overlay.appendChild(el);
+          el.addEventListener('animationend', () => el.remove(), { once: true });
+        }, i * 100);
+      }
+    },
   },
 
   // ─── Boss-Specific Special Move Effects ────────────────────
@@ -1252,10 +1572,10 @@
       overlay.classList.add('lightning-flash');
       setTimeout(() => overlay.classList.remove('lightning-flash'), 150);
 
-      // Drop in the amp
+      // Drop in the guitar sprite
       const amp = document.createElement('div');
       amp.className = 'arcade-fx-amp';
-      amp.innerHTML = '🎸';
+      amp.innerHTML = '<img src="/images/arcade/drew-guitar.png" alt="" style="width:80px;height:auto;transform:scaleX(-1) rotate(-15deg);filter:drop-shadow(0 0 10px rgba(91,141,239,0.7));">';
       amp.style.cssText = `left: ${ampX}px; top: ${ampY}px;`;
       overlay.appendChild(amp);
 
@@ -1440,6 +1760,29 @@
           overlay.appendChild(spark);
           spark.addEventListener('animationend', () => spark.remove(), { once: true });
         }, 100 + i * 30);
+      }
+
+      // Flames on the employee portrait — fire rising from impact point
+      const flameEmojis = ['🔥', '🔥', '🔥', '💥', '🔥'];
+      for (let i = 0; i < 12; i++) {
+        setTimeout(() => {
+          const flame = document.createElement('div');
+          flame.className = 'arcade-fx-laser-flame';
+          flame.textContent = flameEmojis[Math.floor(Math.random() * flameEmojis.length)];
+          const xSpread = targetX + (Math.random() - 0.5) * 80;
+          const yBase = targetY + (Math.random() - 0.5) * 40;
+          const rise = -(60 + Math.random() * 80);
+          const drift = (Math.random() - 0.5) * 30;
+          const size = 20 + Math.random() * 20;
+          flame.style.cssText = `
+            left: ${xSpread}px; top: ${yBase}px;
+            font-size: ${size}px;
+            --flame-rise: ${rise}px;
+            --flame-drift: ${drift}px;
+          `;
+          overlay.appendChild(flame);
+          flame.addEventListener('animationend', () => flame.remove(), { once: true });
+        }, 200 + i * 80);
       }
     },
   },
@@ -1626,6 +1969,7 @@
     'The Dirty Microwave': ['SCRUBBED CLEAN', 'SENT TO HAZMAT', 'UNPLUGGED FOR GOOD'],
     'The MFA Guardian': ['CODE ACCEPTED', 'ACCESS GRANTED', 'AUTHENTICATION BYPASSED'],
     'The Consultant': ['CONTRACT TERMINATED', 'INVOICE DENIED', "YOUR JOB'S BEEN OUTSOURCED"],
+    'Sally in Accounting': ['BUDGET APPROVED', 'EXPENSE REIMBURSED', 'AUDIT CLEARED'],
   },
 
   _getDefeatText(opponent) {

@@ -80,7 +80,7 @@ body.view-arcade .public-orgchart {
   height: 100vh;
   background:
     linear-gradient(180deg, rgba(10, 10, 18, 0.85) 0%, rgba(10, 10, 18, 0.7) 40%, rgba(10, 10, 18, 0.9) 100%),
-    url('/images/arcade/backgrounds/server-room.jpg') center/cover no-repeat;
+    url('/images/arcade/backgrounds/front-lobby.jpg') center/cover no-repeat;
   position: relative;
   overflow: hidden;
 }
@@ -597,15 +597,13 @@ body.view-arcade .public-orgchart {
 /* ── Stage Backgrounds (reused from original, loaded in VS only) ── */
 .arcade-bg-server-room { background-image: url('/images/arcade/backgrounds/server-room.jpg'); }
 .arcade-bg-break-room { background-image: url('/images/arcade/backgrounds/break-room.jpg'); }
-.arcade-bg-network-closet { background-image: url('/images/arcade/backgrounds/network-closet.jpg'); }
-.arcade-bg-front-entrance { background-image: url('/images/arcade/backgrounds/front-lobby.jpg'); }
 .arcade-bg-meeting-room { background-image: url('/images/arcade/backgrounds/meeting-room.jpg'); }
 .arcade-bg-cubicle-farm { background-image: url('/images/arcade/backgrounds/cubicle-farm.jpg'); }
+.arcade-bg-corner-office { background-image: url('/images/arcade/backgrounds/corner-office.jpg'); }
 
 /* ── Stage Ambient Effects (on darken layer so they render above the dim) ── */
 
-.arcade-vs-bg-darken[data-stage="server-room"]::after,
-.arcade-vs-bg-darken[data-stage="network-closet"]::after {
+.arcade-vs-bg-darken[data-stage="server-room"]::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -622,10 +620,6 @@ body.view-arcade .public-orgchart {
     radial-gradient(3px 3px at 52% 62%, #ff3333, transparent 6px);
   animation: serverLEDs 2s step-end infinite;
   pointer-events: none;
-}
-
-.arcade-vs-bg-darken[data-stage="network-closet"]::after {
-  animation-duration: 1.5s;
 }
 
 .arcade-vs-bg-darken[data-stage="break-room"]::after {
@@ -661,16 +655,26 @@ body.view-arcade .public-orgchart {
   pointer-events: none;
 }
 
-.arcade-vs-bg-darken[data-stage="front-entrance"]::after {
+.arcade-vs-bg-darken[data-stage="corner-office"]::after {
   content: '';
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 30%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
-  animation: lightSweep 6s ease-in-out infinite;
+  inset: 0;
+  background:
+    /* City skyline twinkling through windows */
+    radial-gradient(2px 2px at 8% 20%, rgba(100, 180, 255, 0.4), transparent 4px),
+    radial-gradient(2px 2px at 15% 25%, rgba(255, 200, 100, 0.3), transparent 4px),
+    radial-gradient(2px 2px at 22% 18%, rgba(100, 180, 255, 0.3), transparent 4px),
+    radial-gradient(2px 2px at 78% 22%, rgba(255, 200, 100, 0.4), transparent 4px),
+    radial-gradient(2px 2px at 85% 15%, rgba(100, 180, 255, 0.3), transparent 4px),
+    radial-gradient(2px 2px at 92% 28%, rgba(255, 200, 100, 0.3), transparent 4px),
+    /* Desk lamp warm glow */
+    radial-gradient(ellipse 60px 40px at 50% 75%, rgba(255, 180, 80, 0.1), transparent);
+  animation: cityTwinkle 4s ease-in-out infinite;
   pointer-events: none;
+}
+@keyframes cityTwinkle {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 .arcade-vs-bg-darken[data-stage="cubicle-farm"]::after {
@@ -1089,18 +1093,33 @@ body.view-arcade .public-orgchart {
   position: relative;
 }
 
-/* Hash marks at 25%, 50%, 75% */
+/* Segmented HP bar — 10 segments with visible dividers */
 .arcade-vs-hp-track::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
+  background: repeating-linear-gradient(
+    to right,
+    transparent 0%,
+    transparent calc(10% - 2px),
+    rgba(0, 0, 0, 0.6) calc(10% - 2px),
+    rgba(0, 0, 0, 0.6) 10%
+  );
+}
+/* Bright quarter markers at 25%, 50%, 75% */
+.arcade-vs-hp-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
   background:
     linear-gradient(to right,
-      transparent calc(25% - 1px), rgba(255, 255, 255, 0.25) 25%, transparent calc(25% + 1px),
-      transparent calc(50% - 1px), rgba(255, 255, 255, 0.35) 50%, transparent calc(50% + 1px),
-      transparent calc(75% - 1px), rgba(255, 255, 255, 0.25) 75%, transparent calc(75% + 1px)
+      transparent calc(25% - 1px), rgba(255, 255, 255, 0.5) 25%, transparent calc(25% + 1px),
+      transparent calc(50% - 1px), rgba(255, 255, 255, 0.6) 50%, transparent calc(50% + 1px),
+      transparent calc(75% - 1px), rgba(255, 255, 255, 0.5) 75%, transparent calc(75% + 1px)
     );
 }
 
@@ -2081,14 +2100,15 @@ body.view-arcade .public-orgchart {
   pointer-events: none;
   width: 0;
   height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 14px solid #D4A843;
-  filter: drop-shadow(0 0 4px rgba(212, 168, 67, 0.8));
-  animation: pickFly 0.5s ease-out forwards;
+  border-left: 12px solid transparent;
+  border-right: 12px solid transparent;
+  border-bottom: 20px solid #D4A843;
+  filter: drop-shadow(0 0 6px rgba(212, 168, 67, 0.9));
+  animation: pickFly 0.8s ease-out forwards;
 }
 @keyframes pickFly {
   0% { transform: translateX(0) translateY(0) rotate(0deg); opacity: 1; }
+  70% { opacity: 0.8; }
   100% { transform: translateX(var(--pick-travel)) translateY(var(--pick-drift)) rotate(var(--pick-spin)); opacity: 0; }
 }
 
@@ -2151,6 +2171,45 @@ body.view-arcade .public-orgchart {
 @keyframes laserSparkFly {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(calc(-50% + var(--spark-dx)), calc(-50% + var(--spark-dy))) scale(0.3); opacity: 0; }
+}
+
+/* Sally — EXPENSE DENIED stamps slamming onto screen */
+.arcade-fx-denied-stamp {
+  position: absolute;
+  z-index: 26;
+  pointer-events: none;
+  font-family: 'Press Start 2P', 'Impact', monospace;
+  font-weight: 900;
+  color: #ff2222;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(255, 0, 0, 0.6), 2px 2px 0 #440000;
+  border: 3px solid #ff2222;
+  padding: 4px 10px;
+  transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(0);
+  animation: stampSlam 0.6s ease-out forwards;
+}
+@keyframes stampSlam {
+  0% { transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(3); opacity: 0; }
+  30% { transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(1.1); }
+  70% { transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(1); }
+  100% { transform: translate(-50%, -50%) rotate(var(--stamp-rot)) scale(1); opacity: 0; }
+}
+
+/* Laser impact flames — fire rising from hit point */
+.arcade-fx-laser-flame {
+  position: absolute;
+  z-index: 26;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: laserFlameRise 0.8s ease-out forwards;
+  filter: drop-shadow(0 0 4px rgba(255, 100, 0, 0.6));
+}
+@keyframes laserFlameRise {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+  40% { transform: translate(calc(-50% + var(--flame-drift) * 0.4), calc(-50% + var(--flame-rise) * 0.4)) scale(1.2); opacity: 0.9; }
+  100% { transform: translate(calc(-50% + var(--flame-drift)), calc(-50% + var(--flame-rise))) scale(0.3); opacity: 0; }
 }
 
 /* ============================================================
@@ -2280,7 +2339,9 @@ body.view-arcade .public-orgchart {
 .fx-off .arcade-fx-border-bolt,
 .fx-off .arcade-fx-amp,
 .fx-off .arcade-fx-feedback-wave,
-.fx-off .arcade-fx-guitar-pick { animation: none; display: none; }
+.fx-off .arcade-fx-guitar-pick,
+.fx-off .arcade-fx-laser-flame,
+.fx-off .arcade-fx-denied-stamp { animation: none; display: none; }
 .fx-off .arcade-vs-portrait-wrap.boss-electric-entrance { animation: none; }
 
 
