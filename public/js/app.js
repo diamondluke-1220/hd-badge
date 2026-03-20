@@ -734,81 +734,7 @@ async function captureBadgePng() {
   return canvas.toDataURL('image/png');
 }
 
-// ─── Download ─────────────────────────────────────────────
-
-async function downloadBadge() {
-  const loading = document.getElementById('loading');
-  loading.classList.add('active');
-  hidePopover();
-
-  try {
-    const dataUrl = await captureBadgePng();
-
-    const link = document.createElement('a');
-    const employeeId = document.getElementById('idField').textContent;
-    const safeName = state.name.toLowerCase().replace(/\s+/g, '-');
-    link.download = `helpdesk-badge-${safeName}-${employeeId}.png`;
-    link.href = dataUrl;
-    link.click();
-
-    showToast('Badge downloaded!', 'success', 3000);
-
-    // Show join prompt after successful download
-    showJoinPrompt();
-  } catch (err) {
-    console.error('Badge export failed:', err);
-    showToast('Badge generation failed. Try again or take a screenshot instead.', 'error');
-  } finally {
-    loading.classList.remove('active');
-  }
-}
-
-// ─── Join Org Chart Flow ──────────────────────────────────
-
-function showJoinPrompt() {
-  // Don't show if already in directory
-  if (localStorage.getItem('hd-badge')) return;
-  // Don't show if name is default
-  if (state.name === 'YOUR NAME') return;
-
-  // Remove existing prompt if any
-  const existing = document.getElementById('joinPrompt');
-  if (existing) existing.remove();
-
-  const prompt = document.createElement('div');
-  prompt.id = 'joinPrompt';
-  prompt.className = 'join-prompt';
-  prompt.innerHTML = `
-    <div class="join-prompt-text">Badge downloaded! Want to join the company directory?</div>
-    <div class="join-prompt-actions">
-      <button class="join-prompt-btn" id="joinOrgBtn">Join the Org Chart</button>
-      <button class="join-prompt-dismiss" id="joinDismissBtn">No thanks</button>
-    </div>
-  `;
-  document.body.appendChild(prompt);
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => prompt.classList.add('visible'));
-  });
-
-  document.getElementById('joinDismissBtn').addEventListener('click', () => {
-    prompt.classList.remove('visible');
-    setTimeout(() => prompt.remove(), 200);
-  });
-
-  document.getElementById('joinOrgBtn').addEventListener('click', () => {
-    prompt.classList.remove('visible');
-    setTimeout(() => { prompt.remove(); showPrivacyModal(); }, 200);
-  });
-
-  // Auto-dismiss after 12 seconds
-  setTimeout(() => {
-    if (document.getElementById('joinPrompt')) {
-      prompt.classList.remove('visible');
-      setTimeout(() => prompt.remove(), 200);
-    }
-  }, 12000);
-}
+// ─── Join / Submit Flow ───────────────────────────────────
 
 function showPrivacyModal() {
   const modal = document.createElement('div');
@@ -956,7 +882,40 @@ function showToast(message, type = 'success', duration = 4000) {
 }
 
 function showSubmitSuccess(employeeId) {
-  showToast(`Welcome aboard, ${employeeId}! Your badge is now on the org chart.`, 'success', 5000);
+  // Remove existing success banner
+  const existing = document.getElementById('submitSuccess');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'submitSuccess';
+  banner.className = 'submit-success';
+  banner.innerHTML = `
+    <div class="submit-success-text">Welcome aboard, <strong>${esc(employeeId)}</strong>! Your badge is on the org chart.</div>
+    <div class="submit-success-actions">
+      <a class="submit-success-download" href="/api/badge/${esc(employeeId)}/image" download="helpdesk-badge-${esc(employeeId)}.png">Download Badge</a>
+      <button class="submit-success-dismiss" id="successDismissBtn">Dismiss</button>
+    </div>
+  `;
+  const header = document.querySelector('.app-header');
+  const statusBar = document.getElementById('badgeStatusBar');
+  if (statusBar) {
+    statusBar.insertAdjacentElement('afterend', banner);
+  } else {
+    header.insertAdjacentElement('afterend', banner);
+  }
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => banner.classList.add('visible'));
+  });
+
+  document.getElementById('successDismissBtn').addEventListener('click', () => {
+    banner.classList.remove('visible');
+    setTimeout(() => banner.remove(), 200);
+  });
+
+  // Switch button to "Save Changes" now that they have a badge
+  const submitLabel = document.getElementById('submitBadgeLabel');
+  if (submitLabel) submitLabel.textContent = 'Save Changes';
 }
 
 function showBadgeStatusBar(employeeId) {
@@ -1247,10 +1206,19 @@ function sudoRandomize() {
 document.getElementById('rebootBtn').addEventListener('click', sudoRandomize);
 
 // Download & Print FABs
-document.getElementById('downloadBtn').addEventListener('click', downloadBadge);
-// Print Test button — commented out in HTML, guard against null
-const printTestBtn = document.getElementById('printTestBtn');
-if (printTestBtn) printTestBtn.addEventListener('click', printTest);
+document.getElementById('submitBadgeBtn').addEventListener('click', () => {
+  if (state.name === 'YOUR NAME') {
+    showToast('Tap your name on the badge to get started.', 'error');
+    return;
+  }
+  if (state._editingBadgeId) {
+    // Returning user — submit directly (already has privacy setting)
+    submitBadge(true);
+  } else {
+    // New user — show privacy modal first
+    showPrivacyModal();
+  }
+});
 
 
 // ─── Public Org Chart (Employee Directory) ───────────────
@@ -1486,6 +1454,10 @@ if (window.location.pathname === '/orgchart') {
     idEl.dataset.set = '1';
     idEl.dataset.locked = '1';
     showBadgeStatusBar(existingId);
+
+    // Switch button to "Save Changes" for returning users
+    const submitLabel = document.getElementById('submitBadgeLabel');
+    if (submitLabel) submitLabel.textContent = 'Save Changes';
 
     // Auto-load their badge data into the editor
     fetch(`/api/badge/${existingId}`)
