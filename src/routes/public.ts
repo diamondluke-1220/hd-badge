@@ -109,8 +109,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         }
       }
 
-      const cleanName = clampField(name.trim().toUpperCase());
-      const cleanTitle = clampField(title.trim());
+      const cleanName = clampField(name.trim().toUpperCase(), 'name');
+      const cleanTitle = clampField(title.trim(), 'title');
       const flagged = shouldFlag(cleanName) || shouldFlag(cleanTitle);
 
       if (isPresentationActive() && flagged) {
@@ -119,11 +119,11 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
       const result = createBadge({
         name: cleanName,
-        department: clampField(department.trim().toUpperCase()),
+        department: clampField(department.trim().toUpperCase(), 'department'),
         title: cleanTitle,
-        song: clampField(song.trim().toUpperCase()),
-        accessLevel: clampField(accessLevel.trim().toUpperCase()),
-        accessCss: clampField(accessCss.trim()),
+        song: clampField(song.trim().toUpperCase(), 'song'),
+        accessLevel: clampField(accessLevel.trim().toUpperCase(), 'accessLevel'),
+        accessCss: clampField(accessCss.trim(), 'accessCss'),
         hasPhoto,
         photoPublic: photoPublic !== false,
         source: body.source || 'web',
@@ -157,14 +157,14 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       broadcastNewBadge({
         employeeId: result.employeeId,
         name: cleanName,
-        department: clampField(department.trim().toUpperCase()),
+        department: clampField(department.trim().toUpperCase(), 'department'),
         title: cleanTitle,
-        accessLevel: clampField(accessLevel.trim().toUpperCase()),
-        accessCss: clampField(accessCss.trim()),
+        accessLevel: clampField(accessLevel.trim().toUpperCase(), 'accessLevel'),
+        accessCss: clampField(accessCss.trim(), 'accessCss'),
         isBandMember: false,
       });
 
-      log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${clampField(department.trim().toUpperCase())}`);
+      log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${clampField(department.trim().toUpperCase(), 'department')}`);
 
       return c.json({
         success: true,

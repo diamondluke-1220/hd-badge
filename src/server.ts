@@ -71,6 +71,14 @@ const app = new Hono();
 
 const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_FIELD_LENGTH = 200;
+const FIELD_LIMITS: Record<string, number> = {
+  name: 18,
+  department: 28,
+  title: 30,
+  song: 25,
+  accessLevel: 28,
+  accessCss: 30,
+};
 
 // Security headers on all responses
 app.use('*', async (c, next) => {
@@ -121,8 +129,9 @@ function getClientIp(c: any): string {
   }
 }
 
-function clampField(val: string): string {
-  return val.slice(0, MAX_FIELD_LENGTH);
+function clampField(val: string, field?: string): string {
+  const limit = (field && FIELD_LIMITS[field]) || MAX_FIELD_LENGTH;
+  return val.slice(0, limit);
 }
 
 /** Strip data URL prefix and decode base64 to Buffer */
