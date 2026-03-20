@@ -79,8 +79,10 @@ body {
 .app-nav {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 8px;
   margin-top: 12px;
+  flex-wrap: wrap;
 }
 .app-nav-link {
   padding: 8px 20px;
@@ -990,35 +992,33 @@ body {
 /* ==========================================================
    16. BADGE STATUS BAR
    ========================================================== */
-.badge-status-bar {
-  display: flex;
+/* Badge status pill — integrated into app-nav */
+.badge-status-pill {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 6px 16px;
+  gap: 6px;
+  padding: 4px 10px 4px 12px;
   background: rgba(27,107,42,0.15);
-  border-bottom: 1px solid rgba(27,107,42,0.3);
+  border: 1px solid rgba(27,107,42,0.3);
+  border-radius: 20px;
+  margin-left: auto;
 }
 .badge-status-id {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   color: #22C55E;
-  letter-spacing: 2px;
-}
-.badge-status-welcome {
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  color: #8899AA;
-  font-weight: 500;
+  letter-spacing: 1px;
 }
 .badge-status-remove {
   background: none;
   border: none;
   color: #556677;
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
-  text-decoration: underline;
+  padding: 0 2px;
+  transition: color 0.15s;
 }
 .badge-status-remove:hover { color: #DC2626; }
 

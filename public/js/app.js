@@ -920,20 +920,19 @@ function showSubmitSuccess(employeeId) {
 
 function showBadgeStatusBar(employeeId) {
   // Remove existing
-  const existing = document.getElementById('badgeStatusBar');
+  const existing = document.getElementById('badgeStatusPill');
   if (existing) existing.remove();
 
-  const bar = document.createElement('div');
-  bar.id = 'badgeStatusBar';
-  bar.className = 'badge-status-bar';
-  bar.innerHTML = `
-    <span class="badge-status-welcome">Welcome back,</span>
+  const pill = document.createElement('span');
+  pill.id = 'badgeStatusPill';
+  pill.className = 'badge-status-pill';
+  pill.innerHTML = `
     <span class="badge-status-id">${esc(employeeId)}</span>
-    <button class="badge-status-remove" id="removeBadgeBtn">Remove my badge</button>
+    <button class="badge-status-remove" id="removeBadgeBtn" title="Remove my badge">&times;</button>
   `;
 
-  const header = document.querySelector('.app-header');
-  header.insertAdjacentElement('afterend', bar);
+  const nav = document.getElementById('appNav');
+  if (nav) nav.appendChild(pill);
 
   document.getElementById('removeBadgeBtn').addEventListener('click', removeBadge);
 }
@@ -951,8 +950,8 @@ async function removeBadge() {
     if (data.success) {
       localStorage.removeItem('hd-badge');
       state._editingBadgeId = null;
-      const bar = document.getElementById('badgeStatusBar');
-      if (bar) bar.remove();
+      const pill = document.getElementById('badgeStatusPill');
+      if (pill) pill.remove();
       // Reset ID to placeholder for new badge creation
       const idEl = document.getElementById('idField');
       if (idEl) {
@@ -961,6 +960,9 @@ async function removeBadge() {
         idEl.dataset.locked = '1';
       }
       refreshPreview();
+      // Reset submit button label
+      const submitLabel = document.getElementById('submitBadgeLabel');
+      if (submitLabel) submitLabel.textContent = 'Join the Org';
       showToast('Your badge has been shredded.', 'success');
     } else {
       showToast(data.error || 'Failed to remove badge.', 'error');
