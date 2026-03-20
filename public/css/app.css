@@ -996,15 +996,16 @@ body {
 .badge-status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 12px;
+  gap: 8px;
+  padding: 7px 14px 7px 18px;
   background: rgba(27,107,42,0.15);
   border: 1px solid rgba(27,107,42,0.3);
-  border-radius: 20px;
+  border-radius: 6px;
 }
 .badge-status-id {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: clamp(11px, 2.5vw, 13px);
+  font-weight: 600;
   color: #22C55E;
   letter-spacing: 1px;
 }
@@ -1013,7 +1014,7 @@ body {
   border: none;
   color: #556677;
   font-family: 'Inter', sans-serif;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
