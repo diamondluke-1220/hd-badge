@@ -206,7 +206,7 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
 
 // ─── Admin Auth ─────────────────────────────────────────
 
-const adminFailures = new Map<string, { count: number; lastAttempt: number }>();
+const adminFailures = new Map<string, { count: number; firstAttempt: number; lastAttempt: number }>();
 
 /** Check if an IP is localhost (handles IPv4, IPv6, and IPv4-mapped IPv6) */
 function isLocalhost(ip: string): boolean {
@@ -238,8 +238,13 @@ app.use('/api/admin/*', async (c, next) => {
 
   const ip = getClientIp(c);
   const record = adminFailures.get(ip);
-  if (record && record.count >= 5 && Date.now() - record.lastAttempt < 15 * 60 * 1000) {
-    return c.json({ success: false, error: 'Too many failed attempts. Try again in 15 minutes.' }, 429);
+  if (record && record.count >= 5) {
+    // Locked out for 15 min from the LAST failure (not first)
+    if (Date.now() - record.lastAttempt < 15 * 60 * 1000) {
+      return c.json({ success: false, error: 'Too many failed attempts. Try again in 15 minutes.' }, 429);
+    }
+    // Lockout expired — reset
+    adminFailures.delete(ip);
   }
 
   await next();
@@ -250,11 +255,16 @@ app.use('/api/admin/*', async (c, next) => {
   if (!ADMIN_TOKEN) return next();
   try {
     await bearerAuth({ token: ADMIN_TOKEN })(c, next);
+    // Successful auth — clear failure record
+    const ip = getClientIp(c);
+    if (adminFailures.has(ip)) adminFailures.delete(ip);
   } catch (e: any) {
     const ip = getClientIp(c);
-    const record = adminFailures.get(ip) || { count: 0, lastAttempt: 0 };
+    const now = Date.now();
+    const record = adminFailures.get(ip) || { count: 0, firstAttempt: now, lastAttempt: 0 };
     record.count++;
-    record.lastAttempt = Date.now();
+    record.lastAttempt = now;
+    if (!record.firstAttempt) record.firstAttempt = now;
     adminFailures.set(ip, record);
     log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
     return c.json({ success: false, error: 'Unauthorized. Invalid or missing admin token.' }, 401);
@@ -400,10 +410,13 @@ interface SSEClient {
   controller: ReadableStreamDefaultController;
   encoder: TextEncoder;
   keepalive: ReturnType<typeof setInterval>;
+  ip: string;
 }
 
 const sseClients = new Set<SSEClient>();
 const MAX_SSE_CLIENTS = 500;
+const MAX_SSE_PER_IP = 10;
+const sseByIp = new Map<string, number>();
 
 function sseWrite(client: SSEClient, event: string, data: string) {
   client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
@@ -441,13 +454,23 @@ initDemo({
 });
 initPresentation({ broadcast: broadcastSSE });
 
-function handleSSEDirect(): Response {
+function handleSSEDirect(clientIp: string): Response {
   if (sseClients.size >= MAX_SSE_CLIENTS) {
     return new Response(JSON.stringify({ success: false, error: 'Too many live connections. Try again later.' }), {
       status: 503,
       headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
     });
   }
+
+  // Per-IP connection limit
+  const ipCount = sseByIp.get(clientIp) || 0;
+  if (ipCount >= MAX_SSE_PER_IP) {
+    return new Response(JSON.stringify({ success: false, error: 'Too many connections from this address.' }), {
+      status: 429,
+      headers: { 'Content-Type': 'application/json', 'Retry-After': '10' },
+    });
+  }
+  sseByIp.set(clientIp, ipCount + 1);
 
   const encoder = new TextEncoder();
   let clientRef: SSEClient | null = null;
@@ -464,7 +487,7 @@ function handleSSEDirect(): Response {
         }
       }, 5_000);
 
-      clientRef = { controller, encoder, keepalive };
+      clientRef = { controller, encoder, keepalive, ip: clientIp };
       sseClients.add(clientRef);
       log('info', 'sse', `Client connected (${sseClients.size} total)`);
     },
@@ -472,6 +495,10 @@ function handleSSEDirect(): Response {
       if (clientRef) {
         clearInterval(clientRef.keepalive);
         sseClients.delete(clientRef);
+        // Decrement per-IP counter
+        const remaining = (sseByIp.get(clientRef.ip) || 1) - 1;
+        if (remaining <= 0) sseByIp.delete(clientRef.ip);
+        else sseByIp.set(clientRef.ip, remaining);
         clientRef = null;
         log('info', 'sse', `Client disconnected (${sseClients.size} total)`);
       }
@@ -552,7 +579,11 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === '/api/badges/stream') {
-      return handleSSEDirect();
+      // Extract client IP for per-IP SSE limiting
+      const ip = (process.env.TRUST_PROXY === '1'
+        ? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        : server?.requestIP?.(req)?.address) || 'unknown';
+      return handleSSEDirect(ip);
     }
     return app.fetch(req, server);
   },

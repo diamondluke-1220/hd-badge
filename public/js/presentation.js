@@ -86,29 +86,31 @@
     });
 
     pres.sseSource.addEventListener('presentation-state', (e) => {
-      const data = JSON.parse(e.data);
-      handleStateChange(data);
+      try { handleStateChange(JSON.parse(e.data)); }
+      catch (err) { console.error('[Presentation] Bad state event:', err); }
     });
 
     pres.sseSource.addEventListener('presentation-band-member', (e) => {
-      const data = JSON.parse(e.data);
-      handleBandMember(data);
+      try { handleBandMember(JSON.parse(e.data)); }
+      catch (err) { console.error('[Presentation] Bad band-member event:', err); }
     });
 
     pres.sseSource.addEventListener('presentation-chyron', (e) => {
-      const data = JSON.parse(e.data);
-      pres.chyronMessages = data.messages;
-      pres.chyronIndex = 0;
+      try {
+        const data = JSON.parse(e.data);
+        pres.chyronMessages = data.messages;
+        pres.chyronIndex = 0;
+      } catch (err) { console.error('[Presentation] Bad chyron event:', err); }
     });
 
     pres.sseSource.addEventListener('presentation-view-change', (e) => {
-      const data = JSON.parse(e.data);
-      handleViewChange(data.view);
+      try { handleViewChange(JSON.parse(e.data).view); }
+      catch (err) { console.error('[Presentation] Bad view-change event:', err); }
     });
 
     pres.sseSource.addEventListener('new-badge', (e) => {
-      const badge = JSON.parse(e.data);
-      handleNewBadge(badge);
+      try { handleNewBadge(JSON.parse(e.data)); }
+      catch (err) { console.error('[Presentation] Bad badge event:', err); }
     });
 
     pres.sseSource.onerror = () => {

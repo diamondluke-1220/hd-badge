@@ -4,6 +4,7 @@
 import type { Hono } from 'hono';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
+import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
 import { createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge } from '../db';
 import { checkRateLimit } from '../rate-limit';
@@ -78,7 +79,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
 
     // Check all user-supplied text fields for hate speech
-    const textFields = [name, department, title, song, accessLevel];
+    const textFields = [name, department, title, song, accessLevel, accessCss];
     for (const field of textFields) {
       if (!isNameClean(field)) {
         return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
@@ -105,8 +106,17 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       if (photo) {
         photoBuffer = decodeBase64Image(photo);
         if (photoBuffer) {
+          // Validate magic bytes: JPEG (FF D8 FF) or PNG (89 50 4E 47)
+          const isJpeg = photoBuffer[0] === 0xFF && photoBuffer[1] === 0xD8 && photoBuffer[2] === 0xFF;
+          const isPng = photoBuffer[0] === 0x89 && photoBuffer[1] === 0x50 && photoBuffer[2] === 0x4E && photoBuffer[3] === 0x47;
+          if (!isJpeg && !isPng) {
+            return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+          }
           try {
-            await sharp(photoBuffer).metadata();
+            const meta = await sharp(photoBuffer).metadata();
+            if (!meta.width || !meta.height || meta.width > 8000 || meta.height > 8000) {
+              return c.json({ success: false, error: 'Image too large. Max 8000x8000 pixels.' }, 400);
+            }
           } catch {
             return c.json({ success: false, error: 'Invalid image file.' }, 400);
           }
@@ -219,8 +229,11 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
-    const authHeader = c.req.header('authorization');
-    const isAdmin = !!ADMIN_TOKEN && authHeader === `Bearer ${ADMIN_TOKEN}` && c.req.query('full') === '1';
+    const authHeader = c.req.header('authorization') || '';
+    const expected = `Bearer ${ADMIN_TOKEN}`;
+    const tokenMatch = ADMIN_TOKEN && authHeader.length === expected.length &&
+      timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+    const isAdmin = !!tokenMatch && c.req.query('full') === '1';
 
     let imagePath: string;
     if (!isAdmin && !badge.photo_public && badge.has_photo) {
@@ -383,8 +396,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   app.get('/api/orgchart', (c) => {
     const department = c.req.query('department') || undefined;
     const division = c.req.query('division') || undefined;
-    const page = parseInt(c.req.query('page') || '1', 10);
-    const limit = parseInt(c.req.query('limit') || '50', 10);
+    const page = Math.max(1, parseInt(c.req.query('page') || '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '50', 10) || 50));
     const recentFirst = c.req.query('recentFirst') === '1';
 
     const result = listBadges({ department, division, page, limit, recentFirst });

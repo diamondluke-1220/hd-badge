@@ -11,7 +11,7 @@ interface RateEntry {
 
 const store = new Map<string, RateEntry>();
 
-// Clean up stale entries every 10 minutes
+// Every 10 minutes, remove rate limit entries with no activity in the past 24 hours
 setInterval(() => {
   const cutoff = Date.now() - DAY_MS;
   for (const [key, entry] of store) {
@@ -65,14 +65,23 @@ export function checkRateLimit(ip: string): { allowed: boolean; message?: string
   // Record this attempt
   entry.timestamps.push(now);
 
-  // Evict oldest entries if store grows too large
+  // Evict stale entries if store grows too large (LRU by most recent timestamp)
   if (store.size > MAX_STORE_SIZE) {
-    const evictCount = Math.floor(MAX_STORE_SIZE * 0.1);
-    let removed = 0;
-    for (const key of store.keys()) {
-      if (removed >= evictCount) break;
-      store.delete(key);
-      removed++;
+    const staleThreshold = now - DAY_MS;
+    for (const [key, e] of store) {
+      if (store.size <= MAX_STORE_SIZE * 0.9) break;
+      const latest = e.timestamps[e.timestamps.length - 1] || 0;
+      if (latest < staleThreshold) store.delete(key);
+    }
+    // If still over capacity after stale eviction, drop oldest-inserted
+    if (store.size > MAX_STORE_SIZE) {
+      const evictCount = Math.floor(MAX_STORE_SIZE * 0.1);
+      let removed = 0;
+      for (const key of store.keys()) {
+        if (removed >= evictCount) break;
+        store.delete(key);
+        removed++;
+      }
     }
   }
 

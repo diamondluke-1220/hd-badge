@@ -103,9 +103,12 @@
       if (Array.isArray(entry)) {
         // Multiple variants — load all
         Promise.all(entry.map(url => _loadOne(url, ctx)))
-          .then(buffers => { _buffers[name] = buffers.filter(Boolean); });
+          .then(buffers => { _buffers[name] = buffers.filter(Boolean); })
+          .catch(err => console.warn(`[ArcadeSFX] Failed to load ${name}:`, err));
       } else {
-        _loadOne(entry, ctx).then(buf => { if (buf) _buffers[name] = buf; });
+        _loadOne(entry, ctx)
+          .then(buf => { if (buf) _buffers[name] = buf; })
+          .catch(err => console.warn(`[ArcadeSFX] Failed to load ${name}:`, err));
       }
     }
   }

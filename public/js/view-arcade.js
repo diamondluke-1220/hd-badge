@@ -282,14 +282,10 @@ window.ArcadeRenderer = {
       });
     }
 
-    // Show/hide slots
+    // Show/hide slots via class toggle (avoids inline style reflow per slot)
     const slots = this._container.querySelectorAll('.arcade-slot');
     slots.forEach(slot => {
-      if (division === 'ALL') {
-        slot.style.display = '';
-      } else {
-        slot.style.display = slot.dataset.division === division ? '' : 'none';
-      }
+      slot.classList.toggle('slot-hidden', division !== 'ALL' && slot.dataset.division !== division);
     });
 
     // (Division headers removed — tabs handle filtering)
@@ -409,7 +405,7 @@ window.ArcadeRenderer = {
       }
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       e.preventDefault();
-      const slots = [...this._container.querySelectorAll('.arcade-slot:not([style*="display: none"])')];
+      const slots = [...this._container.querySelectorAll('.arcade-slot:not(.slot-hidden)')];
       const idx = slots.indexOf(slot);
       if (idx === -1) return;
       let next = idx;
@@ -617,7 +613,7 @@ window.ArcadeRenderer = {
   // ─── Cursor Selection Animation (~7s, progressive deceleration) ──────────────
 
   _animateCursorSelect(targetBadge, onLand) {
-    const visibleSlots = [...this._container.querySelectorAll('.arcade-slot:not([style*="display: none"])')];
+    const visibleSlots = [...this._container.querySelectorAll('.arcade-slot:not(.slot-hidden)')];
     if (visibleSlots.length === 0) {
       if (onLand) onLand();
       return;

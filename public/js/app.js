@@ -1228,7 +1228,18 @@ let currentRenderer = null;
 let orgChartContainer = null;
 let orgChartStats = null;
 
+// ─── Renderer Interface ──────────────────────────────────
+// Each view renderer (GridRenderer, DendroRenderer, ArcadeRenderer,
+// ReviewBoardRenderer) must implement:
+//   init(container, stats)  — populate container, return Promise
+//   addBadge(badge)         — insert SSE badge, return element or null
+//   destroy()               — clean up: clear intervals/timeouts,
+//                             remove event listeners (resize, zoom, keyboard),
+//                             clear innerHTML, null all refs
 async function switchView(mode) {
+  // Clean up any active focus trap before switching
+  if (_activeFocusTrap) { _activeFocusTrap(); _activeFocusTrap = null; }
+
   // Destroy current renderer
   if (currentRenderer && currentRenderer.destroy) {
     currentRenderer.destroy();

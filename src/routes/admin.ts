@@ -158,6 +158,13 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
 
+      // Validate magic bytes: JPEG (FF D8 FF) or PNG (89 50 4E 47)
+      const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+      const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+      if (!isJpeg && !isPng) {
+        return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+      }
+
       await sharp(buffer)
         .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 90 })
@@ -259,7 +266,11 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
     const escCsv = (val: any): string => {
       if (val === null || val === undefined) return '';
-      const s = String(val);
+      let s = String(val);
+      // Prevent formula injection in Excel (=, +, -, @, \t can trigger formulas)
+      if (/^[=+\-@\t]/.test(s)) {
+        s = "'" + s;
+      }
       if (s.includes(',') || s.includes('"') || s.includes('\n')) {
         return '"' + s.replace(/"/g, '""') + '"';
       }

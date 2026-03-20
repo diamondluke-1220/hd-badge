@@ -177,6 +177,10 @@ window.DendroRenderer = {
     if (this._packetTimer) { clearInterval(this._packetTimer); this._packetTimer = null; }
     if (this._cliTimer) { clearInterval(this._cliTimer); this._cliTimer = null; }
     if (this._interactionTimeout) { clearTimeout(this._interactionTimeout); this._interactionTimeout = null; }
+    // Remove D3 zoom handlers before clearing DOM
+    if (this._svg && this._zoom) {
+      this._svg.on('.zoom', null);
+    }
     if (this._container) { this._container.innerHTML = ''; }
     this._container = null;
     this._stats = null;
@@ -811,7 +815,7 @@ window.DendroRenderer = {
 
   // ─── Packet Animation — dots traveling along links ──────
   _startPacketAnimation() {
-    if (this._packetTimer) clearInterval(this._packetTimer);
+    if (this._packetTimer) return; // Already running
 
     const spawnPacket = () => {
       if (this._isUserInteracting || !this._animLayer || (typeof animationsEnabled === 'function' && !animationsEnabled())) return;

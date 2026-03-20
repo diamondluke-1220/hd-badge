@@ -399,6 +399,9 @@ body.view-arcade .public-orgchart {
   overflow: hidden;
   flex-shrink: 0;
 }
+.arcade-slot.slot-hidden {
+  display: none;
+}
 
 .arcade-slot:hover {
   border-color: #4a4a6a;

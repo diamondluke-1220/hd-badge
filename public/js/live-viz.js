@@ -528,6 +528,7 @@ function playPingTrace(nodeEl) {
     photoImg.setAttribute('x', '-14');
     photoImg.setAttribute('y', '-14');
     photoImg.setAttribute('clip-path', `url(#${clipId})`);
+    photoImg.addEventListener('error', () => { photoImg.remove(); }); // graceful fallback on 404
     photoImg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
     // Adjust clipPath center to match negative offset
     clipCircle.setAttribute('cx', '0');
