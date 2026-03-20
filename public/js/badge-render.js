@@ -192,14 +192,14 @@ function updateBadge(data) {
   const deptEl = document.getElementById('deptField');
   if (deptEl) {
     deptEl.textContent = department || 'SELECT DEPARTMENT';
-    autoShrink(deptEl, 36);
+    autoShrink(deptEl, 28);
   }
 
   // Title
   const titleEl = document.getElementById('titleField');
   if (titleEl) {
     titleEl.textContent = title || 'Select Title';
-    autoShrink(titleEl, 36);
+    autoShrink(titleEl, 28);
   }
 
   // Employee ID + Issued date

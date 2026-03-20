@@ -245,42 +245,38 @@
   font-family: 'Inter', sans-serif;
   font-weight: 700;
   font-size: 62px;
-  color: #0A1F3F;
+  color: #111111;
   text-transform: uppercase;
   letter-spacing: 2px;
   text-align: center;
   margin-bottom: 12px;
   line-height: 1.2;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .badge .title {
   font-family: 'Inter', sans-serif;
   font-weight: 500;
   font-size: 62px;
-  color: #556677;
+  color: #333333;
   text-align: center;
   margin-top: 8px;
   margin-bottom: 16px;
   line-height: 1.2;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .badge .info-divider {
   width: 60%;
   height: 4px;
-  background: #999999;
+  background: #333333;
   margin: 18px 0 22px;
 }
 .badge .name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
   font-size: 82px;
-  color: #0A1F3F;
+  color: #111111;
   text-transform: uppercase;
   letter-spacing: 5px;
   text-align: center;

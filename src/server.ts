@@ -298,12 +298,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
         }
         document.body.style.background = 'white';
 
-        // Print-only: slightly boost binary texture for dye-sub
-        const style = document.createElement('style');
-        style.textContent = `
-          .badge .texture-overlay::before { color: rgba(10, 31, 63, 0.15) !important; }
-        `;
-        document.head.appendChild(style);
+        // Print-only overrides removed — CSS values now calibrated for dye-sub
       });
     }
 
