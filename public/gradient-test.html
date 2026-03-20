@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Dye-Sub Gradient Test Card</title>
+  <style>
+    @page {
+      size: 54mm 85.6mm;
+      margin: 0;
+    }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #f0f0f0;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      justify-content: center;
+    }
+    .test-card {
+      width: 1012px;
+      height: 638px;
+      background: #FFFFFF;
+      border-radius: 30px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+    h2 {
+      font-size: 18px;
+      text-align: center;
+      margin: 0 0 12px;
+      color: #222;
+    }
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #222;
+      margin: 8px 0 4px;
+    }
+    .gradient-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .swatch {
+      flex: 1;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 700;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .text-samples {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .text-sample {
+      flex: 1;
+      height: 50px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .text-sample .label {
+      font-size: 8px;
+      color: #999;
+      margin-bottom: 2px;
+    }
+    .text-sample .binary {
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 2px;
+    }
+    .pattern-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .pattern-box {
+      flex: 1;
+      height: 70px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .pattern-box .bg-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      line-height: 1.4;
+      word-break: break-all;
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      padding: 4px;
+    }
+    .pattern-box .overlay-label {
+      position: absolute;
+      bottom: 4px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      font-weight: 700;
+      color: #222;
+      background: white;
+      padding: 1px 6px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-card">
+    <h2>DYE-SUB GRADIENT TEST — Evolis Primacy PM1W</h2>
+
+    <div class="section-label">GRAYSCALE SWATCHES (5% to 30%)</div>
+    <div class="gradient-row">
+      <div class="swatch" style="background: #F2F2F2; color: #222;">5% #F2F2F2</div>
+      <div class="swatch" style="background: #E8E8E8; color: #222;">8% #E8E8E8</div>
+      <div class="swatch" style="background: #E0E0E0; color: #222;">10% #E0E0E0</div>
+      <div class="swatch" style="background: #D9D9D9; color: #222;">13% #D9D9D9</div>
+      <div class="swatch" style="background: #D4D4D4; color: #222;">15% #D4D4D4</div>
+      <div class="swatch" style="background: #CCCCCC; color: #222;">20% #CCCCCC</div>
+      <div class="swatch" style="background: #C4C4C4; color: #222;">25% #C4C4C4</div>
+      <div class="swatch" style="background: #B3B3B3; color: #222;">30% #B3B3B3</div>
+    </div>
+
+    <div class="section-label">BINARY TEXT AT DIFFERENT OPACITIES (on white)</div>
+    <div class="text-samples">
+      <div class="text-sample">
+        <span class="label">8%</span>
+        <span class="binary" style="color: rgba(0,0,0,0.08); font-size: 12px;">01001000 01000101</span>
+      </div>
+      <div class="text-sample">
+        <span class="label">10%</span>
+        <span class="binary" style="color: rgba(0,0,0,0.10); font-size: 12px;">01001000 01000101</span>
+      </div>
+      <div class="text-sample">
+        <span class="label">13% (current)</span>
+        <span class="binary" style="color: rgba(0,0,0,0.13); font-size: 12px;">01001000 01000101</span>
+      </div>
+      <div class="text-sample">
+        <span class="label">15%</span>
+        <span class="binary" style="color: rgba(0,0,0,0.15); font-size: 12px;">01001000 01000101</span>
+      </div>
+      <div class="text-sample">
+        <span class="label">18%</span>
+        <span class="binary" style="color: rgba(0,0,0,0.18); font-size: 12px;">01001000 01000101</span>
+      </div>
+      <div class="text-sample">
+        <span class="label">20%</span>
+        <span class="binary" style="color: rgba(0,0,0,0.20); font-size: 12px;">01001000 01000101</span>
+      </div>
+    </div>
+
+    <div class="section-label">PATTERN WITH MASK vs NO MASK (13% opacity, 20px text)</div>
+    <div class="pattern-row">
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13);">010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100010001010101001101001011</div>
+        <div class="overlay-label">No mask</div>
+      </div>
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13);">010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100010001010101001101001011</div>
+        <div class="overlay-label" style="padding: 4px 12px;">With mask (padded)</div>
+      </div>
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13);">010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100010001010101001101001011</div>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:14px;font-weight:800;color:#222;">SAMPLE TEXT</div>
+        <div class="overlay-label">Text over pattern</div>
+      </div>
+    </div>
+
+    <div class="section-label">FONT SIZE COMPARISON (13% opacity)</div>
+    <div class="pattern-row">
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13); font-size: 8px;">010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100</div>
+        <div class="overlay-label">8px</div>
+      </div>
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13); font-size: 12px;">010010000100010101001100010100000010000001000100010001010101001101001011010010000100010101001100010100000010000001000100010001010101001101001011</div>
+        <div class="overlay-label">12px</div>
+      </div>
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13); font-size: 16px;">0100100001000101010011000101000000100000010001000100010101010011010010110100100001000101</div>
+        <div class="overlay-label">16px</div>
+      </div>
+      <div class="pattern-box">
+        <div class="bg-text" style="color: rgba(0,0,0,0.13); font-size: 20px;">01001000010001010100110001010000001000000100010001000101010100110100101101001000</div>
+        <div class="overlay-label">20px (current)</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
