@@ -272,8 +272,8 @@
 }
 .badge .info-divider {
   width: 60%;
-  height: 2px;
-  background: #DEE5ED;
+  height: 4px;
+  background: #999999;
   margin: 18px 0 22px;
 }
 .badge .name {
