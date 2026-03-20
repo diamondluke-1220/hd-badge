@@ -867,10 +867,12 @@ function showPrivacyModal() {
 
 async function submitBadge(photoPublic) {
   const loading = document.getElementById('loading');
-  loading.querySelector('.loading-text').textContent = 'Filing your paperwork...';
+  const isEdit = !!state._editingBadgeId;
+  loading.querySelector('.loading-text').textContent = isEdit ? 'Updating your badge...' : 'Filing your paperwork...';
   loading.classList.add('active');
 
   try {
+    const stored = JSON.parse(localStorage.getItem('hd-badge') || '{}');
     const body = {
       name: state.name,
       department: state.department,
@@ -881,10 +883,14 @@ async function submitBadge(photoPublic) {
       caption: state.caption,
       photo: state.photoUrl || null,
       photoPublic,
+      ...(isEdit ? { token: stored.deleteToken } : {}),
     };
 
-    const resp = await fetch('/api/badge', {
-      method: 'POST',
+    const url = isEdit ? `/api/badge/${state._editingBadgeId}` : '/api/badge';
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const resp = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -892,12 +898,19 @@ async function submitBadge(photoPublic) {
     const data = await resp.json();
 
     if (data.success) {
-      localStorage.setItem('hd-badge', JSON.stringify({
-        employeeId: data.employeeId,
-        deleteToken: data.deleteToken,
-      }));
+      if (!isEdit) {
+        localStorage.setItem('hd-badge', JSON.stringify({
+          employeeId: data.employeeId,
+          deleteToken: data.deleteToken,
+        }));
+      }
       showBadgeStatusBar(data.employeeId);
-      showSubmitSuccess(data.employeeId);
+      if (isEdit) {
+        state._editingBadgeId = null;
+        showToast('Badge updated successfully.', 'success');
+      } else {
+        showSubmitSuccess(data.employeeId);
+      }
     } else {
       showToast(data.error || 'Submission failed. Please try again.', 'error');
     }
@@ -945,12 +958,14 @@ function showBadgeStatusBar(employeeId) {
   bar.className = 'badge-status-bar';
   bar.innerHTML = `
     <span class="badge-status-id">${esc(employeeId)}</span>
+    <button class="badge-status-edit" id="editBadgeBtn">Edit my badge</button>
     <button class="badge-status-remove" id="removeBadgeBtn">Remove my badge</button>
   `;
 
   const header = document.querySelector('.app-header');
   header.insertAdjacentElement('afterend', bar);
 
+  document.getElementById('editBadgeBtn').addEventListener('click', () => editBadge(employeeId));
   document.getElementById('removeBadgeBtn').addEventListener('click', removeBadge);
 }
 
@@ -974,6 +989,45 @@ async function removeBadge() {
     }
   } catch {
     showToast('Failed to remove badge. Please try again.', 'error');
+  }
+}
+
+async function editBadge(employeeId) {
+  try {
+    const resp = await fetch(`/api/badge/${employeeId}`);
+    const data = await resp.json();
+    if (!data.employeeId) {
+      showToast('Badge not found.', 'error');
+      return;
+    }
+
+    // Pre-populate editor state with existing badge data
+    state.name = data.name;
+    state.department = data.department;
+    state.title = data.title;
+    state.song = data.song;
+    state.accessLevel = data.accessLevel;
+    state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
+    state._editingBadgeId = employeeId;
+
+    // Update the live badge preview
+    updateBadge({
+      name: state.name,
+      department: state.department,
+      title: state.title,
+      song: state.song,
+      accessLevel: state.accessLevel,
+      accessCss: data.accessCss,
+      caption: state.caption,
+    });
+
+    // Scroll to the badge editor
+    const badge = document.getElementById('badge');
+    if (badge) badge.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    showToast('Editing your badge — make changes and submit.', 'success');
+  } catch {
+    showToast('Failed to load badge for editing.', 'error');
   }
 }
 

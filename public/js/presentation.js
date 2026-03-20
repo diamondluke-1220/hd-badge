@@ -113,6 +113,15 @@
       catch (err) { console.error('[Presentation] Bad badge event:', err); }
     });
 
+    pres.sseSource.addEventListener('badge-updated', (e) => {
+      try {
+        const badge = JSON.parse(e.data);
+        if (pres.currentRenderer && pres.currentRenderer.updateBadge) {
+          pres.currentRenderer.updateBadge(badge);
+        }
+      } catch (err) { console.error('[Presentation] Bad badge-updated event:', err); }
+    });
+
     pres.sseSource.onerror = () => {
       pres.sseSource.close();
       console.log(`[Presentation] SSE lost — retrying in ${sseRetryDelay / 1000}s`);

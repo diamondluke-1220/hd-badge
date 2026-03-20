@@ -27,6 +27,18 @@ function connectSSE() {
     }
   });
 
+  // Silent in-place update (no animation — just refresh card data)
+  sseSource.addEventListener('badge-updated', (e) => {
+    try {
+      const badge = JSON.parse(e.data);
+      if (currentRenderer && currentRenderer.updateBadge) {
+        currentRenderer.updateBadge(badge);
+      }
+    } catch (err) {
+      console.error('[SSE] Failed to process badge-updated event:', err);
+    }
+  });
+
   sseSource.onerror = () => {
     sseSource.close();
     console.log(`[SSE] Connection lost — retrying in ${sseRetryDelay / 1000}s`);

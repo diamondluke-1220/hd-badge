@@ -155,6 +155,18 @@ window.DendroRenderer = {
     return this._g.select(`[data-emp-id="${empKey}"]`).node();
   },
 
+  updateBadge(badge) {
+    // Update node data in the tree index and re-render silently
+    const empKey = badge.employeeId;
+    const node = this._nodeIndex[empKey];
+    if (node) {
+      node.name = badge.name;
+      node.department = badge.department;
+      node.title = badge.title;
+      this._renderTree();
+    }
+  },
+
   _flushPendingBadges() {
     clearTimeout(this._debounceTimer);
     this._debounceTimer = null;

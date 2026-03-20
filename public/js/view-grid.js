@@ -123,6 +123,33 @@ window.GridRenderer = {
     return card;
   },
 
+  updateBadge(badge) {
+    const content = document.getElementById('publicBadgeContent');
+    if (!content) return;
+    const card = content.querySelector(`[data-employee-id="${badge.employeeId}"]`);
+    if (!card) return;
+
+    // Update text in place
+    const nameEl = card.querySelector('.badge-grid-name');
+    const titleEl = card.querySelector('.badge-grid-title');
+    if (nameEl) {
+      const namePx = this._gridFontSize(badge.name, 12, 8, [[12, 12], [18, 10], [24, 9]]);
+      nameEl.textContent = badge.name;
+      nameEl.style.fontSize = namePx + 'px';
+    }
+    if (titleEl) {
+      const titlePx = this._gridFontSize(badge.title, 10, 7, [[14, 10], [22, 9], [30, 8]]);
+      titleEl.textContent = badge.title;
+      titleEl.style.fontSize = titlePx + 'px';
+    }
+
+    // Cache-bust headshot
+    const img = card.querySelector('.badge-grid-avatar');
+    if (img) {
+      img.src = `/api/badge/${badge.employeeId}/headshot?t=${Date.now()}`;
+    }
+  },
+
   destroy() {
     // Remove content rendered by init — container itself stays
     if (this._container) {

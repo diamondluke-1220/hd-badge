@@ -1633,6 +1633,14 @@ window.ReviewBoardRenderer = {
     }
   },
 
+  updateBadge(badge) {
+    // Update in-memory data — board picks it up on next rotation
+    const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
+    if (idx >= 0) {
+      Object.assign(this._allBadges[idx], badge);
+    }
+  },
+
   destroy() {
     this._stopRotation();
     this._closePacket();

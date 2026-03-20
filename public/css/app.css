@@ -1008,6 +1008,7 @@ body {
   color: #22C55E;
   letter-spacing: 2px;
 }
+.badge-status-edit,
 .badge-status-remove {
   background: none;
   border: none;
@@ -1017,6 +1018,7 @@ body {
   cursor: pointer;
   text-decoration: underline;
 }
+.badge-status-edit:hover { color: #5B8DEF; }
 .badge-status-remove:hover { color: #DC2626; }
 
 /* ==========================================================

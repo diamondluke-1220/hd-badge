@@ -209,6 +209,12 @@ export function initDb(dbPath: string) {
     listAll: db.prepare('SELECT * FROM badges ORDER BY created_at DESC LIMIT $limit OFFSET $offset'),
     countVisible: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_visible = 1'),
     countByDept: db.prepare('SELECT department, COUNT(*) as count FROM badges WHERE is_visible = 1 GROUP BY department ORDER BY count DESC'),
+    updateBadge: db.prepare(`
+      UPDATE badges SET name = $name, department = $department, title = $title, song = $song,
+        access_level = $access_level, access_css = $access_css, caption = $caption,
+        has_photo = $has_photo, photo_public = $photo_public, is_flagged = $is_flagged
+      WHERE employee_id = $id AND delete_token = $token
+    `),
     softDelete: db.prepare('UPDATE badges SET is_visible = 0 WHERE employee_id = $id AND delete_token = $token'),
     hardDelete: db.prepare('DELETE FROM badges WHERE employee_id = $id'),
     toggleVisibility: db.prepare('UPDATE badges SET is_visible = CASE WHEN is_visible = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
@@ -465,6 +471,28 @@ export function listBadges(options: {
     page,
     pages: Math.ceil(total / limit),
   };
+}
+
+export function updateBadge(employeeId: string, token: string, input: {
+  name: string; department: string; title: string; song: string;
+  accessLevel: string; accessCss: string; caption: string;
+  hasPhoto: boolean; photoPublic: boolean; flagged: boolean;
+}): boolean {
+  const result = stmts.updateBadge.run({
+    $id: employeeId,
+    $token: hashToken(token),
+    $name: input.name,
+    $department: input.department,
+    $title: input.title,
+    $song: input.song,
+    $access_level: input.accessLevel,
+    $access_css: input.accessCss,
+    $caption: input.caption,
+    $has_photo: input.hasPhoto ? 1 : 0,
+    $photo_public: input.photoPublic ? 1 : 0,
+    $is_flagged: input.flagged ? 1 : 0,
+  });
+  return result.changes > 0;
 }
 
 export function softDeleteBadge(employeeId: string, token: string): boolean {

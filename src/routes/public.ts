@@ -6,7 +6,7 @@ import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
-import { createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge } from '../db';
+import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge } from '../db';
 import { checkRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
@@ -35,6 +35,7 @@ interface PublicDeps {
   getClientIp: (c: any) => string;
   markPortalCleared: (ip: string) => void;
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
+  broadcastSSE: (event: string, data: any) => void;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
   renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
   clampField: (val: string, field?: string) => string;
@@ -49,7 +50,7 @@ interface PublicDeps {
 
 export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   const {
-    getClientIp, markPortalCleared, broadcastNewBadge,
+    getClientIp, markPortalCleared, broadcastNewBadge, broadcastSSE,
     decodeBase64Image, renderBadgePlaywright, clampField,
     PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR,
     ADMIN_TOKEN, THUMB_WIDTH, HEADSHOT_WIDTH,
@@ -220,6 +221,156 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       isBandMember: !!badge.is_band_member,
       createdAt: badge.created_at,
     });
+  });
+
+  // ─── Badge Edit ──────────────────────────────────────────
+
+  app.put('/api/badge/:id', async (c) => {
+    const id = c.req.param('id');
+
+    let body: any;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+    }
+
+    const { token, name, department, title, song, accessLevel, accessCss, caption, photo, photoPublic } = body;
+
+    if (!token) {
+      return c.json({ success: false, error: 'Delete token required for edits.' }, 400);
+    }
+    if (!name || !department || !title || !song || !accessLevel || !accessCss) {
+      return c.json({ success: false, error: 'Missing required fields.' }, 400);
+    }
+
+    // Verify badge exists and is visible
+    const existing = getBadge(id);
+    if (!existing || !existing.is_visible) {
+      return c.json({ success: false, error: 'Badge not found.' }, 404);
+    }
+
+    // Block edits to band member badges
+    if (existing.is_band_member) {
+      return c.json({ success: false, error: 'Executive badges cannot be modified.' }, 403);
+    }
+
+    // Same validation as creation
+    const textFields = [name, department, title, song, accessLevel, accessCss, ...(caption ? [caption] : [])];
+    for (const field of textFields) {
+      if (!isNameClean(field)) {
+        return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
+      }
+    }
+
+    const deptUpper = department.trim().toUpperCase();
+    const titleUpper = title.trim().toUpperCase();
+    const accessUpper = accessLevel.trim().toUpperCase();
+    if (RESERVED_DEPTS.has(deptUpper)) {
+      return c.json({ success: false, error: 'That department is reserved for executive staff.' }, 400);
+    }
+    if (RESERVED_TITLES.has(titleUpper)) {
+      return c.json({ success: false, error: 'That title is reserved for executive staff.' }, 400);
+    }
+    if (RESERVED_ACCESS.has(accessUpper)) {
+      return c.json({ success: false, error: 'ALL ACCESS clearance requires executive authorization.' }, 400);
+    }
+
+    try {
+      const hasPhoto = photo !== undefined ? !!photo : !!existing.has_photo;
+      let photoBuffer: Buffer | null = null;
+      if (photo) {
+        photoBuffer = decodeBase64Image(photo);
+        if (photoBuffer) {
+          const isJpeg = photoBuffer[0] === 0xFF && photoBuffer[1] === 0xD8 && photoBuffer[2] === 0xFF;
+          const isPng = photoBuffer[0] === 0x89 && photoBuffer[1] === 0x50 && photoBuffer[2] === 0x4E && photoBuffer[3] === 0x47;
+          if (!isJpeg && !isPng) {
+            return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+          }
+          try {
+            const meta = await sharp(photoBuffer).metadata();
+            if (!meta.width || !meta.height || meta.width > 8000 || meta.height > 8000) {
+              return c.json({ success: false, error: 'Image too large. Max 8000x8000 pixels.' }, 400);
+            }
+          } catch {
+            return c.json({ success: false, error: 'Invalid image file.' }, 400);
+          }
+        }
+      }
+
+      const cleanName = clampField(name.trim().toUpperCase(), 'name');
+      const cleanTitle = clampField(title.trim(), 'title');
+      const cleanDept = clampField(department.trim().toUpperCase(), 'department');
+      const cleanSong = clampField(song.trim().toUpperCase(), 'song');
+      const cleanAccess = clampField(accessLevel.trim().toUpperCase(), 'accessLevel');
+      const cleanCss = clampField(accessCss.trim(), 'accessCss');
+      const cleanCaption = caption ? clampField(caption.trim().toUpperCase(), 'caption') : existing.caption || 'SCAN TO FILE COMPLAINT';
+      const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess, cleanCaption].some(f => shouldFlag(f));
+
+      if (isPresentationActive() && flagged) {
+        return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
+      }
+
+      const success = updateBadge(id, token, {
+        name: cleanName,
+        department: cleanDept,
+        title: cleanTitle,
+        song: cleanSong,
+        accessLevel: cleanAccess,
+        accessCss: cleanCss,
+        caption: cleanCaption,
+        hasPhoto,
+        photoPublic: photoPublic !== false,
+        flagged,
+      });
+
+      if (!success) {
+        return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
+      }
+
+      // Write new photo if provided
+      if (photoBuffer) {
+        await Bun.write(join(PHOTOS_DIR, `${id}.jpg`), photoBuffer);
+      }
+
+      // Re-render badge
+      const badge = getBadge(id);
+      if (badge) {
+        const badgeBuffer = await renderBadgePlaywright(badge);
+        await Bun.write(join(BADGES_DIR, `${id}.png`), badgeBuffer);
+
+        if (hasPhoto && photoPublic === false) {
+          const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
+          await Bun.write(join(BADGES_DIR, `${id}-nophoto.png`), noPhotoBuffer);
+        }
+      }
+
+      // Invalidate cached derivatives
+      try { unlinkSync(join(THUMBS_DIR, `${id}.png`)); } catch { /* ignore */ }
+      try { unlinkSync(join(HEADSHOTS_DIR, `${id}.jpg`)); } catch { /* ignore */ }
+
+      // Broadcast quiet update (no new-badge animation)
+      broadcastSSE('badge-updated', {
+        employeeId: id,
+        name: cleanName,
+        department: cleanDept,
+        title: cleanTitle,
+        accessLevel: cleanAccess,
+        accessCss: cleanCss,
+        isBandMember: false,
+      });
+
+      log('info', 'badge', `Updated ${id}: ${cleanName} → ${cleanDept}`);
+
+      return c.json({
+        success: true,
+        employeeId: id,
+        message: 'Badge updated successfully.',
+      });
+    } catch (err: any) {
+      log('error', 'badge', `Update failed for ${id}: ${err.message}`);
+      return c.json({ success: false, error: 'Badge update failed. Please try again.' }, 500);
+    }
   });
 
   // ─── Badge Image ─────────────────────────────────────────

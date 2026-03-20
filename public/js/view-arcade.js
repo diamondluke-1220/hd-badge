@@ -1002,6 +1002,24 @@ window.ArcadeRenderer = {
   // ─── Destroy ───────────────────────────────────────────────
 
   destroy() {
+  updateBadge(badge) {
+    // Update in-memory badge data
+    const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
+    if (idx >= 0) {
+      Object.assign(this._allBadges[idx], badge);
+    }
+    // Update slot name label
+    const slot = this._container?.querySelector(`[data-employee-id="${badge.employeeId}"]`);
+    if (slot) {
+      const nameEl = slot.querySelector('.arcade-slot-name');
+      if (nameEl) nameEl.textContent = badge.name;
+      // Cache-bust headshot
+      const img = slot.querySelector('img');
+      if (img) img.src = `/api/badge/${badge.employeeId}/headshot?t=${Date.now()}`;
+    }
+  },
+
+  destroy() {
     this._intervals.forEach(id => clearInterval(id));
     this._intervals = [];
 

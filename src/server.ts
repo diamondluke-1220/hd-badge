@@ -525,6 +525,7 @@ const sharedDeps = {
   getClientIp,
   markPortalCleared,
   broadcastNewBadge,
+  broadcastSSE,
   decodeBase64Image,
   renderBadgePlaywright,
   clampField,
