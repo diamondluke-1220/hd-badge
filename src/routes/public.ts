@@ -136,6 +136,27 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
       }
 
+      // Clean up previous badge from same device (hard-delete only if token is valid)
+      if (body.previousBadgeId && body.previousToken) {
+        // softDeleteBadge verifies the hashed token — use it as auth check
+        const tokenValid = softDeleteBadge(body.previousBadgeId, body.previousToken);
+        if (tokenValid) {
+          // Token matched — now fully remove the soft-deleted badge
+          hardDeleteBadge(body.previousBadgeId);
+          const prevFiles = [
+            join(BADGES_DIR, `${body.previousBadgeId}.png`),
+            join(BADGES_DIR, `${body.previousBadgeId}-nophoto.png`),
+            join(PHOTOS_DIR, `${body.previousBadgeId}.jpg`),
+            join(THUMBS_DIR, `${body.previousBadgeId}.png`),
+            join(HEADSHOTS_DIR, `${body.previousBadgeId}.jpg`),
+          ];
+          for (const f of prevFiles) {
+            try { unlinkSync(f); } catch { /* ignore */ }
+          }
+          log('info', 'badge', `Cleaned up previous badge ${body.previousBadgeId} on recreate`);
+        }
+      }
+
       const cleanCss = clampField(accessCss.trim(), 'accessCss');
       const result = createBadge({
         name: cleanName,

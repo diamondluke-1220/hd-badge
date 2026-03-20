@@ -202,9 +202,9 @@ function updateBadge(data) {
     autoShrink(titleEl, 28);
   }
 
-  // Employee ID + Issued date
+  // Employee ID + Issued date (locked IDs are never regenerated)
   const idEl = document.getElementById('idField');
-  if (idEl && !idEl.dataset.set) {
+  if (idEl && !idEl.dataset.set && !idEl.dataset.locked) {
     idEl.textContent = generateEmployeeId();
     idEl.dataset.set = '1';
   }

@@ -884,6 +884,7 @@ async function submitBadge(photoPublic) {
       photo: state.photoUrl || null,
       photoPublic,
       ...(isEdit ? { token: stored.deleteToken } : {}),
+      ...(!isEdit && stored.employeeId ? { previousBadgeId: stored.employeeId, previousToken: stored.deleteToken } : {}),
     };
 
     const url = isEdit ? `/api/badge/${state._editingBadgeId}` : '/api/badge';
@@ -1253,9 +1254,9 @@ function sudoRandomize() {
   state.caption = pick(WAVEFORM_CAPTIONS);
   accessManuallySet = false;
 
-  // Reset employee ID + issued date for fresh badge feel
+  // Reset employee ID + issued date for fresh badge feel (but keep locked IDs)
   const idEl = document.getElementById('idField');
-  if (idEl) { delete idEl.dataset.set; }
+  if (idEl && !idEl.dataset.locked) { delete idEl.dataset.set; }
   const issuedEl = document.getElementById('issuedField');
   if (issuedEl) { delete issuedEl.dataset.set; }
   const captionEl = document.getElementById('badgeCaption');
@@ -1490,8 +1491,20 @@ if (window.location.pathname === '/orgchart') {
     }
   });
 } else {
-  document.getElementById('idField').textContent = generateEmployeeId();
-  document.getElementById('idField').dataset.set = '1';
+  // If user has an existing badge, show their real ID; otherwise generate a preview ID
+  const storedBadge = localStorage.getItem('hd-badge');
+  let existingId = null;
+  if (storedBadge) {
+    try {
+      existingId = JSON.parse(storedBadge).employeeId;
+    } catch { /* ignore corrupt data */ }
+  }
+
+  const idEl = document.getElementById('idField');
+  idEl.textContent = existingId || generateEmployeeId();
+  idEl.dataset.set = '1';
+  if (existingId) idEl.dataset.locked = '1'; // Prevent sudo randomize from changing it
+
   document.getElementById('issuedField').textContent = generateIssuedDate();
   document.getElementById('issuedField').dataset.set = '1';
   applyStatus();
@@ -1500,12 +1513,7 @@ if (window.location.pathname === '/orgchart') {
 
   refreshPreview();
 
-  // Show status bar if already in directory
-  const storedBadge = localStorage.getItem('hd-badge');
-  if (storedBadge) {
-    try {
-      const { employeeId } = JSON.parse(storedBadge);
-      showBadgeStatusBar(employeeId);
-    } catch { /* ignore corrupt data */ }
+  if (existingId) {
+    showBadgeStatusBar(existingId);
   }
 }
