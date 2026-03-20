@@ -297,7 +297,7 @@
   transform: rotate(90deg) translateX(-50%);
   transform-origin: 0 0;
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 52px;
   color: #222222;
   letter-spacing: 4px;
@@ -368,7 +368,7 @@
 }
 .badge .waveform-duration {
   font-family: 'JetBrains Mono', monospace;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 50px;
   color: #222222;
   letter-spacing: 1px;
@@ -440,6 +440,7 @@
   justify-content: center;
   white-space: nowrap;
   font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
   font-size: 36px;
   color: #444444;
   letter-spacing: 1px;
@@ -552,10 +553,11 @@
   right: 0;
   bottom: 0;
   font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
   font-size: 24px;
   line-height: 1.6;
   letter-spacing: 3px;
-  color: rgba(0, 0, 0, 0.13);
+  color: rgba(0, 0, 0, 0.17);
   word-break: break-all;
   overflow: hidden;
 }
