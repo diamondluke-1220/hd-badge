@@ -905,9 +905,19 @@ async function submitBadge(photoPublic) {
           deleteToken: data.deleteToken,
         }));
       }
+
+      // Set the real server-assigned ID on the badge preview
+      const idEl = document.getElementById('idField');
+      if (idEl) {
+        idEl.textContent = data.employeeId;
+        idEl.dataset.set = '1';
+        idEl.dataset.locked = '1';
+      }
+      state._editingBadgeId = data.employeeId;
+      refreshPreview();
+
       showBadgeStatusBar(data.employeeId);
       if (isEdit) {
-        state._editingBadgeId = null;
         showToast('Badge updated successfully.', 'success');
       } else {
         showSubmitSuccess(data.employeeId);
@@ -958,15 +968,14 @@ function showBadgeStatusBar(employeeId) {
   bar.id = 'badgeStatusBar';
   bar.className = 'badge-status-bar';
   bar.innerHTML = `
+    <span class="badge-status-welcome">Welcome back,</span>
     <span class="badge-status-id">${esc(employeeId)}</span>
-    <button class="badge-status-edit" id="editBadgeBtn">Edit my badge</button>
     <button class="badge-status-remove" id="removeBadgeBtn">Remove my badge</button>
   `;
 
   const header = document.querySelector('.app-header');
   header.insertAdjacentElement('afterend', bar);
 
-  document.getElementById('editBadgeBtn').addEventListener('click', () => editBadge(employeeId));
   document.getElementById('removeBadgeBtn').addEventListener('click', removeBadge);
 }
 
@@ -982,53 +991,23 @@ async function removeBadge() {
     const data = await resp.json();
     if (data.success) {
       localStorage.removeItem('hd-badge');
+      state._editingBadgeId = null;
       const bar = document.getElementById('badgeStatusBar');
       if (bar) bar.remove();
+      // Reset ID to placeholder for new badge creation
+      const idEl = document.getElementById('idField');
+      if (idEl) {
+        idEl.textContent = 'HD-?????';
+        idEl.dataset.set = '1';
+        idEl.dataset.locked = '1';
+      }
+      refreshPreview();
       showToast('Your badge has been shredded.', 'success');
     } else {
       showToast(data.error || 'Failed to remove badge.', 'error');
     }
   } catch {
     showToast('Failed to remove badge. Please try again.', 'error');
-  }
-}
-
-async function editBadge(employeeId) {
-  try {
-    const resp = await fetch(`/api/badge/${employeeId}`);
-    const data = await resp.json();
-    if (!data.employeeId) {
-      showToast('Badge not found.', 'error');
-      return;
-    }
-
-    // Pre-populate editor state with existing badge data
-    state.name = data.name;
-    state.department = data.department;
-    state.title = data.title;
-    state.song = data.song;
-    state.accessLevel = data.accessLevel;
-    state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
-    state._editingBadgeId = employeeId;
-
-    // Update the live badge preview
-    updateBadge({
-      name: state.name,
-      department: state.department,
-      title: state.title,
-      song: state.song,
-      accessLevel: state.accessLevel,
-      accessCss: data.accessCss,
-      caption: state.caption,
-    });
-
-    // Scroll to the badge editor
-    const badge = document.getElementById('badge');
-    if (badge) badge.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-    showToast('Editing your badge — make changes and submit.', 'success');
-  } catch {
-    showToast('Failed to load badge for editing.', 'error');
   }
 }
 
@@ -1491,7 +1470,6 @@ if (window.location.pathname === '/orgchart') {
     }
   });
 } else {
-  // If user has an existing badge, show their real ID; otherwise generate a preview ID
   const storedBadge = localStorage.getItem('hd-badge');
   let existingId = null;
   if (storedBadge) {
@@ -1501,9 +1479,48 @@ if (window.location.pathname === '/orgchart') {
   }
 
   const idEl = document.getElementById('idField');
-  idEl.textContent = existingId || generateEmployeeId();
-  idEl.dataset.set = '1';
-  if (existingId) idEl.dataset.locked = '1'; // Prevent sudo randomize from changing it
+
+  if (existingId) {
+    // Existing badge: lock the ID, auto-load badge data into editor
+    idEl.textContent = existingId;
+    idEl.dataset.set = '1';
+    idEl.dataset.locked = '1';
+    showBadgeStatusBar(existingId);
+
+    // Auto-load their badge data into the editor
+    fetch(`/api/badge/${existingId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.employeeId) {
+          state.name = data.name;
+          state.department = data.department;
+          state.title = data.title;
+          state.song = data.song;
+          state.accessLevel = data.accessLevel;
+          state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
+          state._editingBadgeId = existingId;
+
+          // Set issued date from their creation date
+          const d = new Date(data.createdAt);
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const yy = String(d.getFullYear()).slice(2);
+          const issuedEl = document.getElementById('issuedField');
+          if (issuedEl) {
+            issuedEl.textContent = `ISSUED ${mm}.${dd}.${yy}`;
+            issuedEl.dataset.set = '1';
+          }
+
+          refreshPreview();
+        }
+      })
+      .catch(() => { /* badge may have been deleted — ignore */ });
+  } else {
+    // New user: show placeholder ID until submission
+    idEl.textContent = 'HD-?????';
+    idEl.dataset.set = '1';
+    idEl.dataset.locked = '1'; // Prevent randomization — server assigns real ID
+  }
 
   document.getElementById('issuedField').textContent = generateIssuedDate();
   document.getElementById('issuedField').dataset.set = '1';
@@ -1512,8 +1529,4 @@ if (window.location.pathname === '/orgchart') {
   document.getElementById('badgeCaption').dataset.set = '1';
 
   refreshPreview();
-
-  if (existingId) {
-    showBadgeStatusBar(existingId);
-  }
 }
