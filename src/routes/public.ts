@@ -240,6 +240,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       hasPhoto: !!badge.has_photo,
       photoPublic: !!badge.photo_public,
       isBandMember: !!badge.is_band_member,
+      caption: badge.caption || 'SCAN TO FILE COMPLAINT',
       createdAt: badge.created_at,
     });
   });
