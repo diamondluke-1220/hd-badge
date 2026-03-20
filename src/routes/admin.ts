@@ -165,6 +165,20 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
       setHasPhoto(id, true);
 
+      // Re-render badge with new photo
+      const updatedBadge = getBadge(id);
+      if (updatedBadge) {
+        const badgeBuffer = await renderBadgePlaywright(updatedBadge);
+        await Bun.write(join(BADGES_DIR, `${id}.png`), badgeBuffer);
+
+        // Render nophoto variant if photo is private
+        if (!updatedBadge.photo_public) {
+          const noPhotoBuffer = await renderBadgePlaywright(updatedBadge, { withPhoto: false });
+          await Bun.write(join(BADGES_DIR, `${id}-nophoto.png`), noPhotoBuffer);
+        }
+      }
+
+      // Invalidate cached derivatives
       const thumbPath = join(THUMBS_DIR, `${id}.png`);
       if (existsSync(thumbPath)) {
         unlinkSync(thumbPath);
@@ -174,8 +188,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
         unlinkSync(headshotPath);
       }
 
-      log('info', 'admin', `Photo uploaded for ${id} (${badge.name})`);
-      return c.json({ success: true, message: `Photo uploaded for ${badge.name}.` });
+      log('info', 'admin', `Photo uploaded and badge re-rendered for ${id} (${badge.name})`);
+      return c.json({ success: true, message: `Photo uploaded and badge re-rendered for ${badge.name}.` });
     } catch (err: any) {
       log('error', 'admin', `Photo upload failed for ${id}: ${err.message}`);
       return c.json({ success: false, error: 'Photo upload failed.' }, 500);

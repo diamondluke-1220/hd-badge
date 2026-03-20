@@ -6,9 +6,9 @@ import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
-import { initDb, closeDb } from './db';
+import { initDb, closeDb, listAllBadgeIds } from './db';
 import { log } from './logger';
 import { initDemo } from './demo';
 import { initPresentation } from './presentation';
@@ -20,11 +20,15 @@ import { registerAdminRoutes } from './routes/admin';
 
 let _browser: import('playwright').Browser | null = null;
 let _browserLaunching: Promise<import('playwright').Browser> | null = null;
+let _warmPage: import('playwright').Page | null = null;
+let _warmPageReady = false;
 
 async function getBrowser() {
   if (_browser?.isConnected()) return _browser;
   if (_browserLaunching) return _browserLaunching;
   _browser = null;
+  _warmPage = null;
+  _warmPageReady = false;
   _browserLaunching = (async () => {
     const { chromium } = await import('playwright');
     const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
@@ -35,7 +39,41 @@ async function getBrowser() {
   return _browserLaunching;
 }
 
+/** Get a warm page with the badge template already loaded */
+async function getWarmPage(): Promise<import('playwright').Page> {
+  const serverPort = Number(process.env.PORT) || 3000;
+
+  if (_warmPage && !_warmPage.isClosed()) {
+    return _warmPage;
+  }
+
+  const browser = await getBrowser();
+  _warmPage = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
+  await _warmPage.goto(`http://localhost:${serverPort}/`, { waitUntil: 'domcontentloaded' });
+  await _warmPage.waitForSelector('#badge', { timeout: 5000 });
+
+  // Hide all page UI so only the badge element is captured
+  await _warmPage.evaluate(() => {
+    document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
+      (el as HTMLElement).style.display = 'none';
+    });
+    const capture = document.getElementById('badgeCapture');
+    if (capture) {
+      capture.style.position = 'static';
+      capture.style.left = '0';
+    }
+  });
+
+  _warmPageReady = true;
+  return _warmPage;
+}
+
 async function closeBrowser() {
+  if (_warmPage && !_warmPage.isClosed()) {
+    await _warmPage.close().catch(() => {});
+    _warmPage = null;
+    _warmPageReady = false;
+  }
   if (_browser) {
     await _browser.close().catch(() => {});
     _browser = null;
@@ -62,6 +100,31 @@ mkdirSync(HEADSHOTS_DIR, { recursive: true });
 // Initialize database
 initDb(join(DATA_DIR, 'badges.db'));
 
+// Sweep orphaned files on startup (badges deleted but files left behind)
+{
+  const knownIds = listAllBadgeIds();
+  const dirs = [
+    { path: BADGES_DIR, ext: '.png' },
+    { path: PHOTOS_DIR, ext: '.jpg' },
+    { path: THUMBS_DIR, ext: '.png' },
+    { path: HEADSHOTS_DIR, ext: '.jpg' },
+  ];
+  let orphanCount = 0;
+  for (const { path: dir, ext } of dirs) {
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith(ext)) continue;
+      // Extract ID: "HD-12345.png" or "HD-12345-nophoto.png" → "HD-12345"
+      const id = file.replace(/-nophoto/, '').replace(ext, '');
+      if (!knownIds.has(id)) {
+        try { unlinkSync(join(dir, file)); orphanCount++; } catch { /* ignore */ }
+      }
+    }
+  }
+  if (orphanCount > 0) {
+    console.log(`🧹 Cleaned ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''} from data directories`);
+  }
+}
+
 // Initialize demo engine (broadcast function set after SSE setup below)
 let _broadcastFn: typeof broadcastNewBadge;
 
@@ -73,7 +136,7 @@ const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_FIELD_LENGTH = 200;
 const FIELD_LIMITS: Record<string, number> = {
   name: 18,
-  department: 28,
+  department: 31,
   title: 30,
   song: 25,
   accessLevel: 28,
@@ -217,132 +280,118 @@ function markPortalCleared(ip: string): void {
 
 // ─── Playwright Badge Render ─────────────────────────────
 
+// Cache placeholder photo as data URL at startup (never changes)
+let _placeholderDataUrl: string | null = null;
+{
+  const placeholderPath = join('public', 'placeholder-photo.png');
+  if (existsSync(placeholderPath)) {
+    const buf = readFileSync(placeholderPath);
+    _placeholderDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+  }
+}
+
 /** Server-side badge render via Playwright + Sharp corner clipping */
 async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean }): Promise<Buffer> {
-  const serverPort = Number(process.env.PORT) || 3000;
-  const browser = await getBrowser();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
-  try {
-    await page.goto(`http://localhost:${serverPort}/`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#badge', { timeout: 5000 });
+  const page = await getWarmPage();
 
-    const id = badge.employee_id;
-    const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
-    const includePhoto = (options?.withPhoto !== false) && badge.has_photo && existsSync(photoPath);
-    let photoDataUrl: string | null = null;
-    if (includePhoto) {
-      const photoBuffer = await Bun.file(photoPath).arrayBuffer();
-      photoDataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuffer).toString('base64')}`;
-    } else {
-      const placeholderPath = join('public', 'placeholder-photo.png');
-      if (existsSync(placeholderPath)) {
-        const placeholderBuffer = await Bun.file(placeholderPath).arrayBuffer();
-        photoDataUrl = `data:image/png;base64,${Buffer.from(placeholderBuffer).toString('base64')}`;
-      }
+  const id = badge.employee_id;
+  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
+  const includePhoto = (options?.withPhoto !== false) && badge.has_photo && existsSync(photoPath);
+  let photoDataUrl: string | null = null;
+  if (includePhoto) {
+    const photoBuffer = await Bun.file(photoPath).arrayBuffer();
+    photoDataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuffer).toString('base64')}`;
+  } else {
+    photoDataUrl = _placeholderDataUrl;
+  }
+
+  await page.evaluate(({ badge, photoDataUrl, isPrint }) => {
+    const previewArea = document.getElementById('badgePreviewArea');
+    if (previewArea) previewArea.innerHTML = '';
+
+    const idEl = document.getElementById('idField');
+    if (idEl) { idEl.textContent = badge.employee_id; idEl.dataset.set = '1'; }
+    const issuedEl = document.getElementById('issuedField');
+    if (issuedEl) {
+      const d = new Date(badge.created_at);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const yy = String(d.getFullYear()).slice(2);
+      issuedEl.textContent = `ISSUED ${mm}.${dd}.${yy}`;
+      issuedEl.dataset.set = '1';
     }
 
-    await page.evaluate(({ badge, photoDataUrl }) => {
-      const previewArea = document.getElementById('badgePreviewArea');
-      if (previewArea) previewArea.innerHTML = '';
-
-      const idEl = document.getElementById('idField');
-      if (idEl) { idEl.textContent = badge.employee_id; idEl.dataset.set = '1'; }
-      const issuedEl = document.getElementById('issuedField');
-      if (issuedEl) {
-        const d = new Date(badge.created_at);
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(2);
-        issuedEl.textContent = `ISSUED ${mm}.${dd}.${yy}`;
-        issuedEl.dataset.set = '1';
-      }
-
-      const frame = document.querySelector('#badge .photo-frame') as HTMLElement;
-      if (frame) {
-        const staleImg = frame.querySelector('img');
-        if (staleImg) staleImg.remove();
-        frame.classList.remove('has-photo');
-        const placeholder = frame.querySelector('.photo-placeholder-text') as HTMLElement;
-        if (placeholder) placeholder.style.display = '';
-      }
-
-      (window as any).updateBadge({
-        name: badge.name,
-        department: badge.department,
-        title: badge.title,
-        song: badge.song,
-        accessLevel: badge.access_level,
-        accessCss: badge.access_css,
-        photoUrl: photoDataUrl,
-        waveStyle: 'barcode',
-        caption: 'SCAN TO FILE COMPLAINT',
-      });
-    }, { badge, photoDataUrl });
-
-    if (includePhoto) {
-      await page.waitForFunction(() => {
-        const img = document.querySelector('.photo-frame img') as HTMLImageElement;
-        return img && img.complete && img.naturalWidth > 0;
-      }, { timeout: 5000 }).catch(() => {
-        // Photo may not have loaded — continue with placeholder
-      });
+    const frame = document.querySelector('#badge .photo-frame') as HTMLElement;
+    if (frame) {
+      const staleImg = frame.querySelector('img');
+      if (staleImg) staleImg.remove();
+      frame.classList.remove('has-photo');
+      const placeholder = frame.querySelector('.photo-placeholder-text') as HTMLElement;
+      if (placeholder) placeholder.style.display = '';
     }
 
-    // Print mode: white background, no rounded corners, boosted contrast
-    if (options?.print) {
-      await page.evaluate(() => {
-        const el = document.getElementById('badge');
-        if (el) {
-          el.style.borderRadius = '0';
-          el.style.boxShadow = 'none';
-        }
-        document.body.style.background = 'white';
+    // Reset print-mode overrides from previous render
+    const el = document.getElementById('badge');
+    if (el) {
+      el.style.borderRadius = '';
+      el.style.boxShadow = '';
+    }
+    document.body.style.background = '';
 
-        // Print-only overrides removed — CSS values now calibrated for dye-sub
-      });
+    if (isPrint && el) {
+      el.style.borderRadius = '0';
+      el.style.boxShadow = 'none';
+      document.body.style.background = 'white';
     }
 
-    // Hide all page UI so only the badge element is captured
-    await page.evaluate(() => {
-      document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
-        (el as HTMLElement).style.display = 'none';
-      });
-      const capture = document.getElementById('badgeCapture');
-      if (capture) {
-        capture.style.position = 'static';
-        capture.style.left = '0';
-      }
+    (window as any).updateBadge({
+      name: badge.name,
+      department: badge.department,
+      title: badge.title,
+      song: badge.song,
+      accessLevel: badge.access_level,
+      accessCss: badge.access_css,
+      photoUrl: photoDataUrl,
+      waveStyle: 'barcode',
+      caption: 'SCAN TO FILE COMPLAINT',
     });
+  }, { badge, photoDataUrl, isPrint: !!options?.print });
 
-    const badgeEl = await page.$('#badge');
-    if (!badgeEl) throw new Error('Badge element not found');
+  if (includePhoto) {
+    await page.waitForFunction(() => {
+      const img = document.querySelector('.photo-frame img') as HTMLImageElement;
+      return img && img.complete && img.naturalWidth > 0;
+    }, { timeout: 5000 }).catch(() => {
+      // Photo may not have loaded — continue with placeholder
+    });
+  }
 
-    const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !options?.print });
+  const badgeEl = await page.$('#badge');
+  if (!badgeEl) throw new Error('Badge element not found');
 
-    if (options?.print) {
-      // Set DPI metadata so the image maps correctly to CR80 card size
-      return await sharp(Buffer.from(pngBuf))
-        .withMetadata({ density: 600 })
-        .png()
-        .toBuffer();
-    }
+  const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !options?.print });
 
-    // Round corners with SVG mask
-    const meta = await sharp(Buffer.from(pngBuf)).metadata();
-    const W = meta.width || 700;
-    const H = meta.height || 1100;
-    const R = Math.round(W * 0.04);
-    const rgbaBuf = await sharp(Buffer.from(pngBuf)).ensureAlpha().raw().toBuffer();
-    const roundedMask = Buffer.from(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
-    );
-    return await sharp(rgbaBuf, { raw: { width: W, height: H, channels: 4 } })
-      .composite([{ input: roundedMask, blend: 'dest-in' }])
+  if (options?.print) {
+    // Set DPI metadata so the image maps correctly to CR80 card size
+    return await sharp(Buffer.from(pngBuf))
+      .withMetadata({ density: 600 })
       .png()
       .toBuffer();
-  } finally {
-    await page.close();
   }
+
+  // Round corners with SVG mask (single pipeline)
+  const meta = await sharp(Buffer.from(pngBuf)).metadata();
+  const W = meta.width || 700;
+  const H = meta.height || 1100;
+  const R = Math.round(W * 0.04);
+  const roundedMask = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
+  );
+  return await sharp(Buffer.from(pngBuf))
+    .ensureAlpha()
+    .composite([{ input: roundedMask, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
 }
 
 // ─── SSE (Server-Sent Events) for Live Org Chart ─────────

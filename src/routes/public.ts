@@ -157,6 +157,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         hardDeleteBadge(result.employeeId);
         try { unlinkSync(join(PHOTOS_DIR, `${result.employeeId}.jpg`)); } catch { /* ignore */ }
         try { unlinkSync(join(BADGES_DIR, `${result.employeeId}.png`)); } catch { /* ignore */ }
+        try { unlinkSync(join(BADGES_DIR, `${result.employeeId}-nophoto.png`)); } catch { /* ignore */ }
         throw renderErr;
       }
 
@@ -360,6 +361,18 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const success = softDeleteBadge(id, token);
     if (!success) {
       return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
+    }
+
+    // Clean up all associated files — user asked for deletion
+    const files = [
+      join(BADGES_DIR, `${id}.png`),
+      join(BADGES_DIR, `${id}-nophoto.png`),
+      join(PHOTOS_DIR, `${id}.jpg`),
+      join(THUMBS_DIR, `${id}.png`),
+      join(HEADSHOTS_DIR, `${id}.jpg`),
+    ];
+    for (const f of files) {
+      try { unlinkSync(f); } catch { /* ignore — file may not exist */ }
     }
 
     return c.json({ success: true, message: 'Your badge has been shredded.' });

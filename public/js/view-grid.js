@@ -300,11 +300,21 @@ window.GridRenderer = {
     return section;
   },
 
+  _gridFontSize(text, basePx, minPx, thresholds) {
+    const len = (text || '').length;
+    for (const [maxLen, size] of thresholds) {
+      if (len <= maxLen) return size;
+    }
+    return minPx;
+  },
+
   _createBadgeCard(badge) {
     const card = document.createElement('div');
     card.className = 'badge-grid-card compact' + (badge.isBandMember ? ' band-member' : '');
     card.setAttribute('data-employee-id', badge.employeeId);
     const initials = (badge.name || '?').charAt(0).toUpperCase();
+    const namePx = this._gridFontSize(badge.name, 12, 8, [[12, 12], [18, 10], [24, 9]]);
+    const titlePx = this._gridFontSize(badge.title, 10, 7, [[14, 10], [22, 9], [30, 8]]);
     card.innerHTML = `
       <div class="badge-grid-photo">
         <img class="badge-grid-avatar" src="/api/badge/${esc(badge.employeeId)}/headshot" alt="${esc(badge.name)}" loading="lazy"
@@ -312,8 +322,8 @@ window.GridRenderer = {
         <div class="badge-grid-fallback" style="display:none">${esc(initials)}</div>
       </div>
       <div class="badge-grid-info">
-        <div class="badge-grid-name">${esc(badge.name)}</div>
-        <div class="badge-grid-title">${esc(badge.title)}</div>
+        <div class="badge-grid-name" style="font-size:${namePx}px">${esc(badge.name)}</div>
+        <div class="badge-grid-title" style="font-size:${titlePx}px">${esc(badge.title)}</div>
       </div>
     `;
     card.addEventListener('click', () => showBadgeDetail(badge.employeeId, badge.name));

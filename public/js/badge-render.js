@@ -185,7 +185,7 @@ function updateBadge(data) {
   const nameEl = document.getElementById('nameField');
   if (nameEl) {
     nameEl.textContent = (name || 'YOUR NAME').toUpperCase();
-    autoShrink(nameEl, 42);
+    autoShrink(nameEl, 32);
   }
 
   // Department

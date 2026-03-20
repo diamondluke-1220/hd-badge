@@ -304,9 +304,9 @@ function buildDeptPopover() {
       <div class="card-grid">${cards}</div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popDeptCustom"
-          placeholder="or type your own" maxlength="28" autocomplete="off"
+          placeholder="or type your own" maxlength="31" autocomplete="off"
           value="${esc(customVal)}">
-        <span class="char-count" id="popDeptCount">${customVal.length}/28</span>
+        <span class="char-count" id="popDeptCount">${customVal.length}/31</span>
       </div>
     </div>`;
 }
@@ -457,10 +457,10 @@ function attachPopoverEvents(fieldName, popover) {
       const input = popover.querySelector('#popDeptCustom');
       const counter = popover.querySelector('#popDeptCount');
       input.addEventListener('input', () => {
-        const val = input.value.slice(0, 28);
+        const val = input.value.slice(0, 31);
         input.value = val;
-        counter.textContent = `${val.length}/28`;
-        counter.className = 'char-count' + (val.length >= 28 ? ' full' : val.length >= 24 ? ' warn' : '');
+        counter.textContent = `${val.length}/31`;
+        counter.className = 'char-count' + (val.length >= 31 ? ' full' : val.length >= 27 ? ' warn' : '');
         if (val.trim()) {
           state.department = val.trim().toUpperCase();
           if (!accessManuallySet) state.accessLevel = 'FAST TRACK PROMOTED';

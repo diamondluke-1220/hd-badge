@@ -632,6 +632,12 @@ export function deleteDemoBadges(): number {
   return result.changes;
 }
 
+/** Get all badge employee IDs (for orphan file detection) */
+export function listAllBadgeIds(): Set<string> {
+  const rows = db.prepare('SELECT employee_id FROM badges').all() as { employee_id: string }[];
+  return new Set(rows.map(r => r.employee_id));
+}
+
 export function closeDb() {
   if (db) db.close();
 }
