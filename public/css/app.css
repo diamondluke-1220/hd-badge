@@ -171,7 +171,7 @@ body {
 #badgePreviewArea.discover-pulse .title          { animation: discoverPulse 1.2s ease-out 1.5s both; }
 #badgePreviewArea.discover-pulse .access-badge   { animation: discoverPulse 1.2s ease-out 1.8s both; }
 #badgePreviewArea.discover-pulse .waveform-sticker { animation: discoverPulse 1.2s ease-out 2.1s both; }
-#badgePreviewArea.discover-pulse .waveform-caption { animation: discoverPulse 1.2s ease-out 2.4s both; }
+#badgePreviewArea.discover-pulse .badge-caption { animation: discoverPulse 1.2s ease-out 2.4s both; }
 
 /* ==========================================================
    5b. BADGE PREVIEW HOVER STATES
@@ -204,13 +204,13 @@ body {
   outline-color: rgba(91,141,239,0.5);
   outline-offset: 20px;
 }
-#badgePreviewArea .waveform-caption {
+#badgePreviewArea .badge-caption {
   cursor: pointer;
   outline: 8px solid transparent;
   outline-offset: 14px;
   transition: outline 0.15s ease;
 }
-#badgePreviewArea .waveform-caption:hover {
+#badgePreviewArea .badge-caption:hover {
   outline-color: rgba(91,141,239,0.5);
 }
 #badgePreviewArea .waveform-sticker:hover {

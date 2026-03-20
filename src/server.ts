@@ -273,7 +273,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       await page.waitForTimeout(300);
     }
 
-    // Print mode: white background, no rounded corners
+    // Print mode: white background, no rounded corners, boosted contrast
     if (options?.print) {
       await page.evaluate(() => {
         const el = document.getElementById('badge');
@@ -282,6 +282,13 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
           el.style.boxShadow = 'none';
         }
         document.body.style.background = 'white';
+
+        // Print-only: slightly boost binary texture for dye-sub
+        const style = document.createElement('style');
+        style.textContent = `
+          .badge .texture-overlay::before { color: rgba(10, 31, 63, 0.15) !important; }
+        `;
+        document.head.appendChild(style);
       });
     }
 
@@ -303,7 +310,11 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
     const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !options?.print });
 
     if (options?.print) {
-      return Buffer.from(pngBuf);
+      // Set DPI metadata so the image maps correctly to CR80 card size
+      return await sharp(Buffer.from(pngBuf))
+        .withMetadata({ density: 600 })
+        .png()
+        .toBuffer();
     }
 
     // Round corners with SVG mask

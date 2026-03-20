@@ -85,7 +85,7 @@ const CLICK_MAP = [
   { selector: '.name',             field: 'name' },
   { selector: '.department',       field: 'department' },
   { selector: '.title',            field: 'title' },
-  { selector: '.waveform-caption', field: 'caption' },
+  { selector: '.badge-caption', field: 'caption' },
   { selector: '.waveform-sticker', field: 'song' },
 ];
 
@@ -263,7 +263,7 @@ function buildNamePopover() {
     <div class="popover-body">
       <div class="popover-input-row">
         <input type="text" class="popover-input" id="popName"
-          placeholder="First name" maxlength="16" autocomplete="off"
+          placeholder="First name" maxlength="18" autocomplete="off"
           value="${esc(val)}">
         <span class="char-count" id="popNameCount">${val.length}/16</span>
       </div>
@@ -404,7 +404,7 @@ function buildCaptionPopover() {
       <div class="card-grid">${cards}</div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popCaptionCustom"
-          placeholder="or type your own" maxlength="40" autocomplete="off"
+          placeholder="or type your own" maxlength="25" autocomplete="off"
           value="${esc(customVal)}">
         <span class="char-count" id="popCaptionCount">${customVal.length}/40</span>
       </div>
@@ -1203,7 +1203,7 @@ function sudoRandomize() {
   if (idEl) { delete idEl.dataset.set; }
   const issuedEl = document.getElementById('issuedField');
   if (issuedEl) { delete issuedEl.dataset.set; }
-  const captionEl = document.getElementById('waveformCaption');
+  const captionEl = document.getElementById('badgeCaption');
   if (captionEl) { delete captionEl.dataset.set; }
 
   refreshPreview();
@@ -1429,8 +1429,8 @@ if (window.location.pathname === '/orgchart') {
   document.getElementById('issuedField').textContent = generateIssuedDate();
   document.getElementById('issuedField').dataset.set = '1';
   applyStatus();
-  document.getElementById('waveformCaption').textContent = state.caption;
-  document.getElementById('waveformCaption').dataset.set = '1';
+  document.getElementById('badgeCaption').textContent = state.caption;
+  document.getElementById('badgeCaption').dataset.set = '1';
 
   refreshPreview();
 

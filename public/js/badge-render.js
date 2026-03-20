@@ -23,6 +23,7 @@ const DEPT_ACCESS = {
 // All access level options — label + CSS class
 // Note: ALL ACCESS is reserved for band members only (enforced server-side too)
 const ACCESS_LEVELS = [
+  { label: 'ALL ACCESS',                css: 'all-access' },
   { label: 'PAPER JAM CLEARANCE',       css: 'paper-jam' },
   { label: 'RESET AUTHORIZED',          css: 'reset' },
   { label: 'BSOD CERTIFIED',            css: 'bsod' },
@@ -225,7 +226,7 @@ function updateBadge(data) {
   // Waveform
   if (song) {
     renderWaveform(song, waveStyle);
-    const captionEl = document.getElementById('waveformCaption');
+    const captionEl = document.getElementById('badgeCaption');
     if (captionEl && data.caption) {
       captionEl.textContent = data.caption;
     } else if (captionEl && !captionEl.dataset.set) {

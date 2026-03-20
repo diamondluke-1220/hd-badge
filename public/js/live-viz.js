@@ -157,6 +157,28 @@ function setAnimationsEnabled(enabled) {
     btn.classList.toggle('anim-on', enabled);
     btn.title = enabled ? 'Animations On (A)' : 'Animations Off (A)';
   }
+
+  // When disabling, kill all in-flight animations immediately
+  if (!enabled) {
+    // Abort arcade renderer's pending timeout/interval chains
+    const ar = window.ArcadeRenderer;
+    if (ar) {
+      (ar._timeouts || []).forEach(id => clearTimeout(id));
+      (ar._intervals || []).forEach(id => clearInterval(id));
+      ar._timeouts = [];
+      ar._intervals = [];
+      ar._isVSActive = false;
+      ar._locked = false;
+      // Remove VS overlay if mid-fight
+      const overlay = document.querySelector('.arcade-vs-overlay');
+      if (overlay) overlay.remove();
+    }
+    // Strip inline animation styles so .fx-off CSS rules take effect
+    document.querySelectorAll('[style*="animation"]').forEach(el => {
+      el.style.animation = '';
+      el.style.animationDelay = '';
+    });
+  }
 }
 
 function toggleAnimations() {
