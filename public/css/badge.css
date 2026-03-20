@@ -236,6 +236,7 @@
   flex: 1;
   background: rgba(255, 255, 255, 0.92);
   padding: 28px 36px;
+  margin-top: 20px;
   border-radius: 8px;
   position: relative;
   z-index: 1;
@@ -261,6 +262,7 @@
   font-size: 62px;
   color: #556677;
   text-align: center;
+  margin-top: 8px;
   margin-bottom: 16px;
   line-height: 1.2;
   max-width: 100%;
@@ -328,7 +330,7 @@
   align-items: center;
   gap: 12px;
   margin-top: auto;
-  margin-bottom: 240px;
+  margin-bottom: 190px;
   width: calc(100% + 120px);
   margin-left: -60px;
   margin-right: -60px;
