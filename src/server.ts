@@ -223,7 +223,8 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
   const browser = await getBrowser();
   const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
   try {
-    await page.goto(`http://localhost:${serverPort}/`, { waitUntil: 'networkidle' });
+    await page.goto(`http://localhost:${serverPort}/`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#badge', { timeout: 5000 });
 
     const id = badge.employee_id;
     const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
@@ -279,7 +280,12 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
     }, { badge, photoDataUrl });
 
     if (includePhoto) {
-      await page.waitForTimeout(300);
+      await page.waitForFunction(() => {
+        const img = document.querySelector('.photo-frame img') as HTMLImageElement;
+        return img && img.complete && img.naturalWidth > 0;
+      }, { timeout: 5000 }).catch(() => {
+        // Photo may not have loaded — continue with placeholder
+      });
     }
 
     // Print mode: white background, no rounded corners, boosted contrast

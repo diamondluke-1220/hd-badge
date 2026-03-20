@@ -582,6 +582,34 @@ export function getAnalytics(): {
   })();
 }
 
+/** Serialize a BadgeRow to a JSON-friendly object for API responses */
+export function serializeBadge(b: BadgeRow, opts?: { admin?: boolean }) {
+  const base = {
+    employeeId: b.employee_id,
+    name: b.name,
+    department: b.department,
+    title: b.title,
+    song: b.song,
+    accessLevel: b.access_level,
+    accessCss: b.access_css,
+    hasPhoto: !!b.has_photo,
+    photoPublic: !!b.photo_public,
+    isBandMember: !!b.is_band_member,
+    createdAt: b.created_at,
+  };
+  if (!opts?.admin) return base;
+  return {
+    ...base,
+    isVisible: !!b.is_visible,
+    isPaid: !!b.is_paid,
+    paidAt: b.paid_at,
+    isPrinted: !!b.is_printed,
+    printedAt: b.printed_at,
+    isFlagged: !!b.is_flagged,
+    source: b.source,
+  };
+}
+
 /** Export all badges as an array (for CSV backup) */
 export function exportAllBadges(): BadgeRow[] {
   return db.prepare('SELECT * FROM badges ORDER BY id ASC').all() as BadgeRow[];

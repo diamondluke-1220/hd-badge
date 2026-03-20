@@ -5,7 +5,7 @@ import type { Hono } from 'hono';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
-import { createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats } from '../db';
+import { createBadge, getBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge } from '../db';
 import { checkRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
@@ -36,7 +36,7 @@ interface PublicDeps {
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
   renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
-  clampField: (val: string) => string;
+  clampField: (val: string, field?: string) => string;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
   THUMBS_DIR: string;
@@ -77,8 +77,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
     }
 
-    if (!isNameClean(name)) {
-      return c.json({ success: false, error: 'HR has flagged your name for review.' }, 400);
+    // Check all user-supplied text fields for hate speech
+    const textFields = [name, department, title, song, accessLevel];
+    for (const field of textFields) {
+      if (!isNameClean(field)) {
+        return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
+      }
     }
 
     // Block band-exclusive departments, titles, and access levels
@@ -111,19 +115,23 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
       const cleanName = clampField(name.trim().toUpperCase(), 'name');
       const cleanTitle = clampField(title.trim(), 'title');
-      const flagged = shouldFlag(cleanName) || shouldFlag(cleanTitle);
+      const cleanDept = clampField(department.trim().toUpperCase(), 'department');
+      const cleanSong = clampField(song.trim().toUpperCase(), 'song');
+      const cleanAccess = clampField(accessLevel.trim().toUpperCase(), 'accessLevel');
+      const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess].some(f => shouldFlag(f));
 
       if (isPresentationActive() && flagged) {
         return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
       }
 
+      const cleanCss = clampField(accessCss.trim(), 'accessCss');
       const result = createBadge({
         name: cleanName,
-        department: clampField(department.trim().toUpperCase(), 'department'),
+        department: cleanDept,
         title: cleanTitle,
-        song: clampField(song.trim().toUpperCase(), 'song'),
-        accessLevel: clampField(accessLevel.trim().toUpperCase(), 'accessLevel'),
-        accessCss: clampField(accessCss.trim(), 'accessCss'),
+        song: cleanSong,
+        accessLevel: cleanAccess,
+        accessCss: cleanCss,
         hasPhoto,
         photoPublic: photoPublic !== false,
         source: body.source || 'web',
@@ -157,14 +165,14 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       broadcastNewBadge({
         employeeId: result.employeeId,
         name: cleanName,
-        department: clampField(department.trim().toUpperCase(), 'department'),
+        department: cleanDept,
         title: cleanTitle,
-        accessLevel: clampField(accessLevel.trim().toUpperCase(), 'accessLevel'),
-        accessCss: clampField(accessCss.trim(), 'accessCss'),
+        accessLevel: cleanAccess,
+        accessCss: cleanCss,
         isBandMember: false,
       });
 
-      log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${clampField(department.trim().toUpperCase(), 'department')}`);
+      log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${cleanDept}`);
 
       return c.json({
         success: true,
@@ -369,19 +377,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const result = listBadges({ department, division, page, limit, recentFirst });
 
     return c.json({
-      badges: result.badges.map(b => ({
-        employeeId: b.employee_id,
-        name: b.name,
-        department: b.department,
-        title: b.title,
-        song: b.song,
-        accessLevel: b.access_level,
-        accessCss: b.access_css,
-        hasPhoto: !!b.has_photo,
-        photoPublic: !!b.photo_public,
-        isBandMember: !!b.is_band_member,
-        createdAt: b.created_at,
-      })),
+      badges: result.badges.map(b => serializeBadge(b)),
       total: result.total,
       page: result.page,
       pages: result.pages,

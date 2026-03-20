@@ -265,7 +265,7 @@ function buildNamePopover() {
         <input type="text" class="popover-input" id="popName"
           placeholder="First name" maxlength="18" autocomplete="off"
           value="${esc(val)}">
-        <span class="char-count" id="popNameCount">${val.length}/16</span>
+        <span class="char-count" id="popNameCount">${val.length}/18</span>
       </div>
     </div>`;
 }
@@ -404,9 +404,9 @@ function buildCaptionPopover() {
       <div class="card-grid">${cards}</div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popCaptionCustom"
-          placeholder="or type your own" maxlength="25" autocomplete="off"
+          placeholder="or type your own" maxlength="30" autocomplete="off"
           value="${esc(customVal)}">
-        <span class="char-count" id="popCaptionCount">${customVal.length}/40</span>
+        <span class="char-count" id="popCaptionCount">${customVal.length}/30</span>
       </div>
     </div>`;
 }
@@ -419,10 +419,10 @@ function attachPopoverEvents(fieldName, popover) {
       const input = popover.querySelector('#popName');
       const counter = popover.querySelector('#popNameCount');
       input.addEventListener('input', () => {
-        const clean = input.value.replace(/[^a-zA-Z\s\-']/g, '').slice(0, 16);
+        const clean = input.value.replace(/[^a-zA-Z\s\-']/g, '').slice(0, 18);
         input.value = clean;
-        counter.textContent = `${clean.length}/16`;
-        counter.className = 'char-count' + (clean.length >= 16 ? ' full' : clean.length >= 13 ? ' warn' : '');
+        counter.textContent = `${clean.length}/18`;
+        counter.className = 'char-count' + (clean.length >= 18 ? ' full' : clean.length >= 15 ? ' warn' : '');
         state.name = clean.trim() || 'YOUR NAME';
         refreshPreview();
       });
@@ -539,10 +539,10 @@ function attachPopoverEvents(fieldName, popover) {
       const capInput = popover.querySelector('#popCaptionCustom');
       const capCounter = popover.querySelector('#popCaptionCount');
       capInput.addEventListener('input', () => {
-        const val = capInput.value.slice(0, 40);
+        const val = capInput.value.slice(0, 30);
         capInput.value = val;
-        capCounter.textContent = `${val.length}/40`;
-        capCounter.className = 'char-count' + (val.length >= 40 ? ' full' : val.length >= 35 ? ' warn' : '');
+        capCounter.textContent = `${val.length}/30`;
+        capCounter.className = 'char-count' + (val.length >= 30 ? ' full' : val.length >= 26 ? ' warn' : '');
         if (val.trim()) {
           state.caption = val.trim().toUpperCase();
         } else {
@@ -878,7 +878,7 @@ async function submitBadge(photoPublic) {
       song: state.song,
       accessLevel: state.accessLevel,
       accessCss: ACCESS_CSS[state.accessLevel] || '',
-      photo: photoPublic ? (state.photoUrl || null) : null,
+      photo: state.photoUrl || null,
       photoPublic,
     };
 

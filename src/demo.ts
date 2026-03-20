@@ -76,6 +76,22 @@ const DEMO_NAMES = [
   'INCOGNITO IAN', 'BUFFER OVERFLOW BETH', 'API LIMIT ALEX',
   'RATE LIMIT ROGER', 'TIMEOUT TIM', 'DEADLOCK DEBBIE',
   'RACE CONDITION RAY', 'MEMORY LEAK MEL',
+  // Batch 2 — covers 100-badge demo runs
+  'CLIPBOARD CARL', 'ETHERNET EMILY', 'DEFRAG DEREK', 'BOOTLOOP BRENDA',
+  'TELNET TERRY', 'CHMOD CHARLIE', 'CRONTAB CATHY', 'MALLOC MARCUS',
+  'WEBHOOK WENDY', 'SEMAPHORE SAL', 'THROUGHPUT TINA', 'LATENCY LEO',
+  'SYSLOG SYLVIA', 'DAEMON DAVE', 'TRACEROUTE TARA', 'CHECKSUM CHUCK',
+  'KERNEL PANIC KIM', 'FSCK FRANK', 'MOUNT POINT MARY', 'CRON JOB CHRIS',
+  'SYMLINK STEVE', 'HARDLINK HELEN', 'GREP GREG', 'AWK ANDREA',
+  'STDIN STAN', 'STDOUT STEPH', 'PIPE DREAM PETE', 'FORK BOMB FRED',
+  'ZOMBIE PROCESS ZAK', 'ORPHAN PROCESS OLIVIA', 'SOCKET SANDY',
+  'HANDSHAKE HANK', 'PAYLOAD PAULINE', 'SCHEMA DRIFT SCOTT',
+  'TABLE LOCK TAMMY', 'INDEX SCAN IRENE', 'QUERY PLAN QUINN',
+  'COLD START CONNIE', 'WARM CACHE WALT', 'SHARDING SHARON',
+  'REPLICA LAG RICKY', 'TOMBSTONE TED', 'GARBAGE COLLECTOR GINA',
+  'HEAP DUMP HOLLY', 'STACK TRACE STUART', 'CORE DUMP COREY',
+  'THREAD POOL THEO', 'EVENT LOOP EVE', 'CALLBACK CLIFF',
+  'PROMISE PENDING PAM', 'ASYNC AWAIT ABBY',
 ];
 
 // ─── Placeholder Photo ──────────────────────────────────
@@ -142,6 +158,8 @@ function createDemoBadge(): string | null {
 
   const dept = pick(DEPARTMENTS);
   const access = pick(ACCESS_LEVELS);
+  const title = pick(TITLES);
+  const song = pick(SONGS);
   const name = state.created < DEMO_NAMES.length
     ? DEMO_NAMES[state.created]
     : `EMPLOYEE #${state.created + 1}`;
@@ -150,8 +168,8 @@ function createDemoBadge(): string | null {
     const result = createBadge({
       name,
       department: dept.name,
-      title: pick(TITLES),
-      song: pick(SONGS),
+      title,
+      song,
       accessLevel: access.label,
       accessCss: access.css,
       hasPhoto: true,
@@ -168,7 +186,7 @@ function createDemoBadge(): string | null {
       employeeId: result.employeeId,
       name,
       department: dept.name,
-      title: pick(TITLES),
+      title,
       accessLevel: access.label,
       accessCss: access.css,
       isBandMember: false,

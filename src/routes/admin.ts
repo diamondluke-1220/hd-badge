@@ -5,7 +5,7 @@ import type { Hono } from 'hono';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
-import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue } from '../db';
+import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge } from '../db';
 import { log, getLog } from '../logger';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
@@ -37,26 +37,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const result = listBadges({ page, limit, includeHidden: true, department, division, dateFrom, dateTo, hasPhoto, search });
 
     return c.json({
-      badges: result.badges.map(b => ({
-        employeeId: b.employee_id,
-        name: b.name,
-        department: b.department,
-        title: b.title,
-        song: b.song,
-        accessLevel: b.access_level,
-        accessCss: b.access_css,
-        hasPhoto: !!b.has_photo,
-        photoPublic: !!b.photo_public,
-        isBandMember: !!b.is_band_member,
-        isVisible: !!b.is_visible,
-        isPaid: !!b.is_paid,
-        paidAt: b.paid_at,
-        isPrinted: !!b.is_printed,
-        printedAt: b.printed_at,
-        isFlagged: !!b.is_flagged,
-        createdAt: b.created_at,
-        source: b.source,
-      })),
+      badges: result.badges.map(b => serializeBadge(b, { admin: true })),
       total: result.total,
       page: result.page,
       pages: result.pages,

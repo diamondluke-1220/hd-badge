@@ -3,6 +3,7 @@
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const MAX_STORE_SIZE = 10000;
 
 interface RateEntry {
   timestamps: number[];
@@ -63,5 +64,17 @@ export function checkRateLimit(ip: string): { allowed: boolean; message?: string
 
   // Record this attempt
   entry.timestamps.push(now);
+
+  // Evict oldest entries if store grows too large
+  if (store.size > MAX_STORE_SIZE) {
+    const evictCount = Math.floor(MAX_STORE_SIZE * 0.1);
+    let removed = 0;
+    for (const key of store.keys()) {
+      if (removed >= evictCount) break;
+      store.delete(key);
+      removed++;
+    }
+  }
+
   return { allowed: true };
 }
