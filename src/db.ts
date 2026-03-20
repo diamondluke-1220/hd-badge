@@ -41,11 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_badges_flagged ON badges(is_flagged);
 
 // Band member seed data — HD-00001 through HD-00005
 const BAND_MEMBERS = [
-  { id: 'HD-00001', name: 'LUKE',  dept: 'TICKET ESCALATION BUREAU',          title: 'Chief Escalation Officer',      song: 'PLEASE HOLD',       access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-00002', name: 'DREW',  dept: 'AUDIO ENGINEERING DIVISION',        title: 'Chief Audio Architect',         song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-00003', name: 'HENRY', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE',   title: 'Chief Impact Officer',          song: 'THE MEMO',          access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-00004', name: 'TODD',  dept: 'INFRASTRUCTURE & POWER CHORDS',     title: 'VP of Power Distribution',      song: 'TAKING LIBERTIES',  access: 'ALL ACCESS', css: 'all-access' },
-  { id: 'HD-00005', name: 'ADAM',  dept: 'LOW FREQUENCY OPERATIONS',          title: 'VP of Bottom Line Operations',  song: 'BOSS LEVEL',        access: 'ALL ACCESS', css: 'all-access' },
+  { id: 'HD-00001', name: 'LUKE',  dept: 'TICKET ESCALATION BUREAU',          title: 'Chief Escalation Officer',      song: 'PLEASE HOLD',       access: 'ALL ACCESS', css: 'all-access', caption: 'SCAN TO FILE COMPLAINT' },
+  { id: 'HD-00002', name: 'DREW',  dept: 'AUDIO ENGINEERING DIVISION',        title: 'Chief Audio Architect',         song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access', caption: 'NOT RESPONSIBLE FOR LOST EARDRUMS' },
+  { id: 'HD-00003', name: 'HENRY', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE',   title: 'Chief Impact Officer',          song: 'THE MEMO',          access: 'ALL ACCESS', css: 'all-access', caption: 'STAGE DIVE TO SCAN' },
+  { id: 'HD-00004', name: 'TODD',  dept: 'INFRASTRUCTURE & POWER CHORDS',     title: 'VP of Power Distribution',      song: 'TAKING LIBERTIES',  access: 'ALL ACCESS', css: 'all-access', caption: 'WARRANTY VOID IF REMOVED' },
+  { id: 'HD-00005', name: 'ADAM',  dept: 'LOW FREQUENCY OPERATIONS',          title: 'VP of Bottom Line Operations',  song: 'BOSS LEVEL',        access: 'ALL ACCESS', css: 'all-access', caption: 'UNAUTHORIZED MOSHING VOIDS WARRANTY' },
 ];
 
 // Division → department mapping (mirrors PUBLIC_DIVISIONS + DEPARTMENTS in app.js)
@@ -179,11 +179,20 @@ export function initDb(dbPath: string) {
     })();
   });
 
+  // v5: Caption column
+  runMigration(5, 'Add caption column for user-customizable badge text', () => {
+    const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('caption')) {
+      db.exec("ALTER TABLE badges ADD COLUMN caption TEXT DEFAULT 'SCAN TO FILE COMPLAINT'");
+    }
+  });
+
   // Prepare all statements
   stmts = {
     insertBadge: db.prepare(`
-      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged, is_demo)
-      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged, $is_demo)
+      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged, is_demo, caption)
+      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged, $is_demo, $caption)
     `),
     getBadge: db.prepare('SELECT * FROM badges WHERE employee_id = $id'),
     getBadgeByToken: db.prepare('SELECT * FROM badges WHERE delete_token = $token'),
@@ -262,6 +271,7 @@ function seedBandMembers() {
       $photo_public: 1,
       $is_flagged: 0,
       $is_demo: 0,
+      $caption: m.caption,
     });
   }
 }
@@ -291,6 +301,7 @@ export interface BadgeInput {
   song: string;
   accessLevel: string;
   accessCss: string;
+  caption?: string;
   hasPhoto: boolean;
   photoPublic: boolean;
   source?: string;
@@ -320,6 +331,7 @@ export interface BadgeRow {
   printed_at: string | null;
   is_flagged: number;
   is_demo: number;
+  caption: string;
 }
 
 export function createBadge(input: BadgeInput): { employeeId: string; deleteToken: string } {
@@ -341,6 +353,7 @@ export function createBadge(input: BadgeInput): { employeeId: string; deleteToke
     $photo_public: input.photoPublic ? 1 : 0,
     $is_flagged: input.flagged ? 1 : 0,
     $is_demo: input.isDemo ? 1 : 0,
+    $caption: input.caption || 'SCAN TO FILE COMPLAINT',
   });
 
   return { employeeId, deleteToken };
@@ -595,6 +608,7 @@ export function serializeBadge(b: BadgeRow, opts?: { admin?: boolean }) {
     hasPhoto: !!b.has_photo,
     photoPublic: !!b.photo_public,
     isBandMember: !!b.is_band_member,
+    caption: b.caption || 'SCAN TO FILE COMPLAINT',
     createdAt: b.created_at,
   };
   if (!opts?.admin) return base;

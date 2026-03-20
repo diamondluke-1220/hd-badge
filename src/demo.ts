@@ -57,6 +57,15 @@ const SONGS = [
   'HOSTILE TAKEOVER', 'PATCH 22', 'PLEASE HOLD', 'ALTERNATIVE FAX',
 ];
 
+const CAPTIONS = [
+  'SCAN TO FILE COMPLAINT', 'IF FOUND RETURN TO MOSH PIT',
+  'DO NOT COPY (TORRENTING IS OK)', 'WARRANTY VOID IF REMOVED',
+  'NOT RESPONSIBLE FOR LOST EARDRUMS', 'THIS BADGE IS YOUR RECEIPT',
+  'BADGE EXPIRES WHEN THE MUSIC STOPS', 'UNAUTHORIZED MOSHING VOIDS WARRANTY',
+  'HAVE YOU TRIED TURNING IT OFF AND BACK ON', 'STAGE DIVE TO SCAN',
+  "IT'S NOT THE NETWORK", "WHAT'S THE WIFI PASSWORD?", 'TAKING BACK MONDAYS',
+];
+
 // Curated funny demo names
 const DEMO_NAMES = [
   'CHAD THUNDERPATCH', 'KAREN FROM LEGAL', 'DAVE (NOT THAT DAVE)',
@@ -160,6 +169,7 @@ function createDemoBadge(): string | null {
   const access = pick(ACCESS_LEVELS);
   const title = pick(TITLES);
   const song = pick(SONGS);
+  const caption = pick(CAPTIONS);
   const name = state.created < DEMO_NAMES.length
     ? DEMO_NAMES[state.created]
     : `EMPLOYEE #${state.created + 1}`;
@@ -172,6 +182,7 @@ function createDemoBadge(): string | null {
       song,
       accessLevel: access.label,
       accessCss: access.css,
+      caption,
       hasPhoto: true,
       photoPublic: true,
       source: 'demo',

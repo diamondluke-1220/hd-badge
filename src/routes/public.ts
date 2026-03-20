@@ -72,14 +72,14 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Invalid request body.' }, 400);
     }
 
-    const { name, department, title, song, accessLevel, accessCss, photo, photoPublic } = body;
+    const { name, department, title, song, accessLevel, accessCss, caption, photo, photoPublic } = body;
 
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
     }
 
     // Check all user-supplied text fields for hate speech
-    const textFields = [name, department, title, song, accessLevel, accessCss];
+    const textFields = [name, department, title, song, accessLevel, accessCss, ...(caption ? [caption] : [])];
     for (const field of textFields) {
       if (!isNameClean(field)) {
         return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
@@ -128,7 +128,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       const cleanDept = clampField(department.trim().toUpperCase(), 'department');
       const cleanSong = clampField(song.trim().toUpperCase(), 'song');
       const cleanAccess = clampField(accessLevel.trim().toUpperCase(), 'accessLevel');
-      const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess].some(f => shouldFlag(f));
+      const cleanCaption = caption ? clampField(caption.trim().toUpperCase(), 'caption') : 'SCAN TO FILE COMPLAINT';
+      const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess, cleanCaption].some(f => shouldFlag(f));
 
       if (isPresentationActive() && flagged) {
         return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
@@ -142,6 +143,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         song: cleanSong,
         accessLevel: cleanAccess,
         accessCss: cleanCss,
+        caption: cleanCaption,
         hasPhoto,
         photoPublic: photoPublic !== false,
         source: body.source || 'web',

@@ -141,6 +141,7 @@ const FIELD_LIMITS: Record<string, number> = {
   song: 25,
   accessLevel: 28,
   accessCss: 30,
+  caption: 45,
 };
 
 // Security headers on all responses
@@ -363,7 +364,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       accessCss: badge.access_css,
       photoUrl: photoDataUrl,
       waveStyle: 'barcode',
-      caption: 'SCAN TO FILE COMPLAINT',
+      caption: badge.caption || 'SCAN TO FILE COMPLAINT',
     });
   }, { badge, photoDataUrl, isPrint: !!options?.print });
 
