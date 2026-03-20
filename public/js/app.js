@@ -928,6 +928,7 @@ function showBadgeStatusBar(employeeId) {
   pill.className = 'badge-status-pill';
   pill.innerHTML = `
     <span class="badge-status-id">${esc(employeeId)}</span>
+    <a class="badge-status-download" href="/api/badge/${esc(employeeId)}/image" download="helpdesk-badge-${esc(employeeId)}.png" title="Download badge">&darr;</a>
     <button class="badge-status-remove" id="removeBadgeBtn" title="Remove my badge">&times;</button>
   `;
 
