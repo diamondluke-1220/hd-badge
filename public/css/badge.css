@@ -225,6 +225,8 @@
 .badge .access-badge.thought-leader { background: #14532D; }
 .badge .access-badge.peter-principle { background: #7E22CE; }
 .badge .access-badge.above-pay { background: #92400E; }
+.badge .access-badge.pending { background: #64748B; }
+.badge .access-badge.custom { background: #1E3A5F; }
 
 /* Info section */
 .badge .info-section {

@@ -17,7 +17,7 @@ const DEPT_ACCESS = {
   'TEAM BUILDING AVOIDANCE':            { access: 'TRUST FALL EXEMPT',         css: 'trust-fall' },
   'MOSH PIT HR':                        { access: 'PIT APPROVED',              css: 'pit' },
   'ENTERPRISE GUITAR WORSHIP':           { access: 'SHRED CERTIFIED',           css: 'shred' },
-  'STAGE DIVE RISK ASSESSMENT':         { access: 'DIVE AUTHORIZED',           css: 'dive' },
+  'STAGE DIVE RISK ASSESSMENT':         { access: 'STAGE DIVE AUTHORIZED',           css: 'dive' },
 };
 
 // All access level options — label + CSS class
@@ -35,13 +35,13 @@ const ACCESS_LEVELS = [
   { label: 'TRUST FALL EXEMPT',         css: 'trust-fall' },
   { label: 'PIT APPROVED',              css: 'pit' },
   { label: 'SHRED CERTIFIED',           css: 'shred' },
-  { label: 'DIVE AUTHORIZED',           css: 'dive' },
+  { label: 'STAGE DIVE AUTHORIZED',           css: 'dive' },
   { label: 'FAST TRACK PROMOTED',       css: 'fast-track' },
   { label: 'CORNER OFFICE APPROVED',    css: 'corner-office' },
   { label: 'THOUGHT LEADER CERTIFIED',  css: 'thought-leader' },
   { label: 'PROMOTED BEYOND CAPABILITY', css: 'peter-principle' },
   { label: 'ABOVE YOUR PAY GRADE',      css: 'above-pay' },
-  { label: 'PENDING REVIEW',            css: '' },
+  { label: 'PENDING REVIEW',            css: 'pending' },
 ];
 
 // Lookup: access label → css class
@@ -216,7 +216,7 @@ function updateBadge(data) {
 
   // Access badge — uses explicit accessLevel from state
   const accessLabel = (data.accessLevel || 'PENDING REVIEW').toUpperCase();
-  const accessCss = ACCESS_CSS[accessLabel] || '';
+  const accessCss = ACCESS_CSS[accessLabel] || 'custom';
   const ab = document.getElementById('accessBadge');
   if (ab) {
     ab.textContent = accessLabel;
