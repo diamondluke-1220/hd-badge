@@ -641,6 +641,10 @@
     .pq-btn-done { border-color: #22C55E; color: #22C55E; }
     .pq-btn-done:hover { background: #22C55E; color: white; }
     .pq-btn[disabled] { opacity: 0.5; cursor: default; }
+    .pq-btn-batch { border-color: #D97706; color: #D97706; }
+    .pq-btn-batch:hover { background: #D97706; color: white; }
+    .pq-btn-rerender { border-color: #8B5CF6; color: #8B5CF6; }
+    .pq-btn-rerender:hover { background: #8B5CF6; color: white; }
     .pq-empty {
       color: #999;
       font-size: 13px;
@@ -744,6 +748,8 @@
     <div class="analytics-header">
       <h2>Print Queue</h2>
       <span style="font-size:13px;color:#999;" id="pqStatus">0 badges awaiting print</span>
+      <button class="pq-btn pq-btn-batch" id="batchPrintBtn" onclick="batchPrintDownload()" style="margin-left:auto;">&#128230; Download All (ZIP)</button>
+      <button class="pq-btn pq-btn-rerender" onclick="rerenderAll()">&#8635; Re-render All Badges</button>
     </div>
     <div id="printQueueGrid" class="pq-grid">
       <div class="pq-empty">No badges in print queue. Mark badges as paid to add them.</div>
@@ -1338,6 +1344,52 @@ async function loadPrintQueueCount() {
   const data = await apiFetch('/api/admin/badges/print-queue');
   if (data.error) return;
   updatePrintQueueCount(data.count || 0);
+}
+
+async function batchPrintDownload() {
+  const btn = document.getElementById('batchPrintBtn');
+  btn.disabled = true;
+  btn.textContent = 'Rendering ZIP…';
+  try {
+    const resp = await fetch('/api/admin/badges/batch-print', {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      alert(data.error || 'Batch print failed.');
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `helpdesk-print-queue-${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Batch print failed. Try again.');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '&#128230; Download All (ZIP)';
+}
+
+async function rerenderAll() {
+  if (!confirm('Re-render ALL badges? This may take a minute for large badge counts.')) return;
+  const btn = document.querySelector('.pq-btn-rerender');
+  btn.disabled = true;
+  btn.textContent = 'Rendering…';
+  try {
+    const data = await apiFetch('/api/admin/badges/rerender-all', { method: 'POST' });
+    if (data.success) {
+      alert(`Re-render complete: ${data.rendered} rendered, ${data.failed} failed out of ${data.total} total.`);
+    } else {
+      alert(data.error || 'Re-render failed.');
+    }
+  } catch (e) {
+    alert('Re-render failed. Try again.');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '&#8635; Re-render All Badges';
 }
 
 // ─── Analytics ──────────────────────────────────────────

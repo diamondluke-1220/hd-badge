@@ -5,6 +5,7 @@ import type { Hono } from 'hono';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
+import archiver from 'archiver';
 import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge } from '../db';
 import { log, getLog } from '../logger';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
@@ -247,6 +248,93 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       log('error', 'admin', `Badge render failed for ${id}: ${err.message}`);
       return c.json({ success: false, error: 'Badge render failed.' }, 500);
     }
+  });
+
+  // ─── Batch Print (ZIP) ──────────────────────────────────
+
+  app.get('/api/admin/badges/batch-print', async (c) => {
+    const badges = getPrintQueue();
+    if (badges.length === 0) {
+      return c.json({ success: false, error: 'No badges in print queue (paid + unprinted).' }, 404);
+    }
+
+    try {
+      log('info', 'admin', `Batch print started: ${badges.length} badges`);
+
+      const archive = archiver('zip', { zlib: { level: 5 } });
+      const chunks: Buffer[] = [];
+
+      archive.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+      // Render each badge in print mode and add to ZIP
+      for (const badge of badges) {
+        try {
+          const printBuffer = await renderBadgePlaywright(badge, { print: true });
+          const safeName = badge.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+          archive.append(printBuffer, { name: `${badge.employee_id}-${safeName}.png` });
+        } catch (err: any) {
+          log('error', 'admin', `Batch print: render failed for ${badge.employee_id}: ${err.message}`);
+          // Skip failed badge, continue with rest
+        }
+      }
+
+      await archive.finalize();
+      const zipBuffer = Buffer.concat(chunks);
+
+      const filename = `helpdesk-print-queue-${new Date().toISOString().slice(0, 10)}.zip`;
+      log('info', 'admin', `Batch print complete: ${badges.length} badges, ${(zipBuffer.length / 1024).toFixed(0)}KB`);
+
+      return new Response(zipBuffer, {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-cache, no-store',
+        },
+      });
+    } catch (err: any) {
+      log('error', 'admin', `Batch print failed: ${err.message}`);
+      return c.json({ success: false, error: 'Batch print failed.' }, 500);
+    }
+  });
+
+  // ─── Re-render All Badges ──────────────────────────────
+
+  app.post('/api/admin/badges/rerender-all', async (c) => {
+    const result = listBadges({ limit: 1000, maxLimit: 1000 });
+    const badges = result.badges;
+
+    if (badges.length === 0) {
+      return c.json({ success: false, error: 'No badges to render.' }, 404);
+    }
+
+    log('info', 'admin', `Re-render all started: ${badges.length} badges`);
+    let rendered = 0;
+    let failed = 0;
+
+    for (const badge of badges) {
+      try {
+        const badgeBuffer = await renderBadgePlaywright(badge);
+        await Bun.write(join(BADGES_DIR, `${badge.employee_id}.png`), badgeBuffer);
+
+        // Re-render nophoto variant if needed
+        if (badge.has_photo && !badge.photo_public) {
+          const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
+          await Bun.write(join(BADGES_DIR, `${badge.employee_id}-nophoto.png`), noPhotoBuffer);
+        }
+
+        // Invalidate cached thumb
+        const thumbPath = join(THUMBS_DIR, `${badge.employee_id}.png`);
+        if (existsSync(thumbPath)) unlinkSync(thumbPath);
+
+        rendered++;
+      } catch (err: any) {
+        log('error', 'admin', `Re-render failed for ${badge.employee_id}: ${err.message}`);
+        failed++;
+      }
+    }
+
+    log('info', 'admin', `Re-render all complete: ${rendered} rendered, ${failed} failed`);
+    return c.json({ success: true, rendered, failed, total: badges.length });
   });
 
   // ─── Analytics & Export ──────────────────────────────────
