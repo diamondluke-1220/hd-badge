@@ -45,8 +45,19 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - Search, filters (date/division/dept/photo/status), payment/print tracking, content flagging
 - Two-tier profanity filter (hard-block hate speech, soft-flag edgy content)
 - Photo upload with auto-render (badge re-rendered immediately after upload)
+- Badge recovery — admin reissues token, generates recovery link for fans who lost localStorage
 - Analytics dashboard, CSV export (formula injection protected), system logs
+- Toast notifications (no alert() dialogs), row click-to-highlight, toggle action feedback
 - Demo mode + presentation mode controls
+
+**Design System**
+- CSS custom properties (15 design tokens) for colors, surfaces, borders, radii
+- 4-tier text hierarchy optimized for dark backgrounds (warm, high-contrast)
+- External stylesheets for all views (admin CSS extracted from inline)
+- Responsive: horizontal-scroll nav/stats on mobile, bottom-sheet popovers
+- Corporate boot sequence on first visit (2.5s terminal animation, skip-able)
+- Themed 404 "Incident Report" page with rotating sarcastic quips
+- Real-time headcount badge in nav (SSE-powered, pulses green on new badges)
 
 ## Tech Stack
 
@@ -127,8 +138,11 @@ public/
   admin.html         # HR Dashboard
   presentation.html  # Projector display for live shows
   table-tent.html    # Printable merch table card with QR codes
+  404.html           # Themed "Incident Report" error page
+  recover.html       # Badge recovery page (token-based)
   js/app.js            # Badge editor, popover system, renderer switching, submit/edit flow
-  js/live-viz.js       # Live visualizations: SSE, ticker, animations, stats panel
+  js/boot-sequence.js  # First-visit corporate boot animation (localStorage gated)
+  js/live-viz.js       # Live visualizations: SSE, ticker, animations, stats panel, headcount
   js/badge-render.js   # Badge DOM rendering (departments, titles, waveforms, access levels)
   js/shared.js         # Shared constants, utilities, window.HD namespace
   js/badge-pool.js     # Badge data pool for view renderers
@@ -140,7 +154,14 @@ public/
   js/arcade-sound.js   # ZzFX procedural sound effects
   js/presentation.js   # Presentation mode client
   js/presentation-shims.js # Shims for presentation route compatibility
-  css/               # App styles, badge styles, view-specific styles
+  css/app.css          # App UI styles + design tokens (:root custom properties)
+  css/admin.css        # Admin dashboard styles (extracted from inline)
+  css/badge.css        # Badge card styles (print-spec locked — DO NOT EDIT)
+  css/arcade.css       # Arcade fighting game view styles
+  css/presentation.css # Presentation mode display styles
+  css/dendro.css       # Dendrogram network tree styles
+  css/reviewboard.css  # Split-flap review board styles
+  css/flap-base.css    # Shared Vestaboard tile base styles
   lib/               # Vendored deps (d3, html2canvas, cropper, qrcode, zzfx)
   fonts/             # Self-hosted web fonts (Barlow, Inter, JetBrains Mono, Orbitron, Press Start 2P, Roboto Condensed)
 data/                # Runtime data (gitignored)
@@ -264,6 +285,7 @@ graph LR
 | `/api/admin/demo/start` | POST | Bearer | Generate 5-100 test badges |
 | `/api/admin/demo/cleanup` | POST | Bearer | Remove all demo badges + files |
 | `/api/admin/presentation/start` | POST | Bearer | Start presentation mode |
+| `/api/admin/badge/:id/recover` | POST | Bearer | Reissue delete token for badge recovery |
 | `/api/admin/export/csv` | GET | Bearer | CSV export (formula injection protected) |
 
 ## Security
