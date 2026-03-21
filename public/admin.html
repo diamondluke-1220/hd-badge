@@ -206,69 +206,120 @@
     }
     .badge-table th {
       text-align: left;
-      padding: 12px;
+      padding: 8px 10px;
       font-family: 'JetBrains Mono', monospace;
       color: #B0BEC5;
-      font-size: 12px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 2px;
       border-bottom: 1px solid #3A3A44;
       white-space: nowrap;
     }
     .badge-table td {
-      padding: 12px;
+      padding: 6px 10px;
       border-bottom: 1px solid #2A2A32;
       vertical-align: middle;
     }
     .badge-table tr:hover td {
       background: #2A2A32;
     }
-    .badge-thumb {
-      width: 40px;
-      height: 64px;
-      object-fit: cover;
-      border-radius: 4px;
-      background: #3A3A44;
-      cursor: pointer;
+    .badge-table tr.row-hidden td {
+      opacity: 0.5;
     }
     .badge-id {
       font-family: 'JetBrains Mono', monospace;
       color: #B0BEC5;
-      font-size: 13px;
+      font-size: 12px;
     }
-    .badge-name { font-weight: 700; color: white; font-size: 15px; }
+    .badge-name { font-weight: 700; color: white; font-size: 13px; }
     .badge-dept {
-      font-size: 13px;
+      font-size: 12px;
       color: #B0BEC5;
     }
-    .status-visible {
-      color: #44BB66;
-      font-size: 13px;
+    .badge-title-cell {
+      font-size: 12px;
+      color: #999;
     }
-    .status-hidden {
-      color: #DC2626;
-      font-size: 13px;
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
+      vertical-align: middle;
     }
+    .status-dot.green { background: #22C55E; }
+    .status-dot.red { background: #DC2626; }
+    .status-dot.blue { background: #3B82F6; }
+    .status-dot.yellow { background: #F59E0B; }
+    .status-dot.gray { background: #555; }
+    .status-visible { color: #44BB66; font-size: 11px; }
+    .status-hidden { color: #DC2626; font-size: 11px; }
     .status-band {
       background: #3D2F00;
       color: #FFCC00;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
       font-weight: 600;
     }
 
+    /* Badge Preview Modal */
+    .preview-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .preview-modal.active { display: flex; }
+    .preview-modal-img {
+      max-height: 65vh;
+      max-width: 90vw;
+      border-radius: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+    .preview-modal-info {
+      color: #B0BEC5;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      text-align: center;
+    }
+    .preview-modal-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .preview-modal-close {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      background: none;
+      border: none;
+      color: #999;
+      font-size: 28px;
+      cursor: pointer;
+    }
+    .preview-modal-close:hover { color: white; }
+
     /* Action buttons */
     .btn-action {
-      padding: 8px 14px;
+      padding: 4px 8px;
       border: 1px solid #3A3A44;
       background: none;
       color: #B0BEC5;
-      border-radius: 6px;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      margin-right: 4px;
-      margin-bottom: 4px;
+      font-size: 11px;
+      margin-right: 2px;
+      margin-bottom: 2px;
+    }
+    .actions-cell {
+      white-space: nowrap;
     }
     .btn-action:hover {
       border-color: #5B8DEF;
@@ -832,14 +883,11 @@
     <table class="badge-table" aria-label="Employee badges">
       <thead>
         <tr>
-          <th scope="col">Badge</th>
           <th scope="col">ID</th>
           <th scope="col">Name</th>
           <th scope="col">Department</th>
           <th scope="col">Title</th>
           <th scope="col">Status</th>
-          <th scope="col">Paid</th>
-          <th scope="col">Printed</th>
           <th scope="col">Created</th>
           <th scope="col">Actions</th>
         </tr>
@@ -998,50 +1046,44 @@ function renderTable(badges) {
   const tbody = document.getElementById('badgeTableBody');
 
   if (badges.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No badges found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No badges found.</td></tr>';
     return;
   }
 
   tbody.innerHTML = badges.map(b => {
-    const imgSrc = `/api/badge/${b.employeeId}/thumb?t=${Date.now()}`;
-    const statusClass = b.isVisible ? 'status-visible' : 'status-hidden';
-    const statusText = b.isVisible ? 'Visible' : 'Hidden';
-    const bandTag = b.isBandMember ? ' <span class="status-band">BAND</span>' : '';
     const date = b.createdAt ? new Date(b.createdAt).toLocaleDateString() : '—';
+    const rowClass = b.isVisible ? '' : 'row-hidden';
+
+    // Status dots: visibility, paid, printed, flagged
+    let statusDots = '';
+    statusDots += b.isVisible
+      ? '<span class="status-dot green" title="Visible"></span>'
+      : '<span class="status-dot red" title="Hidden"></span>';
+    if (b.isPaid) statusDots += '<span class="status-dot green" title="Paid"></span>';
+    if (b.isPrinted) statusDots += '<span class="status-dot blue" title="Printed"></span>';
+    if (b.isFlagged) statusDots += '<span class="status-dot yellow" title="Flagged"></span>';
+    if (b.isBandMember) statusDots += ' <span class="status-band">BAND</span>';
+
     const hideLabel = b.isVisible ? 'Hide' : 'Show';
+    const paidLabel = b.isPaid ? 'Unpay' : '$';
+    const printedLabel = b.isPrinted ? 'Unprint' : 'Print';
+    const flagLabel = b.isFlagged ? 'Unflag' : 'Flag';
 
-    const paidClass = b.isPaid ? 'status-paid' : 'status-unpaid';
-    const paidText = b.isPaid ? 'Paid' : '—';
-    const paidBtnClass = b.isPaid ? 'btn-action btn-paid' : 'btn-action';
-    const paidBtnLabel = b.isPaid ? 'Unpay' : 'Mark Paid';
-
-    const printedClass = b.isPrinted ? 'status-printed' : 'status-unpaid';
-    const printedText = b.isPrinted ? 'Printed' : '—';
-    const printedBtnClass = b.isPrinted ? 'btn-action btn-printed' : 'btn-action';
-    const printedBtnLabel = b.isPrinted ? 'Unprint' : 'Mark Printed';
-
-    const flagTag = b.isFlagged ? ' <span class="status-flagged">FLAG</span>' : '';
-    const flagBtnClass = b.isFlagged ? 'btn-action btn-flagged' : 'btn-action';
-    const flagBtnLabel = b.isFlagged ? 'Unflag' : 'Flag';
-
-    return `<tr>
-      <td><a href="/api/badge/${b.employeeId}/image?t=${Date.now()}" target="_blank"><img class="badge-thumb" src="${imgSrc}" alt="Badge" loading="lazy"></a></td>
+    return `<tr class="${rowClass}">
       <td><span class="badge-id">${b.employeeId}</span></td>
-      <td><span class="badge-name">${esc(b.name)}</span>${flagTag}</td>
+      <td><span class="badge-name">${esc(b.name)}</span></td>
       <td><span class="badge-dept">${esc(b.department)}</span></td>
-      <td>${esc(b.title)}</td>
-      <td><span class="${statusClass}">${statusText}</span>${bandTag}</td>
-      <td><span class="${paidClass}">${paidText}</span></td>
-      <td><span class="${printedClass}">${printedText}</span></td>
+      <td><span class="badge-title-cell">${esc(b.title)}</span></td>
+      <td>${statusDots}</td>
       <td>${date}</td>
-      <td>
-        <button class="btn-action" onclick="uploadPhoto('${b.employeeId}')" title="Upload photo">&#128247; Photo</button>
-        <button class="btn-action" onclick="renderBadge('${b.employeeId}')" title="Render badge PNG">&#127912; Render</button>
-        <button class="${flagBtnClass}" onclick="toggleFlag('${b.employeeId}')">${flagBtnLabel}</button>
-        <button class="${paidBtnClass}" onclick="togglePaid('${b.employeeId}')">${paidBtnLabel}</button>
-        <button class="${printedBtnClass}" onclick="togglePrinted('${b.employeeId}')">${printedBtnLabel}</button>
-        <button class="btn-action" onclick="toggleHide('${b.employeeId}')">${hideLabel}</button>
-        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')">Delete</button>
+      <td class="actions-cell">
+        <button class="btn-action" onclick="showPreview('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')" title="Preview badge">&#128065;</button>
+        <button class="btn-action" onclick="uploadPhoto('${b.employeeId}')" title="Upload photo">&#128247;</button>
+        <button class="btn-action${b.isPaid ? ' btn-paid' : ''}" onclick="togglePaid('${b.employeeId}')" title="${paidLabel}">${paidLabel}</button>
+        <button class="btn-action${b.isPrinted ? ' btn-printed' : ''}" onclick="togglePrinted('${b.employeeId}')" title="${printedLabel}">${printedLabel}</button>
+        <button class="btn-action${b.isFlagged ? ' btn-flagged' : ''}" onclick="toggleFlag('${b.employeeId}')" title="${flagLabel}">${flagLabel}</button>
+        <button class="btn-action" onclick="toggleHide('${b.employeeId}')" title="${hideLabel}">${hideLabel}</button>
+        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')" title="Delete">&times;</button>
       </td>
     </tr>`;
   }).join('');
@@ -1762,6 +1804,29 @@ if (token) {
       sessionStorage.removeItem('admin-token');
       token = '';
     });
+}
+function showPreview(employeeId, name) {
+  // Remove existing modal
+  const existing = document.getElementById('previewModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'previewModal';
+  modal.className = 'preview-modal active';
+  modal.innerHTML = `
+    <button class="preview-modal-close" id="previewCloseBtn">&times;</button>
+    <img class="preview-modal-img" src="/api/badge/${esc(employeeId)}/image?t=${Date.now()}" alt="Badge preview">
+    <div class="preview-modal-info">${esc(employeeId)} — ${esc(name)}</div>
+    <div class="preview-modal-actions">
+      <a class="btn-action btn-printed" href="/api/admin/badge/${esc(employeeId)}/print" download="${esc(employeeId)}-print.png" style="text-decoration:none;">&#128424; Download Print</a>
+      <button class="btn-action" onclick="renderBadge('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#127912; Re-render</button>
+      <button class="btn-action" onclick="uploadPhoto('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#128247; Upload Photo</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('previewCloseBtn').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 </script>
 
