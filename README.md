@@ -15,41 +15,48 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - Keyboard keycap header with binary texture overlay
 - 11 departments, 17 job titles, 19 access levels, 13 captions
 - Song waveform "barcodes" generated from real audio RMS data (14 songs)
-- Photo upload with crop tool
+- Photo upload with crop tool, auto-shrink text for long names/titles
 - "sudo randomize" button for instant random badges
-- PNG download
-- Print-ready badge export (`GET /api/badge/:id/print` — 600 DPI CR80, white bg, square corners)
+- "Join the Org" submit button — server assigns unique employee ID (HD-XXXXX)
+- Badge edit — returning users auto-load their badge, submit updates in place (same ID)
+- Nav pill with employee ID, download arrow, and remove button
+- Print-ready export (`GET /api/badge/:id/print` — 600 DPI CR80, white bg, square corners)
 
 **Employee Directory**
 - Division-grouped hierarchy with color-coded headers
 - Responsive grid (5/4/3/2 columns), mobile responsive (CSS transform scaling, touch targets)
-- Server-side thumbnails (sharp, 320px, cached on disk)
-- Server-side badge rendering via Playwright (replaces client-side html2canvas for creation)
+- Server-side thumbnails (sharp, 320px, cached on disk) + headshots (200px, cached)
+- Server-side badge rendering via Playwright (warm page reuse for performance)
 - Four view modes with keyboard shortcuts (1/2/3/4):
-  - **Grid** [1] — default card layout with photo circles, animated odometer counter
+  - **Grid** [1] — default card layout with photo circles, animated odometer counter, auto-shrink text
   - **AI Review** [2] — 10x44 split-flap text grid with AI performance reviews (78 comedy reviews, 13 styles, 20 skills), progressive reveal animation, headshot tile panel with canvas color sampling
-  - **Dendrogram Tree** [3] — D3 horizontal hierarchy with neon glow nodes, full-viewport layout
-  - **Arcade Select** [4] — fighting game character select grid with RPG stats and VS screen
+  - **Dendrogram Tree** [3] — D3 horizontal hierarchy with neon glow nodes, network-themed (router icon, ethernet cables, packet animations, CLI popups), full-viewport layout
+  - **Arcade Select** [4] — fighting game character select with 36s VS cinematic, 3-act fight sequence, SNES boss portraits, ZzFX sound effects, combo counter, special moves
 
 **Live Show Features**
-- Presentation mode (`/presentation`) — band intro, auto-rotating views (grid → dendro → arcade, 90s each), chyron ticker
-- SSE real-time badge events, stock ticker, terminal onboarding animation, spotlight mode
+- Presentation mode (`/presentation`) — band intro sequence, auto-rotating views (grid → dendro → arcade, 90s each), chyron ticker
+- SSE real-time badge events with per-IP connection limiting
+- Badge-updated events (silent refresh, no animation — prevents edit spam during shows)
+- Terminal onboarding animation, spotlight mode, stock ticker
 - CSS donut chart (department distribution), demo mode (5-100 test badges)
 
 **Admin (HR Dashboard)**
-- Bearer token auth with rate limiting (5 fails = 15min lockout), CSP headers, localhost-only option
-- Search, filters, payment/print tracking, content flagging (two-tier profanity filter)
-- Analytics dashboard, CSV export, band member photo management
+- Bearer token auth with brute force protection (5 fails = 15min lockout), CSP headers, localhost-only option
+- Search, filters (date/division/dept/photo/status), payment/print tracking, content flagging
+- Two-tier profanity filter (hard-block hate speech, soft-flag edgy content)
+- Photo upload with auto-render (badge re-rendered immediately after upload)
+- Analytics dashboard, CSV export (formula injection protected), system logs
+- Demo mode + presentation mode controls
 
 ## Tech Stack
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Server:** [Hono](https://hono.dev)
-- **Database:** SQLite (bun:sqlite, WAL mode)
-- **Badge Rendering:** [Playwright](https://playwright.dev) (server-side, headless Chromium)
-- **Thumbnails:** [sharp](https://sharp.pixelplumbing.com)
+- **Database:** SQLite (bun:sqlite, WAL mode, 5 migrations)
+- **Badge Rendering:** [Playwright](https://playwright.dev) (server-side, warm page reuse)
+- **Image Processing:** [sharp](https://sharp.pixelplumbing.com) (thumbnails, headshots, corner rounding)
 - **Visualizations:** [D3.js](https://d3js.org) (dendrogram tree view)
-- **Client-side:** Vanilla JS, Cropper.js, html2canvas (PNG download fallback)
+- **Client-side:** Vanilla JS, Cropper.js
 - **CI/CD:** GitHub Actions → ghcr.io → Docker (Unraid)
 
 ## Quick Start
@@ -107,34 +114,35 @@ docker pull ghcr.io/diamondluke-1220/hd-badge:latest
 src/
   server.ts          # Hono server, middleware, SSE, Playwright render, route wiring
   routes/portal.ts   # Captive portal detection + clearance routes
-  routes/public.ts   # Public API (badge CRUD, org chart, images)
+  routes/public.ts   # Public API (badge CRUD, edit, org chart, images)
   routes/admin.ts    # Admin API (management, demo, presentation, export)
-  db.ts              # SQLite schema, queries, migrations, band member seeding
+  db.ts              # SQLite schema, queries, migrations (v1-v5), band member seeding
   demo.ts            # Demo mode (test badge generation, cleanup)
   logger.ts          # Ring buffer logger (200 entries, categories)
   presentation.ts    # Presentation mode state machine + endpoints
   profanity.ts       # Two-tier content filter
-  rate-limit.ts      # IP-based rate limiting
+  rate-limit.ts      # IP-based rate limiting with LRU eviction
 public/
   index.html         # Badge creator
   admin.html         # HR Dashboard
   presentation.html  # Projector display for live shows
   table-tent.html    # Printable merch table card with QR codes
-  js/app.js            # Badge editor, popover system, renderer switching, init
+  js/app.js            # Badge editor, popover system, renderer switching, submit/edit flow
   js/live-viz.js       # Live visualizations: SSE, ticker, animations, stats panel
   js/badge-render.js   # Badge DOM rendering (departments, titles, waveforms, access levels)
   js/shared.js         # Shared constants, utilities, window.HD namespace
   js/badge-pool.js     # Badge data pool for view renderers
-  js/view-grid.js      # Grid view (default, odometer counter)
+  js/view-grid.js      # Grid view (default, odometer counter, auto-shrink text)
   js/view-reviewboard.js # AI Review (split-flap text grid, headshot tiles)
-  js/view-dendro.js    # D3 dendrogram tree view
+  js/view-dendro.js    # D3 dendrogram tree view (packet animations, CLI popups)
   js/view-arcade.js    # Arcade fighting game select view (layout, rotation, cursor)
   js/arcade-cinematic.js # VS cinematic system (fights, specials, effects)
+  js/arcade-sound.js   # ZzFX procedural sound effects
   js/presentation.js   # Presentation mode client
   js/presentation-shims.js # Shims for presentation route compatibility
   css/               # App styles, badge styles, view-specific styles
-  lib/               # Vendored deps (d3, html2canvas, cropper, qrcode)
-  fonts/             # Self-hosted web fonts (Barlow, Inter, JetBrains Mono, Orbitron, Press Start 2P)
+  lib/               # Vendored deps (d3, html2canvas, cropper, qrcode, zzfx)
+  fonts/             # Self-hosted web fonts (Barlow, Inter, JetBrains Mono, Orbitron, Press Start 2P, Roboto Condensed)
 data/                # Runtime data (gitignored)
   badges.db          # SQLite database
   photos/            # Uploaded fan photos
@@ -149,69 +157,67 @@ data/                # Runtime data (gitignored)
 flowchart TD
     A[Fan opens badge creator] --> B[Live CSS preview in browser]
     B --> C{Fan edits fields}
-    C -->|Name, Dept, Title, Song| B
+    C -->|Name, Dept, Title, Song, Caption| B
     C -->|Upload Photo| D[Cropper.js modal]
     D -->|Crop & confirm| E[700x630 JPEG stored in browser state]
     E --> B
-    B --> F[Fan clicks 'Join the Company']
+    B --> F{"Fan clicks 'Join the Org'"}
     F --> G{Has photo?}
     G -->|Yes| H[Privacy modal: public or private?]
     G -->|No| I[Submit to server]
     H --> I
 
-    I -->|POST /api/badge| J[Server receives metadata + photo data URL]
+    I -->|POST /api/badge| J[Server validates + creates record]
 
     subgraph Server ["Server-Side Processing"]
-        J --> K[Create SQLite record]
-        K --> L{Photo provided?}
-        L -->|Yes| M[Decode base64 → save data/photos/ID.jpg]
-        L -->|No| N[No photo file saved]
-        M --> O[Playwright renders badge]
-        N --> O
-        O --> P{Photo on disk?}
-        P -->|Yes| Q[Inject photo into badge DOM]
-        P -->|No| R[Inject skull headset placeholder]
-        Q --> S[Screenshot → Sharp corner clip → PNG]
-        R --> S
-        S --> T[Save data/badges/ID.png]
-        T --> U{Photo private?}
-        U -->|Yes| V[Re-render without photo → ID-nophoto.png]
-        U -->|No| W[Done]
-        V --> W
+        J --> K[Generate unique HD-XXXXX employee ID]
+        K --> L[Create SQLite record with hashed delete token]
+        L --> M{Photo provided?}
+        M -->|Yes| N[Validate magic bytes + save data/photos/ID.jpg]
+        M -->|No| O[No photo file saved]
+        N --> P[Playwright renders badge on warm page]
+        O --> P
+        P --> Q[Sharp: ensureAlpha → SVG mask composite → RGBA PNG]
+        Q --> R[Save data/badges/ID.png]
+        R --> S{Photo private?}
+        S -->|Yes| T[Re-render without photo → ID-nophoto.png]
+        S -->|No| U[Done]
+        T --> U
     end
 
-    W --> X[Return employeeId + deleteToken]
-    X --> Y[Client shows success + badge status bar]
-    Y --> Z[SSE broadcasts to org chart viewers]
+    U --> V[Return employeeId + deleteToken]
+    V --> W[Client locks ID, shows nav pill + success banner]
+    W --> X[SSE broadcasts 'new-badge' to org chart viewers]
+
+    subgraph Edit ["Returning User Edit Flow"]
+        Y[User returns — badge auto-loads from API] --> Z[Editor pre-populated with existing data]
+        Z --> AA{"User clicks 'Save Changes'"}
+        AA -->|PUT /api/badge/:id| AB[Server validates token + updates record]
+        AB --> AC[Re-render badge + invalidate cache]
+        AC --> AD[SSE broadcasts 'badge-updated' — silent refresh, no animation]
+    end
 ```
 
 ## Render Pipeline
 
-Badges are rendered server-side via a shared headless Chromium instance (one browser, new page per render). Both fan creation and admin re-render use the same `renderBadgePlaywright()` function.
+Badges are rendered server-side via a warm Playwright page (single browser, reusable page). Both fan creation, admin re-render, and photo upload use the same `renderBadgePlaywright()` function.
 
 ```mermaid
 flowchart TD
-    A[renderBadgePlaywright called] --> B[New page on shared Chromium instance]
-    B --> C[Navigate to localhost:PORT/]
-    C --> D[Clear preview area DOM]
-    D --> E[Inject badge data via updateBadge]
-    E --> F{Photo file exists?}
-    F -->|Yes| G[Read photo → base64 data URL → inject]
-    F -->|No| H[Read placeholder-photo.png → inject]
-    G --> I[Wait 300ms for image load]
-    H --> I
-    I --> J[Strip all DOM except badgeCapture]
-    J --> K[Position badge at 0,0 fixed]
-    K --> L{Print mode?}
-    L -->|Yes| M[Square corners, white bg, omitBackground:false]
-    L -->|No| N[Apply clip-path: inset 0 round 75px]
-    N --> O[Screenshot with omitBackground:true]
-    O --> P[Sharp: ensureAlpha → PNG buffer]
-    P --> Q[SVG rounded-rect mask, radius scaled to width]
-    Q --> R[Sharp composite dest-in blend → RGBA PNG]
-    M --> S[Screenshot → Sharp flatten white → PNG]
-    R --> T[page.close in finally block]
-    S --> T
+    A[renderBadgePlaywright called] --> B[Get warm page — reuse or create + navigate]
+    B --> C[Reset print-mode overrides from previous render]
+    C --> D[Inject badge data via page.evaluate → updateBadge]
+    D --> E{Photo file exists?}
+    E -->|Yes| F[Read photo → base64 data URL → inject]
+    E -->|No| G[Use cached placeholder data URL]
+    F --> H[waitForFunction: img.complete + naturalWidth > 0]
+    G --> H
+    H --> I[Screenshot badge element]
+    I --> J{Print mode?}
+    J -->|Yes| K[Sharp: set 600 DPI metadata → PNG]
+    J -->|No| L[Sharp: ensureAlpha → SVG rounded mask → composite dest-in → PNG]
+    K --> M[Return buffer — page stays warm for next render]
+    L --> M
 ```
 
 ## Storage Layout
@@ -219,15 +225,15 @@ flowchart TD
 ```mermaid
 graph LR
     subgraph SQLite ["data/badges.db (SQLite WAL)"]
-        DB[Badge Records<br/>name, dept, title, song<br/>has_photo, photo_public<br/>is_paid, is_printed<br/>is_flagged, is_visible<br/>created_at, delete_token]
+        DB[Badge Records<br/>name, dept, title, song, caption<br/>has_photo, photo_public<br/>is_paid, is_printed<br/>is_flagged, is_visible<br/>created_at, delete_token]
     end
 
     subgraph Filesystem ["data/ directory"]
-        PH[photos/ID.jpg<br/>Cropped headshot<br/>700x630 JPEG 85%]
-        BD[badges/ID.png<br/>Full rendered badge<br/>RGBA PNG, transparent corners]
+        PH[photos/ID.jpg<br/>Cropped headshot<br/>JPEG, validated magic bytes]
+        BD[badges/ID.png<br/>Full rendered badge<br/>RGBA PNG, rounded corners]
         NP[badges/ID-nophoto.png<br/>Privacy variant<br/>Only if photo_public=false]
-        TH[thumbs/ID.png<br/>320px thumbnail, cached]
-        HS[headshots/ID.jpg<br/>200px headshot, cached]
+        TH[thumbs/ID.png<br/>320px thumbnail, cached<br/>Mtime-based invalidation]
+        HS[headshots/ID.jpg<br/>200px headshot, cached<br/>Mtime-based invalidation]
     end
 
     DB -.->|has_photo flag| PH
@@ -241,16 +247,37 @@ graph LR
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
 | `/api/badge` | POST | Rate limited | Create badge → Playwright render |
+| `/api/badge/:id` | GET | Public | Badge metadata (name, dept, title, caption, etc.) |
+| `/api/badge/:id` | PUT | Delete token | Edit badge → re-render + quiet SSE update |
+| `/api/badge/:id` | DELETE | Delete token | Self-service badge removal + file cleanup |
 | `/api/badge/:id/image` | GET | Public | Serve badge PNG (respects photo privacy) |
-| `/api/badge/:id/thumb` | GET | Public | 320px thumbnail (auto-cached) |
-| `/api/badge/:id/headshot` | GET | Public | 200px headshot (auto-cached, privacy-aware) |
+| `/api/badge/:id/thumb` | GET | Public | 320px thumbnail (lazy-generated, cached) |
+| `/api/badge/:id/headshot` | GET | Public | 200px headshot (lazy-generated, privacy-aware) |
 | `/api/badge/:id/print` | GET | Public | 600 DPI CR80, white bg, square corners |
-| `/api/badge/:id/photo` | GET | Admin | Serve original cropped photo |
+| `/api/orgchart` | GET | Public | Paginated badge list (division/dept filters) |
+| `/api/orgchart/stats` | GET | Public | Department counts, newest hire, sparkline |
+| `/api/badges/stream` | GET | Public | SSE live events (new-badge, badge-updated) |
 | `/api/admin/badge/:id/render` | POST | Bearer | Re-render badge via Playwright |
-| `/api/admin/badge/:id/photo` | POST | Bearer | Upload/replace photo |
+| `/api/admin/badge/:id/photo` | POST | Bearer | Upload photo → auto re-render |
+| `/api/admin/badge/:id/photo-source` | GET | Bearer | Serve original uploaded photo |
+| `/api/admin/badges` | GET | Bearer | Admin badge list with filters |
 | `/api/admin/demo/start` | POST | Bearer | Generate 5-100 test badges |
+| `/api/admin/demo/cleanup` | POST | Bearer | Remove all demo badges + files |
 | `/api/admin/presentation/start` | POST | Bearer | Start presentation mode |
-| `/api/badges/stream` | GET | Public | SSE live badge events |
+| `/api/admin/export/csv` | GET | Bearer | CSV export (formula injection protected) |
+
+## Security
+
+- Timing-safe admin token comparison (crypto.timingSafeEqual)
+- Brute force protection (5 fails = 15min lockout, cleared on success)
+- Photo upload magic byte validation (JPEG/PNG only) + max dimension check
+- Per-IP SSE connection limiting (10 max)
+- Rate limiting with LRU eviction (3/hour, 10/day; relaxed in SHOW_MODE)
+- Two-tier profanity filter across all text fields including caption and accessCss
+- CSP headers (frame-ancestors 'none', nosniff, DENY)
+- CSV export formula injection prevention
+- Startup orphan file sweep (cleans files with no matching DB record)
+- Soft-delete file cleanup (user deletion removes all associated files)
 
 ## License
 
