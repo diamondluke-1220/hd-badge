@@ -3,11 +3,16 @@
 // Fighting-game character select screen for the employee directory.
 // VS animation is the main presentation focus — Punch-Out inspired choreography.
 
+const ROSTER_SIZE = 24;
+const ROSTER_COOLDOWN = 3; // fights to wait before swapping out a fought badge
+
 window.ArcadeRenderer = {
   _container: null,
   _stats: null,
   _allBadges: [],
   _bossBadges: [],
+  _rosterSlots: [],   // { badge, foughtAt: null|tickNumber } — active in grid
+  _rosterPool: [],    // badges waiting to enter the roster
   _selectedBadge: null,
   _locked: false,
   _intervals: [],
@@ -155,6 +160,8 @@ window.ArcadeRenderer = {
     this._stats = stats;
     this._allBadges = [];
     this._bossBadges = [];
+    this._rosterSlots = [];
+    this._rosterPool = [];
     this._selectedBadge = null;
     this._locked = false;
     this._intervals = [];
@@ -198,12 +205,19 @@ window.ArcadeRenderer = {
   },
 
   async _fetchAllBadges() {
-    const badges = await BadgePool.fetchAll({ limit: 100 });
+    const badges = await BadgePool.fetchAll({ limit: 500 });
     // Band members are bosses only — they appear as opponents, not as rotating fighters
-    this._allBadges = badges.filter(b => !b.isBandMember);
+    const fanBadges = [];
     badges.forEach(b => {
       if (b.isBandMember) this._bossBadges.push(b);
+      else fanBadges.push(b);
     });
+    this._allBadges = fanBadges;
+
+    // Split into active roster (up to ROSTER_SIZE) + waiting pool
+    const shuffled = hdShuffle([...fanBadges]);
+    this._rosterSlots = shuffled.slice(0, ROSTER_SIZE).map(b => ({ badge: b, foughtAt: null }));
+    this._rosterPool = shuffled.slice(ROSTER_SIZE);
   },
 
   // ─── Layout (Clean Grid — no arena, no fighter portraits) ───────
@@ -295,9 +309,9 @@ window.ArcadeRenderer = {
     const grid = this._gridPanel;
     if (!grid) return;
 
-    // API already returns bosses first, then newest — use that order
-    this._allBadges.forEach(badge => {
-      const slot = this._createSlot(badge);
+    // Only render active roster slots (not the full pool)
+    this._rosterSlots.forEach(rs => {
+      const slot = this._createSlot(rs.badge);
       grid.appendChild(slot);
     });
 
@@ -436,8 +450,15 @@ window.ArcadeRenderer = {
   // ─── Rotation System ───────────────────────────────────────
 
   _startRotation() {
-    if (this._allBadges.length === 0) return;
-    this._shuffledBadges = hdShuffle(this._allBadges);
+    if (this._rosterSlots.length === 0) return;
+    // Build fight queue from unfought roster members
+    this._shuffledBadges = hdShuffle(this._rosterSlots.filter(rs => rs.foughtAt === null).map(rs => rs.badge));
+    // If everyone has fought, pick from oldest-fought
+    if (this._shuffledBadges.length === 0) {
+      this._shuffledBadges = this._rosterSlots
+        .slice().sort((a, b) => (a.foughtAt || 0) - (b.foughtAt || 0))
+        .map(rs => rs.badge);
+    }
     this._rotationIndex = 0;
     this._rotationTick = 0;
 
@@ -595,16 +616,7 @@ window.ArcadeRenderer = {
     const interval = animationsEnabled() ? 18000 : 3000;
     this._rotationTimer = setInterval(() => {
       if (this._isArrivalActive || this._locked || this._isVSActive) return;
-      this._rotationTick++;
       this._rotationIndex++;
-
-      if (this._rotationIndex >= this._shuffledBadges.length) {
-        this._shuffledBadges = hdShuffle(this._allBadges);
-        this._rotationIndex = 0;
-        // New round — clear all fight result markers
-        this._clearFightResults();
-      }
-
       this._showVSMatchup();
     }, interval);
     this._intervals.push(this._rotationTimer);
@@ -790,9 +802,89 @@ window.ArcadeRenderer = {
     });
   },
 
+  // ─── Roster Swap Logic ──────────────────────────────────────
+
+  _markFought(employeeId) {
+    const rs = this._rosterSlots.find(r => r.badge.employeeId === employeeId);
+    if (rs) rs.foughtAt = this._rotationTick;
+  },
+
+  _postFightSwap() {
+    if (this._rosterPool.length === 0) return;
+
+    // Find roster members eligible for swap (fought ROSTER_COOLDOWN+ ticks ago)
+    const swappable = this._rosterSlots.filter(rs =>
+      rs.foughtAt !== null && (this._rotationTick - rs.foughtAt) >= ROSTER_COOLDOWN
+    );
+
+    // Sort by oldest fought first
+    swappable.sort((a, b) => (a.foughtAt || 0) - (b.foughtAt || 0));
+
+    // Swap one per fight cycle to keep it gradual
+    if (swappable.length > 0 && this._rosterPool.length > 0) {
+      this._swapRosterSlot(swappable[0]);
+    }
+  },
+
+  _swapRosterSlot(rosterSlot) {
+    const oldBadge = rosterSlot.badge;
+    const newBadge = this._rosterPool.shift();
+    if (!newBadge) return;
+
+    // Remove old slot from DOM
+    const oldSlotEl = this._container.querySelector(`[data-employee-id="${oldBadge.employeeId}"]`);
+    if (oldSlotEl) {
+      oldSlotEl.classList.add('slot-swap-out');
+      setTimeout(() => {
+        oldSlotEl.remove();
+        // Add new slot
+        const newSlotEl = this._createSlot(newBadge);
+        newSlotEl.classList.add('slot-swap-in');
+        this._gridPanel.appendChild(newSlotEl);
+        this._autoSizeGrid();
+        setTimeout(() => newSlotEl.classList.remove('slot-swap-in'), 500);
+      }, 300);
+    }
+
+    // Update roster state
+    rosterSlot.badge = newBadge;
+    rosterSlot.foughtAt = null;
+
+    // Old badge goes back to pool (can re-enter later)
+    this._rosterPool.push(oldBadge);
+  },
+
+  _forceSwapForSSE(newBadge) {
+    // Priority eviction: fought badges first (oldest), then unfought (oldest in roster)
+    const fought = this._rosterSlots
+      .filter(rs => rs.foughtAt !== null)
+      .sort((a, b) => (a.foughtAt || 0) - (b.foughtAt || 0));
+
+    const target = fought.length > 0 ? fought[0] : this._rosterSlots[0];
+    if (!target) return;
+
+    // Direct swap — no pool recycling for the evicted badge (it goes to pool)
+    const oldBadge = target.badge;
+    const oldSlotEl = this._container.querySelector(`[data-employee-id="${oldBadge.employeeId}"]`);
+    if (oldSlotEl) oldSlotEl.remove();
+
+    target.badge = newBadge;
+    target.foughtAt = null;
+    this._rosterPool.push(oldBadge);
+  },
+
   _showVSMatchup() {
+    // Rebuild fight queue if exhausted
     if (this._rotationIndex >= this._shuffledBadges.length) {
-      this._shuffledBadges = hdShuffle(this._allBadges);
+      const unfought = this._rosterSlots.filter(rs => rs.foughtAt === null).map(rs => rs.badge);
+      if (unfought.length > 0) {
+        this._shuffledBadges = hdShuffle(unfought);
+      } else {
+        // Everyone fought — pick oldest-fought for rematches
+        this._shuffledBadges = this._rosterSlots
+          .slice().sort((a, b) => (a.foughtAt || 0) - (b.foughtAt || 0))
+          .map(rs => rs.badge);
+      }
       this._rotationIndex = 0;
       this._clearFightResults();
     }
@@ -828,16 +920,16 @@ window.ArcadeRenderer = {
         // Blinking INSERT COIN style text during breather — immediately visible
         this._setAnnouncer('WELCOME TO THE CORPORATE ARENA', { blink: true, large: true });
 
+        // Mark fighter as fought + run roster swap logic
+        this._markFought(currentBadge.employeeId);
+        this._rotationTick++;
+        this._postFightSwap();
+
         // Chain next matchup directly — breather owns the loop, no interval dependency
         const breatherId = setTimeout(() => {
           if (this._locked || this._isArrivalActive || this._isVSActive) return;
           this._setAnnouncer('', { blink: false, large: false });
           this._rotationIndex++;
-          if (this._rotationIndex >= this._shuffledBadges.length) {
-            this._shuffledBadges = hdShuffle(this._allBadges);
-            this._rotationIndex = 0;
-            this._clearFightResults();
-          }
           this._showVSMatchup();
         }, 4000);
         this._timeouts.push(breatherId);
@@ -872,10 +964,25 @@ window.ArcadeRenderer = {
 
     if (badge.isBandMember) {
       this._bossBadges.push(badge);
-    } else {
-      this._allBadges.push(badge);
+      // Boss — no roster slot needed, just resume
+      this._isArrivalActive = false;
+      if (this._arrivalQueue.length > 0) {
+        const next = this._arrivalQueue.shift();
+        this.addBadge(next);
+      } else {
+        this._resumeRotation();
+      }
+      return;
     }
-    this._shuffledBadges = hdShuffle(this._allBadges);
+
+    this._allBadges.push(badge);
+
+    // Force-swap into roster (evicts oldest fought badge)
+    if (this._rosterSlots.length >= ROSTER_SIZE) {
+      this._forceSwapForSSE(badge);
+    } else {
+      this._rosterSlots.push({ badge, foughtAt: null });
+    }
 
     const div = getDivisionForDept(badge.department, badge.isBandMember);
     const slot = this._createSlot(badge);
@@ -884,7 +991,7 @@ window.ArcadeRenderer = {
     if (!target) return;
 
     if (this._activeTab !== 'ALL' && div !== this._activeTab) {
-      slot.style.display = 'none';
+      slot.classList.add('slot-hidden');
     }
 
     if (animationsEnabled()) {
@@ -893,6 +1000,10 @@ window.ArcadeRenderer = {
     } else {
       this._getDivisionInsertTarget(div).appendChild(slot);
     }
+
+    // Mark as fought (they just had their VS intro fight)
+    this._markFought(badge.employeeId);
+    this._rotationTick++;
 
     slot.classList.add('new');
     this._autoSizeGrid();
@@ -1001,7 +1112,6 @@ window.ArcadeRenderer = {
 
   // ─── Destroy ───────────────────────────────────────────────
 
-  destroy() {
   updateBadge(badge) {
     // Update in-memory badge data
     const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
@@ -1039,6 +1149,8 @@ window.ArcadeRenderer = {
     this._stats = null;
     this._allBadges = [];
     this._bossBadges = [];
+    this._rosterSlots = [];
+    this._rosterPool = [];
     this._selectedBadge = null;
     this._locked = false;
     this._gridPanel = null;
