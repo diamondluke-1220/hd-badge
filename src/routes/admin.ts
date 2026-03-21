@@ -6,7 +6,7 @@ import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import archiver from 'archiver';
-import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge } from '../db';
+import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge, reissueToken } from '../db';
 import { log, getLog } from '../logger';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
@@ -135,6 +135,18 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
     return c.json({ success: true, message: 'Flag status toggled.' });
+  });
+
+  // ─── Badge Recovery (reissue token) ─────────────────────
+
+  app.post('/api/admin/badge/:id/recover', (c) => {
+    const id = c.req.param('id');
+    const newToken = reissueToken(id);
+    if (!newToken) {
+      return c.json({ success: false, error: 'Badge not found.' }, 404);
+    }
+    log('info', 'admin', `Recovery token reissued for ${id}`);
+    return c.json({ success: true, employeeId: id, token: newToken });
   });
 
   // ─── Photo Upload ────────────────────────────────────────

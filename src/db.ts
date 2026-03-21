@@ -500,6 +500,15 @@ export function softDeleteBadge(employeeId: string, token: string): boolean {
   return result.changes > 0;
 }
 
+export function reissueToken(employeeId: string): string | null {
+  const badge = getBadge(employeeId);
+  if (!badge) return null;
+  const newToken = randomUUID();
+  db.prepare('UPDATE badges SET delete_token = $token WHERE employee_id = $id')
+    .run({ $token: hashToken(newToken), $id: employeeId });
+  return newToken;
+}
+
 export function hardDeleteBadge(employeeId: string): boolean {
   const result = stmts.hardDelete.run({ $id: employeeId });
   return result.changes > 0;

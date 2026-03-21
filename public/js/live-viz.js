@@ -1,6 +1,28 @@
 // Help Desk Badge App — Live Visualization & Animations
 // Extracted from app.js — SSE, ticker, animations, stats panel
 
+// ─── Nav Headcount Badge ──────────────────────────────────
+
+(function initHeadcount() {
+  const el = document.getElementById('navHeadcount');
+  if (!el) return;
+  // Fetch initial count
+  fetch('/api/orgchart?page=1&limit=1')
+    .then(r => r.json())
+    .then(d => { if (d.total != null) el.textContent = d.total; })
+    .catch(() => {});
+})();
+
+function incrementHeadcount() {
+  const el = document.getElementById('navHeadcount');
+  if (!el) return;
+  const current = parseInt(el.textContent) || 0;
+  el.textContent = current + 1;
+  // Brief green pulse on increment
+  el.classList.add('pulse');
+  setTimeout(() => el.classList.remove('pulse'), 1500);
+}
+
 // ─── Live Org Chart Visualizations ─────────────────────────
 
 // --- SSE Connection ---
@@ -21,6 +43,7 @@ function connectSSE() {
   sseSource.addEventListener('new-badge', (e) => {
     try {
       const badge = JSON.parse(e.data);
+      incrementHeadcount();
       queueLiveAnimation(badge);
     } catch (err) {
       console.error('[SSE] Failed to process badge event:', err);

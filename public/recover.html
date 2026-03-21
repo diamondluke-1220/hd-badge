@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Badge Recovery — Help Desk LLC.</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    .recover-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .recover-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      max-width: 440px;
+      width: 100%;
+      padding: 40px;
+      text-align: center;
+    }
+    .recover-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .recover-title {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 20px;
+      color: white;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .recover-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--accent-green);
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .recover-msg {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+    .recover-error {
+      color: #DC2626;
+    }
+    .recover-btn {
+      display: inline-block;
+      background: var(--accent-green-dark);
+      color: white;
+      font-family: 'Barlow', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-decoration: none;
+      padding: 12px 32px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .recover-btn:hover { background: #22883A; }
+    .recover-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="recover-page">
+  <div class="recover-card" id="recoverCard">
+    <div class="recover-spinner"></div>
+    <div class="recover-msg">Recovering badge access...</div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const token = params.get('token');
+  const card = document.getElementById('recoverCard');
+
+  if (!id || !token) {
+    card.innerHTML = `
+      <div class="recover-icon">&#9888;</div>
+      <div class="recover-title">Invalid Link</div>
+      <p class="recover-msg recover-error">This recovery link is missing required parameters.</p>
+      <a href="/" class="recover-btn">Go to Help Desk</a>
+    `;
+    return;
+  }
+
+  // Verify the token works by testing against the API
+  fetch(`/api/badge/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, {
+    method: 'HEAD',
+  }).then(() => {
+    // Store the credentials in localStorage
+    localStorage.setItem('hd-badge', JSON.stringify({
+      employeeId: id,
+      deleteToken: token,
+    }));
+
+    card.innerHTML = `
+      <div class="recover-icon">&#9989;</div>
+      <div class="recover-title">Badge Recovered</div>
+      <div class="recover-id">${id}</div>
+      <p class="recover-msg">Your badge access has been restored. You can now edit your badge.</p>
+      <a href="/" class="recover-btn">Open Badge Editor</a>
+    `;
+  }).catch(() => {
+    card.innerHTML = `
+      <div class="recover-icon">&#9888;</div>
+      <div class="recover-title">Recovery Failed</div>
+      <p class="recover-msg recover-error">This recovery link may have expired. Please contact the Help Desk crew for a new one.</p>
+      <a href="/" class="recover-btn">Go to Help Desk</a>
+    `;
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -4,728 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HR Dashboard — Help Desk LLC.</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/admin.css">
   <link rel="stylesheet" href="/css/badge.css">
   <link rel="stylesheet" href="/lib/cropper.min.css">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Inter', -apple-system, sans-serif;
-      background: #1C1C22;
-      color: #E0E8F0;
-      min-height: 100vh;
-    }
-
-    /* Login Screen */
-    .login-screen {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      flex-direction: column;
-      gap: 24px;
-    }
-    .login-card {
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 12px;
-      padding: 40px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
-    .login-card h1 {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 11px;
-      letter-spacing: 4px;
-      text-transform: uppercase;
-      color: #5B8DEF;
-      margin-bottom: 8px;
-    }
-    .login-card h2 {
-      font-family: 'Barlow', sans-serif;
-      font-size: 22px;
-      font-weight: 800;
-      color: white;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-bottom: 24px;
-    }
-    .login-card input {
-      width: 100%;
-      padding: 12px 16px;
-      background: #1C1C22;
-      border: 1px solid #3A3A44;
-      border-radius: 8px;
-      color: #E0E8F0;
-      font-size: 14px;
-      margin-bottom: 16px;
-    }
-    .login-card input:focus {
-      outline: none;
-      border-color: #5B8DEF;
-    }
-    .login-card button {
-      width: 100%;
-      padding: 12px;
-      background: #2E7DFF;
-      border: none;
-      border-radius: 8px;
-      color: white;
-      font-family: 'Barlow', sans-serif;
-      font-weight: 700;
-      font-size: 14px;
-      cursor: pointer;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-    .login-card button:hover { background: #5BA3FF; }
-    .login-error {
-      color: #DC2626;
-      font-size: 13px;
-      margin-top: 8px;
-      display: none;
-    }
-
-    /* Dashboard */
-    .dashboard { display: none; }
-    .dash-header {
-      background: #2A2A32;
-      border-bottom: 2px solid #5B8DEF;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .dash-header h1 {
-      font-family: 'Barlow', sans-serif;
-      font-size: clamp(18px, 3vw, 22px);
-      font-weight: 800;
-      letter-spacing: 4px;
-      text-transform: uppercase;
-      color: white;
-    }
-    .dash-header .subtitle {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: #B0BEC5;
-      letter-spacing: 2px;
-      margin-top: 4px;
-    }
-    .dash-header button {
-      background: none;
-      border: 1px solid #3A3A44;
-      color: #B0BEC5;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .dash-header button:hover {
-      border-color: #5B8DEF;
-      color: #5B8DEF;
-    }
-
-    /* Stats Bar */
-    .stats-bar {
-      display: flex;
-      gap: 16px;
-      padding: 20px 24px;
-      overflow-x: auto;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .stat-card {
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 10px;
-      padding: 16px 20px;
-      min-width: 140px;
-      flex: 1;
-    }
-    .stat-card .stat-value {
-      font-family: 'Barlow', sans-serif;
-      font-size: 28px;
-      font-weight: 800;
-      color: white;
-    }
-    .stat-card .stat-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: #B0BEC5;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-top: 4px;
-    }
-
-    /* Filters */
-    .filters-bar {
-      display: flex;
-      gap: 12px;
-      padding: 0 24px 16px;
-      flex-wrap: wrap;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .filter-input {
-      padding: 8px 14px;
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 8px;
-      color: #E0E8F0;
-      font-size: 13px;
-      flex: 1;
-      min-width: 180px;
-    }
-    .filter-input:focus {
-      outline: none;
-      border-color: #5B8DEF;
-    }
-    .filter-select {
-      padding: 8px 14px;
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 8px;
-      color: #E0E8F0;
-      font-size: 13px;
-      min-width: 160px;
-    }
-
-    /* Table */
-    .badge-table-wrap {
-      padding: 0 24px 40px;
-      overflow-x: auto;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .badge-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    .badge-table th {
-      text-align: left;
-      padding: 8px 10px;
-      font-family: 'JetBrains Mono', monospace;
-      color: #B0BEC5;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      border-bottom: 1px solid #3A3A44;
-      white-space: nowrap;
-    }
-    .badge-table td {
-      padding: 6px 10px;
-      border-bottom: 1px solid #2A2A32;
-      vertical-align: middle;
-    }
-    .badge-table tr:hover td {
-      background: #2A2A32;
-    }
-    .badge-table tr.row-hidden td {
-      opacity: 0.5;
-    }
-    .badge-id {
-      font-family: 'JetBrains Mono', monospace;
-      color: #B0BEC5;
-      font-size: 12px;
-    }
-    .badge-name { font-weight: 700; color: white; font-size: 13px; }
-    .badge-dept {
-      font-size: 12px;
-      color: #B0BEC5;
-    }
-    .badge-title-cell {
-      font-size: 12px;
-      color: #999;
-    }
-    .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 4px;
-      vertical-align: middle;
-    }
-    .status-dot.green { background: #22C55E; }
-    .status-dot.red { background: #DC2626; }
-    .status-dot.blue { background: #3B82F6; }
-    .status-dot.yellow { background: #F59E0B; }
-    .status-dot.gray { background: #555; }
-    .status-visible { color: #44BB66; font-size: 11px; }
-    .status-hidden { color: #DC2626; font-size: 11px; }
-    .status-band {
-      background: #3D2F00;
-      color: #FFCC00;
-      padding: 1px 6px;
-      border-radius: 3px;
-      font-size: 10px;
-      font-weight: 600;
-    }
-
-    /* Badge Preview Modal */
-    .preview-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.85);
-      z-index: 2000;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-      flex-direction: column;
-      gap: 16px;
-    }
-    .preview-modal.active { display: flex; }
-    .preview-modal-img {
-      max-height: 65vh;
-      max-width: 90vw;
-      border-radius: 8px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    }
-    .preview-modal-info {
-      color: #B0BEC5;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 13px;
-      text-align: center;
-    }
-    .preview-modal-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .preview-modal-close {
-      position: absolute;
-      top: 20px;
-      right: 24px;
-      background: none;
-      border: none;
-      color: #999;
-      font-size: 28px;
-      cursor: pointer;
-    }
-    .preview-modal-close:hover { color: white; }
-
-    /* Action buttons */
-    .btn-action {
-      padding: 4px 8px;
-      border: 1px solid #3A3A44;
-      background: none;
-      color: #B0BEC5;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 11px;
-      margin-right: 2px;
-      margin-bottom: 2px;
-    }
-    .actions-cell {
-      white-space: nowrap;
-    }
-    .btn-action:hover {
-      border-color: #5B8DEF;
-      color: white;
-    }
-    .btn-action.btn-danger:hover {
-      border-color: #DC2626;
-      color: #DC2626;
-    }
-    .btn-action.btn-paid {
-      border-color: #22C55E;
-      color: #22C55E;
-    }
-    .btn-action.btn-printed {
-      border-color: #3B82F6;
-      color: #3B82F6;
-    }
-    .status-paid {
-      color: #22C55E;
-      font-size: 13px;
-    }
-    .status-unpaid {
-      color: #999;
-      font-size: 13px;
-    }
-    .status-printed {
-      color: #3B82F6;
-      font-size: 13px;
-    }
-    .status-flagged {
-      color: #F59E0B;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .btn-action.btn-flagged {
-      border-color: #F59E0B;
-      color: #F59E0B;
-    }
-
-    /* Pagination */
-    .pagination {
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-      padding: 16px 24px;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .pagination button {
-      padding: 6px 14px;
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 6px;
-      color: #E0E8F0;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .pagination button:hover { border-color: #5B8DEF; }
-    .pagination button:disabled {
-      opacity: 0.4;
-      cursor: default;
-    }
-    .pagination .page-info {
-      display: flex;
-      align-items: center;
-      color: #999;
-      font-size: 13px;
-    }
-
-    /* Analytics Section */
-    .analytics-section {
-      padding: 0 24px 20px;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-    .analytics-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .analytics-header h2 {
-      font-family: 'Barlow', sans-serif;
-      font-weight: 800;
-      font-size: clamp(13px, 2.5vw, 15px);
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      color: #B0BEC5;
-    }
-    .analytics-toggle {
-      background: none;
-      border: 1px solid #3A3A44;
-      color: #B0BEC5;
-      padding: 6px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .analytics-toggle:hover {
-      border-color: #5B8DEF;
-      color: #5B8DEF;
-    }
-    .analytics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-    .analytics-card {
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 10px;
-      padding: 16px;
-    }
-    .analytics-card h3 {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      color: #B0BEC5;
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-bottom: 10px;
-    }
-    .analytics-card .rank-list {
-      list-style: none;
-    }
-    .analytics-card .rank-list li {
-      display: flex;
-      justify-content: space-between;
-      padding: 5px 0;
-      font-size: 14px;
-      border-bottom: 1px solid #2A2A32;
-    }
-    .analytics-card .rank-list li:last-child {
-      border-bottom: none;
-    }
-    .rank-name {
-      color: #E0E8F0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 160px;
-    }
-    .rank-count {
-      color: #E0E8F0;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 14px;
-      font-weight: 600;
-      min-width: 30px;
-      text-align: right;
-    }
-    .rank-num {
-      color: #5B8DEF;
-      font-size: 12px;
-      margin-right: 6px;
-      min-width: 16px;
-    }
-    .analytics-pair {
-      display: flex;
-      justify-content: space-between;
-      padding: 6px 0;
-      font-size: 14px;
-    }
-    .analytics-pair .pair-label { color: #B0BEC5; }
-    .analytics-pair .pair-value { color: white; font-weight: 700; font-size: 18px; }
-    .analytics-bar {
-      display: flex;
-      height: 8px;
-      border-radius: 4px;
-      overflow: hidden;
-      margin-top: 8px;
-      background: #1C1C22;
-    }
-    .analytics-bar .bar-fill {
-      height: 100%;
-      transition: width 0.3s;
-    }
-
-    /* Date inputs */
-    input[type="date"] {
-      padding: 8px 14px;
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 8px;
-      color: #E0E8F0;
-      font-size: 13px;
-      min-width: 140px;
-    }
-    input[type="date"]:focus {
-      outline: none;
-      border-color: #5B8DEF;
-    }
-    input[type="date"]::-webkit-calendar-picker-indicator {
-      filter: invert(0.7);
-    }
-
-    /* Confirm dialog */
-    .confirm-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-    }
-    .confirm-card {
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 12px;
-      padding: 32px;
-      max-width: 400px;
-      width: 90%;
-      text-align: center;
-    }
-    .confirm-card h3 {
-      color: #DC2626;
-      margin-bottom: 12px;
-      font-size: 16px;
-    }
-    .confirm-card p {
-      color: #B0BEC5;
-      font-size: 14px;
-      margin-bottom: 24px;
-    }
-    .confirm-card .btn-row {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-    }
-    .confirm-card button {
-      padding: 8px 20px;
-      border-radius: 6px;
-      border: 1px solid #3A3A44;
-      background: none;
-      color: #E0E8F0;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .confirm-card .btn-confirm {
-      background: #DC2626;
-      border-color: #DC2626;
-      color: white;
-    }
-
-    /* Empty state */
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: #999;
-    }
-
-    /* Crop Modal */
-    .admin-crop-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.9);
-      z-index: 200;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-    .admin-crop-modal.active {
-      display: flex;
-    }
-    .admin-crop-container {
-      width: 100%;
-      max-width: 500px;
-      max-height: 60vh;
-    }
-    .admin-crop-container img {
-      max-width: 100%;
-      display: block;
-    }
-    .admin-crop-actions {
-      display: flex;
-      gap: 12px;
-      margin-top: 20px;
-    }
-    .admin-crop-actions button {
-      padding: 10px 24px;
-      border-radius: 8px;
-      border: 1px solid #3A3A44;
-      background: #2A2A32;
-      color: #E0E8F0;
-      cursor: pointer;
-      font-size: 14px;
-      font-family: 'Barlow', sans-serif;
-      font-weight: 600;
-    }
-    .admin-crop-actions button:hover {
-      border-color: #5B8DEF;
-    }
-    .admin-crop-actions .btn-crop-confirm {
-      background: #2E7DFF;
-      border-color: #2E7DFF;
-      color: white;
-    }
-    .admin-crop-actions .btn-crop-confirm:hover {
-      background: #5BA3FF;
-    }
-
-    /* Print Queue */
-    .pq-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 12px;
-    }
-    .pq-card {
-      background: #2A2A32;
-      border: 1px solid #3A3A44;
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-    .pq-card-thumb {
-      width: 44px;
-      height: 70px;
-      border-radius: 4px;
-      object-fit: cover;
-      background: #1C1C22;
-      flex-shrink: 0;
-    }
-    .pq-card-info {
-      flex: 1;
-      min-width: 0;
-    }
-    .pq-card-name {
-      font-weight: 700;
-      font-size: 14px;
-      color: #E0E8F0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .pq-card-dept {
-      font-size: 11px;
-      color: #999;
-      margin-top: 2px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .pq-card-date {
-      font-size: 11px;
-      color: #999;
-      margin-top: 4px;
-    }
-    .pq-card-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-    .pq-btn {
-      padding: 6px 10px;
-      border: 1px solid #3A3A44;
-      border-radius: 6px;
-      background: #1C1C22;
-      color: #B0BEC5;
-      font-size: 12px;
-      font-family: 'JetBrains Mono', monospace;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .pq-btn:hover { border-color: #5B8DEF; color: #5B8DEF; }
-    .pq-btn-print { border-color: #2E7DFF; color: #2E7DFF; }
-    .pq-btn-print:hover { background: #2E7DFF; color: white; }
-    .pq-btn-done { border-color: #22C55E; color: #22C55E; }
-    .pq-btn-done:hover { background: #22C55E; color: white; }
-    .pq-btn[disabled] { opacity: 0.5; cursor: default; }
-    .pq-btn-batch { border-color: #D97706; color: #D97706; }
-    .pq-btn-batch:hover { background: #D97706; color: white; }
-    .pq-btn-rerender { border-color: #8B5CF6; color: #8B5CF6; }
-    .pq-btn-rerender:hover { background: #8B5CF6; color: white; }
-    .pq-empty {
-      color: #999;
-      font-size: 13px;
-      padding: 24px;
-      text-align: center;
-    }
-    .pq-count-badge {
-      background: #2E7DFF;
-      color: white;
-      font-size: 10px;
-      padding: 1px 6px;
-      border-radius: 8px;
-      margin-left: 4px;
-      font-weight: 700;
-    }
-
-    @media (max-width: 768px) {
-      .stats-bar { flex-direction: column; }
-      .stat-card { min-width: auto; }
-      .badge-table { font-size: 14px; }
-      .badge-table th, .badge-table td { padding: 8px 6px; }
-      .badge-thumb { width: 30px; height: 48px; }
-      /* Prevent iOS auto-zoom on input focus */
-      input, select, textarea { font-size: 16px; }
-      /* Bump small label text for mobile readability */
-      .stat-card .stat-label { font-size: 11px; }
-      .analytics-header h2 { font-size: 16px; }
-      .btn-action { font-size: 13px; padding: 6px 12px; }
-      .filter-input, .filter-select { font-size: 14px; }
-    }
+    /* Admin-specific overrides: reset base body styles from app.css
+       that conflict with admin layout (editor, nav, etc.) */
+    .app-header, .editor, .fab-group, .public-orgchart,
+    .popover, .badge-capture, .edit-hint, .preview-wrapper,
+    .badge-status-pill, .submit-success, .skip-link,
+    .ticker-bar, .terminal-overlay { display: none !important; }
   </style>
 </head>
 <body>
@@ -749,7 +38,6 @@
       <div class="subtitle">Authorized Personnel Only</div>
     </div>
     <nav style="display:flex;gap:8px;" role="navigation" aria-label="Dashboard actions">
-      <button onclick="togglePrintQueue()">Print Queue <span class="pq-count-badge" id="pqNavCount" style="display:none;">0</span></button>
       <button onclick="toggleAnalytics()">Analytics</button>
       <button onclick="toggleDemo()">Demo Mode</button>
       <button onclick="togglePresentation()">Presentation</button>
@@ -912,6 +200,21 @@
 
 <script src="/lib/cropper.min.js"></script>
 <script>
+// ─── Toast Helper (replaces alert()) ────────────────────
+function showToast(message, type = 'success') {
+  const existing = document.querySelector('.admin-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = `admin-toast toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
 // ─── State ──────────────────────────────────────────────
 let token = sessionStorage.getItem('admin-token') || '';
 let currentPage = 1;
@@ -1000,7 +303,7 @@ async function loadStats() {
       <div class="stat-value">${departments.length}</div>
       <div class="stat-label">Departments</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card stat-card-clickable" onclick="togglePrintQueue()" title="Toggle Print Queue">
       <div class="stat-value" id="pqStatCount" style="color:#2E7DFF">—</div>
       <div class="stat-label">Print Queue</div>
     </div>
@@ -1104,21 +407,40 @@ function goPage(p) {
 }
 
 // ─── Actions ────────────────────────────────────────────
+function flashRow(id) {
+  requestAnimationFrame(() => {
+    const row = document.querySelector(`.badge-id`);
+    // Find the row containing this badge ID
+    const rows = document.querySelectorAll('.badge-table tbody tr');
+    for (const r of rows) {
+      const idCell = r.querySelector('.badge-id');
+      if (idCell && idCell.textContent === id) {
+        r.classList.add('row-flash');
+        r.addEventListener('animationend', () => r.classList.remove('row-flash'), { once: true });
+        break;
+      }
+    }
+  });
+}
+
 async function toggleFlag(id) {
   await apiFetch(`/api/admin/badge/${id}/flag`, { method: 'POST' });
-  loadBadges();
+  await loadBadges();
+  flashRow(id);
 }
 
 async function togglePaid(id) {
   await apiFetch(`/api/admin/badge/${id}/paid`, { method: 'POST' });
-  loadBadges();
+  await loadBadges();
+  flashRow(id);
   loadPrintQueueCount();
   if (pqVisible) loadPrintQueue();
 }
 
 async function togglePrinted(id) {
   await apiFetch(`/api/admin/badge/${id}/printed`, { method: 'POST' });
-  loadBadges();
+  await loadBadges();
+  flashRow(id);
   loadPrintQueueCount();
   if (pqVisible) loadPrintQueue();
 }
@@ -1126,7 +448,8 @@ async function togglePrinted(id) {
 async function toggleHide(id) {
   await apiFetch(`/api/admin/badge/${id}/hide`, { method: 'POST' });
   loadStats();
-  loadBadges();
+  await loadBadges();
+  flashRow(id);
 }
 
 let adminCropper = null;
@@ -1210,13 +533,13 @@ async function applyAdminCrop() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(data.message);
+        showToast(data.message, 'success');
         loadBadges();
       } else {
-        alert('Upload failed: ' + (data.error || 'Unknown error'));
+        showToast('Upload failed: ' + (data.error || 'Unknown error'), 'error');
       }
     } catch (err) {
-      alert('Upload failed: ' + err.message);
+      showToast('Upload failed: ' + err.message, 'error');
     }
     cancelAdminCrop();
   }, 'image/jpeg', 0.85);
@@ -1248,6 +571,26 @@ async function doDelete(id, btn) {
   if (overlay) overlay.remove();
   loadStats();
   loadBadges();
+}
+
+// ─── Badge Recovery ────────────────────────────────────
+async function recoverBadge(id) {
+  const data = await apiFetch(`/api/admin/badge/${id}/recover`, { method: 'POST' });
+  if (!data.success) {
+    showToast(data.error || 'Recovery failed.', 'error');
+    return;
+  }
+
+  const recoveryUrl = `${window.location.origin}/recover?id=${encodeURIComponent(data.employeeId)}&token=${encodeURIComponent(data.token)}`;
+
+  // Copy to clipboard
+  try {
+    await navigator.clipboard.writeText(recoveryUrl);
+    showToast(`Recovery link copied for ${data.employeeId}`, 'success');
+  } catch {
+    // Fallback: prompt with the URL
+    prompt('Recovery link (copy this):', recoveryUrl);
+  }
 }
 
 // ─── Divisions ──────────────────────────────────────────
@@ -1369,7 +712,7 @@ async function pqDownload(id, btn) {
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
-    alert('Failed to download print badge. Try again.');
+    showToast('Failed to download print badge. Try again.', 'error');
   }
   btn.disabled = false;
   btn.innerHTML = '&#128424; Print';
@@ -1398,7 +741,7 @@ async function batchPrintDownload() {
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
-      alert(data.error || 'Batch print failed.');
+      showToast(data.error || 'Batch print failed.', 'error');
       return;
     }
     const blob = await resp.blob();
@@ -1409,7 +752,7 @@ async function batchPrintDownload() {
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
-    alert('Batch print failed. Try again.');
+    showToast('Batch print failed. Try again.', 'error');
   }
   btn.disabled = false;
   btn.innerHTML = '&#128230; Download All (ZIP)';
@@ -1423,12 +766,12 @@ async function rerenderAll() {
   try {
     const data = await apiFetch('/api/admin/badges/rerender-all', { method: 'POST' });
     if (data.success) {
-      alert(`Re-render complete: ${data.rendered} rendered, ${data.failed} failed out of ${data.total} total.`);
+      showToast(`Re-render complete: ${data.rendered} rendered, ${data.failed} failed out of ${data.total} total.`, 'success');
     } else {
-      alert(data.error || 'Re-render failed.');
+      showToast(data.error || 'Re-render failed.', 'error');
     }
   } catch (e) {
-    alert('Re-render failed. Try again.');
+    showToast('Re-render failed. Try again.', 'error');
   }
   btn.disabled = false;
   btn.innerHTML = '&#8635; Re-render All Badges';
@@ -1515,7 +858,7 @@ async function exportCSV() {
   const res = await fetch('/api/admin/export/csv', {
     headers: { 'Authorization': `Bearer ${token}` },
   });
-  if (!res.ok) return alert('Export failed.');
+  if (!res.ok) return showToast('Export failed.', 'error');
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1573,6 +916,15 @@ document.getElementById('dateFrom').addEventListener('change', () => {
 document.getElementById('dateTo').addEventListener('change', () => {
   currentPage = 1;
   loadBadges();
+});
+
+// ─── Row Selection (click to highlight) ─────────────────
+document.getElementById('badgeTableBody').addEventListener('click', (e) => {
+  const row = e.target.closest('tr');
+  if (!row) return;
+  // Don't toggle if clicking an action button
+  if (e.target.closest('.btn-action') || e.target.closest('a')) return;
+  row.classList.toggle('row-selected');
 });
 
 // ─── Demo Mode ──────────────────────────────────────────
@@ -1783,13 +1135,13 @@ async function renderBadge(id) {
     });
     const result = await res.json();
     if (result.success) {
-      alert(result.message);
+      showToast(result.message, 'success');
       loadBadges();
     } else {
-      alert('Render failed: ' + (result.error || 'Unknown error'));
+      showToast('Render failed: ' + (result.error || 'Unknown error'), 'error');
     }
   } catch (err) {
-    alert('Render failed: ' + err.message);
+    showToast('Render failed: ' + err.message, 'error');
   }
 }
 
@@ -1821,6 +1173,7 @@ function showPreview(employeeId, name) {
       <a class="btn-action btn-printed" href="/api/admin/badge/${esc(employeeId)}/print" download="${esc(employeeId)}-print.png" style="text-decoration:none;">&#128424; Download Print</a>
       <button class="btn-action" onclick="renderBadge('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#127912; Re-render</button>
       <button class="btn-action" onclick="uploadPhoto('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#128247; Upload Photo</button>
+      <button class="btn-action" onclick="recoverBadge('${esc(employeeId)}')" title="Generate recovery link">&#128273; Recover</button>
     </div>
   `;
   document.body.appendChild(modal);

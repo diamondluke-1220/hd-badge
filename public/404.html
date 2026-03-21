@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Incident Report — Help Desk LLC.</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+
+<div class="incident-page">
+  <div class="incident-card">
+    <div class="incident-header">Incident Report</div>
+
+    <div class="incident-field">
+      <span class="incident-label">Incident #</span>
+      <span class="incident-value" id="incidentNum">IR-0000</span>
+    </div>
+    <div class="incident-field">
+      <span class="incident-label">Date Filed</span>
+      <span class="incident-value" id="incidentDate">00/00/00</span>
+    </div>
+    <div class="incident-field">
+      <span class="incident-label">Severity</span>
+      <span class="incident-value severity-low">LOW</span>
+    </div>
+    <div class="incident-field">
+      <span class="incident-label">Status</span>
+      <span class="incident-value status-unresolved">UNRESOLVED</span>
+    </div>
+    <div class="incident-field">
+      <span class="incident-label">Filed By</span>
+      <span class="incident-value">SYSTEM</span>
+    </div>
+    <div class="incident-field">
+      <span class="incident-label">Assigned To</span>
+      <span class="incident-value">NOBODY</span>
+    </div>
+
+    <p class="incident-desc">
+      The resource you requested could not be located. This incident has been logged and will be reviewed during the next all-hands meeting.
+    </p>
+
+    <p class="incident-quip" id="incidentQuip"></p>
+
+    <a href="/" class="incident-btn">Return to Help Desk</a>
+  </div>
+</div>
+
+<script>
+  // Generate incident number
+  document.getElementById('incidentNum').textContent =
+    'IR-' + String(Math.floor(1000 + Math.random() * 9000));
+
+  // Set date
+  const d = new Date();
+  document.getElementById('incidentDate').textContent =
+    String(d.getMonth() + 1).padStart(2, '0') + '/' +
+    String(d.getDate()).padStart(2, '0') + '/' +
+    String(d.getFullYear()).slice(2);
+
+  // Rotating quips
+  const quips = [
+    'This page has been escalated to a team that does not exist.',
+    'Your request has been added to the backlog. The backlog is on fire.',
+    'We checked the server room. The server room checked out.',
+    'This ticket has been auto-closed due to lack of caring.',
+    'IT has been notified. IT has chosen to ignore this notification.',
+    'The requested resource was last seen near the good coffee machine.',
+    'A ticket has been opened, triaged, deprioritized, and forgotten.',
+    'This incident will be discussed at a meeting about having fewer meetings.',
+    'Resolution ETA: Right after the printer gets fixed.',
+    'The page you\'re looking for called in sick today.',
+    'Have you tried turning the URL off and on again?',
+    'Error 404: Employee morale also not found.',
+  ];
+  document.getElementById('incidentQuip').textContent =
+    quips[Math.floor(Math.random() * quips.length)];
+</script>
+
+</body>
+</html>

@@ -548,11 +548,24 @@ registerAdminRoutes(app, sharedDeps);
 app.get('/orgchart', serveStatic({ path: './public/index.html' }));
 app.get('/presentation', serveStatic({ path: './public/presentation.html' }));
 app.get('/admin', serveStatic({ path: './public/admin.html' }));
+app.get('/recover', serveStatic({ path: './public/recover.html' }));
 
 // ─── Static Files (must be LAST) ─────────────────────────
 
 app.use('/*', serveStatic({ root: './public' }));
 app.get('/', serveStatic({ path: './public/index.html' }));
+
+// ─── 404 Catch-All (themed incident report page) ────────
+// Only serves the HTML error page for navigation requests (not API/assets).
+app.notFound((c) => {
+  const accept = c.req.header('accept') || '';
+  // API requests and non-HTML requests get JSON
+  if (c.req.path.startsWith('/api/') || !accept.includes('text/html')) {
+    return c.json({ success: false, error: 'Not found.' }, 404);
+  }
+  // Browser navigation gets the themed 404 page
+  return c.html(readFileSync(join('public', '404.html'), 'utf-8'), 404);
+});
 
 // ─── Server ──────────────────────────────────────────────
 
