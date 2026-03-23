@@ -40,6 +40,7 @@
     <nav style="display:flex;gap:8px;" role="navigation" aria-label="Dashboard actions">
       <button onclick="toggleAnalytics()">Analytics</button>
       <button onclick="toggleDemo()">Demo Mode</button>
+      <button onclick="toggleShowMode()">Show Mode</button>
       <button onclick="togglePresentation()">Presentation</button>
       <button onclick="toggleLogs()">System Log</button>
       <button onclick="exportCSV()">Export CSV</button>
@@ -100,6 +101,21 @@
       <h2>Badge Analytics</h2>
     </div>
     <div class="analytics-grid" id="analyticsGrid"></div>
+  </div>
+
+  <!-- Show Mode Section -->
+  <div class="analytics-section" id="showModeSection" style="display:none;">
+    <div class="analytics-header">
+      <h2>Show Mode</h2>
+      <span style="font-size:13px;color:#999;" id="showModeStatus">Inactive</span>
+    </div>
+    <div class="analytics-card" style="max-width:600px;">
+      <p style="font-size:13px;color:#B0BEC5;margin-bottom:16px;">
+        Relaxes rate limits for live shows (50/hr, 200/day per IP vs normal 3/hr, 10/day).
+        Clears existing rate limit state on activation.
+      </p>
+      <button class="btn-action" style="padding:8px 16px;font-size:13px;" id="showModeToggleBtn" onclick="showModeToggle()">Enable Show Mode</button>
+    </div>
   </div>
 
   <!-- Demo Mode Section -->
@@ -930,6 +946,30 @@ document.getElementById('badgeTableBody').addEventListener('click', (e) => {
 // ─── Demo Mode ──────────────────────────────────────────
 let demoVisible = false;
 let demoPolling = null;
+
+// ─── Show Mode ──────────────────────────────────────────
+let showModeVisible = false;
+
+function toggleShowMode() {
+  showModeVisible = !showModeVisible;
+  document.getElementById('showModeSection').style.display = showModeVisible ? 'block' : 'none';
+  if (showModeVisible) refreshShowModeStatus();
+}
+
+async function refreshShowModeStatus() {
+  const res = await apiFetch('/api/admin/show-mode/status');
+  const active = res.showMode;
+  document.getElementById('showModeStatus').textContent = active ? 'ACTIVE' : 'Inactive';
+  document.getElementById('showModeStatus').style.color = active ? '#22C55E' : '#999';
+  document.getElementById('showModeToggleBtn').textContent = active ? 'Disable Show Mode' : 'Enable Show Mode';
+}
+
+async function showModeToggle() {
+  const res = await apiFetch('/api/admin/show-mode/toggle', { method: 'POST' });
+  if (res.showMode !== undefined) {
+    refreshShowModeStatus();
+  }
+}
 
 function toggleDemo() {
   demoVisible = !demoVisible;

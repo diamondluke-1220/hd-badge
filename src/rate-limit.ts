@@ -10,6 +10,15 @@ interface RateEntry {
 }
 
 const store = new Map<string, RateEntry>();
+let showModeActive = process.env.SHOW_MODE === '1';
+
+export function setShowMode(active: boolean): void {
+  showModeActive = active;
+}
+
+export function isShowMode(): boolean {
+  return showModeActive;
+}
 
 // Every 10 minutes, remove rate limit entries with no activity in the past 24 hours
 setInterval(() => {
@@ -21,8 +30,8 @@ setInterval(() => {
 }, 10 * 60 * 1000);
 
 function getLimits(): { hourly: number; daily: number } {
-  if (process.env.SHOW_MODE === '1') {
-    return { hourly: 10, daily: 50 };
+  if (showModeActive) {
+    return { hourly: 50, daily: 200 };
   }
   return { hourly: 3, daily: 10 };
 }

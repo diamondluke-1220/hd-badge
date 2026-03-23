@@ -1114,7 +1114,7 @@ window.ArcadeRenderer = {
     // Update in-memory badge data
     const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
     if (idx >= 0) {
-      Object.assign(this._allBadges[idx], badge);
+      Object.keys(badge).forEach(k => { if (badge[k] !== undefined) this._allBadges[idx][k] = badge[k]; });
     }
     // Update slot name label
     const slot = this._container?.querySelector(`[data-employee-id="${badge.employeeId}"]`);

@@ -12,7 +12,6 @@ import { initDb, closeDb, listAllBadgeIds } from './db';
 import { log } from './logger';
 import { initDemo } from './demo';
 import { initPresentation } from './presentation';
-import { registerPortalRoutes } from './routes/portal';
 import { registerPublicRoutes } from './routes/public';
 import { registerAdminRoutes } from './routes/admin';
 
@@ -280,15 +279,6 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000);
 
-// ─── Captive Portal State ────────────────────────────────
-
-const portalCleared = new Set<string>();
-
-function markPortalCleared(ip: string): void {
-  portalCleared.add(ip);
-  setTimeout(() => portalCleared.delete(ip), 4 * 60 * 60 * 1000);
-}
-
 // ─── Playwright Badge Render ─────────────────────────────
 
 // Cache placeholder photo as data URL at startup (never changes)
@@ -363,7 +353,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       accessLevel: badge.access_level,
       accessCss: badge.access_css,
       photoUrl: photoDataUrl,
-      waveStyle: 'barcode',
+      waveStyle: badge.wave_style || 'barcode',
       caption: badge.caption || 'SCAN TO FILE COMPLAINT',
     });
   }, { badge, photoDataUrl, isPrint: !!options?.print });
@@ -394,7 +384,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
   const meta = await sharp(Buffer.from(pngBuf)).metadata();
   const W = meta.width || 700;
   const H = meta.height || 1100;
-  const R = Math.round(W * 0.04);
+  const R = Math.round(W * 0.0588);
   const roundedMask = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
   );
@@ -523,13 +513,11 @@ function handleSSEDirect(clientIp: string): Response {
 
 const sharedDeps = {
   getClientIp,
-  markPortalCleared,
   broadcastNewBadge,
   broadcastSSE,
   decodeBase64Image,
   renderBadgePlaywright,
   clampField,
-  portalCleared,
   PHOTOS_DIR,
   BADGES_DIR,
   THUMBS_DIR,
@@ -539,7 +527,6 @@ const sharedDeps = {
   HEADSHOT_WIDTH,
 };
 
-registerPortalRoutes(app, sharedDeps);
 registerPublicRoutes(app, sharedDeps);
 registerAdminRoutes(app, sharedDeps);
 
@@ -579,8 +566,9 @@ if (ADMIN_TOKEN) {
 } else {
   console.log(`⚠️  No ADMIN_TOKEN set — admin panel disabled`);
 }
-if (process.env.SHOW_MODE === '1') {
-  console.log(`🎸 SHOW MODE active — relaxed rate limits`);
+import { isShowMode } from './rate-limit';
+if (isShowMode()) {
+  console.log(`🎸 SHOW MODE active — relaxed rate limits (50/hr, 200/day)`);
 }
 
 // Graceful shutdown

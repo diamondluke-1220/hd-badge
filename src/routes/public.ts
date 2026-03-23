@@ -33,7 +33,6 @@ const RESERVED_ACCESS = new Set([
 
 interface PublicDeps {
   getClientIp: (c: any) => string;
-  markPortalCleared: (ip: string) => void;
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
   broadcastSSE: (event: string, data: any) => void;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
@@ -50,7 +49,7 @@ interface PublicDeps {
 
 export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   const {
-    getClientIp, markPortalCleared, broadcastNewBadge, broadcastSSE,
+    getClientIp, broadcastNewBadge, broadcastSSE,
     decodeBase64Image, renderBadgePlaywright, clampField,
     PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR,
     ADMIN_TOKEN, THUMB_WIDTH, HEADSHOT_WIDTH,
@@ -63,6 +62,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
     const rateCheck = checkRateLimit(ip);
     if (!rateCheck.allowed) {
+      log('warn', 'rate-limit', `Blocked ${ip}: ${rateCheck.message}`);
       return c.json({ success: false, error: rateCheck.message }, 429);
     }
 
@@ -73,7 +73,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Invalid request body.' }, 400);
     }
 
-    const { name, department, title, song, accessLevel, accessCss, caption, photo, photoPublic } = body;
+    const { name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
 
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
@@ -166,6 +166,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         accessLevel: cleanAccess,
         accessCss: cleanCss,
         caption: cleanCaption,
+        waveStyle: waveStyle || 'barcode',
         hasPhoto,
         photoPublic: photoPublic !== false,
         source: body.source || 'web',
@@ -194,8 +195,6 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         try { unlinkSync(join(BADGES_DIR, `${result.employeeId}-nophoto.png`)); } catch { /* ignore */ }
         throw renderErr;
       }
-
-      markPortalCleared(ip);
 
       broadcastNewBadge({
         employeeId: result.employeeId,
@@ -257,7 +256,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Invalid request body.' }, 400);
     }
 
-    const { token, name, department, title, song, accessLevel, accessCss, caption, photo, photoPublic } = body;
+    const { token, name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
 
     if (!token) {
       return c.json({ success: false, error: 'Delete token required for edits.' }, 400);
@@ -341,6 +340,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         accessLevel: cleanAccess,
         accessCss: cleanCss,
         caption: cleanCaption,
+        waveStyle: waveStyle || existing.wave_style || 'barcode',
         hasPhoto,
         photoPublic: photoPublic !== false,
         flagged,
@@ -372,15 +372,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       try { unlinkSync(join(HEADSHOTS_DIR, `${id}.jpg`)); } catch { /* ignore */ }
 
       // Broadcast quiet update (no new-badge animation)
-      broadcastSSE('badge-updated', {
-        employeeId: id,
-        name: cleanName,
-        department: cleanDept,
-        title: cleanTitle,
-        accessLevel: cleanAccess,
-        accessCss: cleanCss,
-        isBandMember: false,
-      });
+      broadcastSSE('badge-updated', badge ? serializeBadge(badge) : { employeeId: id });
 
       log('info', 'badge', `Updated ${id}: ${cleanName} → ${cleanDept}`);
 

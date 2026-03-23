@@ -10,6 +10,7 @@ import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, to
 import { log, getLog } from '../logger';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
+import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
 
 interface AdminDeps {
   renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
@@ -478,5 +479,19 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   // Public presentation status (no auth — for SSE reconnect recovery)
   app.get('/api/presentation/status', (c) => {
     return c.json(getPublicState());
+  });
+
+  // ─── Show Mode (relaxed rate limits) ────────────────────
+
+  app.post('/api/admin/show-mode/toggle', (c) => {
+    const active = !isShowMode();
+    setShowMode(active);
+    if (active) resetRateLimits();
+    log('info', 'show-mode', active ? 'Show mode ON — 50/hr, 200/day limits' : 'Show mode OFF — normal limits');
+    return c.json({ showMode: active });
+  });
+
+  app.get('/api/admin/show-mode/status', (c) => {
+    return c.json({ showMode: isShowMode() });
   });
 }

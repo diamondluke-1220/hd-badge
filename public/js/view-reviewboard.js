@@ -1711,7 +1711,7 @@ window.ReviewBoardRenderer = {
     // Update in-memory data — board picks it up on next rotation
     const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
     if (idx >= 0) {
-      Object.assign(this._allBadges[idx], badge);
+      Object.keys(badge).forEach(k => { if (badge[k] !== undefined) this._allBadges[idx][k] = badge[k]; });
     }
   },
 

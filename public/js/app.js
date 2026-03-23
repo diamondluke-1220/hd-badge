@@ -807,6 +807,7 @@ async function submitBadge(photoPublic) {
       accessLevel: state.accessLevel,
       accessCss: ACCESS_CSS[state.accessLevel] || '',
       caption: state.caption,
+      waveStyle: state.waveStyle,
       photo: state.photoUrl || null,
       photoPublic,
       ...(isEdit ? { token: stored.deleteToken } : {}),
@@ -1413,10 +1414,6 @@ function showBadgeDetail(employeeId, name) {
 
 // ─── Init ─────────────────────────────────────────────────
 
-// Clear captive portal — tells server this device has loaded the page,
-// so OS connectivity checks get "success" responses and stop nagging
-fetch('/api/portal/clear', { method: 'POST' }).catch(() => {});
-
 // Check if we're on the org chart public page
 // Set active nav link
 const activePage = window.location.pathname === '/orgchart' ? 'orgchart' : 'editor';
@@ -1473,6 +1470,7 @@ if (window.location.pathname === '/orgchart') {
           state.song = data.song;
           state.accessLevel = data.accessLevel;
           state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
+          state.waveStyle = data.waveStyle || 'barcode';
           state._editingBadgeId = existingId;
 
           // Set issued date from their creation date

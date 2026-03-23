@@ -188,11 +188,20 @@ export function initDb(dbPath: string) {
     }
   });
 
+  // v6: Wave style column (barcode/sticker)
+  runMigration(6, 'Add wave_style column for waveform display preference', () => {
+    const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
+    const colNames = new Set(cols.map(c => c.name));
+    if (!colNames.has('wave_style')) {
+      db.exec("ALTER TABLE badges ADD COLUMN wave_style TEXT DEFAULT 'barcode'");
+    }
+  });
+
   // Prepare all statements
   stmts = {
     insertBadge: db.prepare(`
-      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged, is_demo, caption)
-      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged, $is_demo, $caption)
+      INSERT INTO badges (employee_id, name, department, title, song, access_level, access_css, source, delete_token, has_photo, is_band_member, photo_public, is_flagged, is_demo, caption, wave_style)
+      VALUES ($employee_id, $name, $department, $title, $song, $access_level, $access_css, $source, $delete_token, $has_photo, $is_band_member, $photo_public, $is_flagged, $is_demo, $caption, $wave_style)
     `),
     getBadge: db.prepare('SELECT * FROM badges WHERE employee_id = $id'),
     getBadgeByToken: db.prepare('SELECT * FROM badges WHERE delete_token = $token'),
@@ -211,7 +220,7 @@ export function initDb(dbPath: string) {
     countByDept: db.prepare('SELECT department, COUNT(*) as count FROM badges WHERE is_visible = 1 GROUP BY department ORDER BY count DESC'),
     updateBadge: db.prepare(`
       UPDATE badges SET name = $name, department = $department, title = $title, song = $song,
-        access_level = $access_level, access_css = $access_css, caption = $caption,
+        access_level = $access_level, access_css = $access_css, caption = $caption, wave_style = $wave_style,
         has_photo = $has_photo, photo_public = $photo_public, is_flagged = $is_flagged
       WHERE employee_id = $id AND delete_token = $token
     `),
@@ -308,6 +317,7 @@ export interface BadgeInput {
   accessLevel: string;
   accessCss: string;
   caption?: string;
+  waveStyle?: string;
   hasPhoto: boolean;
   photoPublic: boolean;
   source?: string;
@@ -338,6 +348,7 @@ export interface BadgeRow {
   is_flagged: number;
   is_demo: number;
   caption: string;
+  wave_style: string;
 }
 
 export function createBadge(input: BadgeInput): { employeeId: string; deleteToken: string } {
@@ -360,6 +371,7 @@ export function createBadge(input: BadgeInput): { employeeId: string; deleteToke
     $is_flagged: input.flagged ? 1 : 0,
     $is_demo: input.isDemo ? 1 : 0,
     $caption: input.caption || 'SCAN TO FILE COMPLAINT',
+    $wave_style: input.waveStyle || 'barcode',
   });
 
   return { employeeId, deleteToken };
@@ -475,7 +487,7 @@ export function listBadges(options: {
 
 export function updateBadge(employeeId: string, token: string, input: {
   name: string; department: string; title: string; song: string;
-  accessLevel: string; accessCss: string; caption: string;
+  accessLevel: string; accessCss: string; caption: string; waveStyle: string;
   hasPhoto: boolean; photoPublic: boolean; flagged: boolean;
 }): boolean {
   const result = stmts.updateBadge.run({
@@ -488,6 +500,7 @@ export function updateBadge(employeeId: string, token: string, input: {
     $access_level: input.accessLevel,
     $access_css: input.accessCss,
     $caption: input.caption,
+    $wave_style: input.waveStyle || 'barcode',
     $has_photo: input.hasPhoto ? 1 : 0,
     $photo_public: input.photoPublic ? 1 : 0,
     $is_flagged: input.flagged ? 1 : 0,
@@ -646,6 +659,7 @@ export function serializeBadge(b: BadgeRow, opts?: { admin?: boolean }) {
     photoPublic: !!b.photo_public,
     isBandMember: !!b.is_band_member,
     caption: b.caption || 'SCAN TO FILE COMPLAINT',
+    waveStyle: b.wave_style || 'barcode',
     createdAt: b.created_at,
   };
   if (!opts?.admin) return base;
