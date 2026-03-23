@@ -1059,6 +1059,30 @@ window.ReviewBoardRenderer = {
       // Badge panel glow in division color
       this._setBadgePanelGlow(divColor);
     });
+
+    // Update mobile view
+    this._updateMobileView(badge, name, title, skills, quote, divColor);
+  },
+
+  _updateMobileView(badge, name, title, skills, quote, divColor) {
+    if (!this._mobileView) return;
+    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const photo = this._mobileStrip.querySelector('.rb-mobile-photo');
+    photo.src = imgSrc;
+    photo.alt = name;
+    photo.style.borderColor = divColor;
+    this._mobileStrip.querySelector('.rb-mobile-name').textContent = name;
+    const idEl = this._mobileStrip.querySelector('.rb-mobile-id');
+    idEl.textContent = badge.employeeId || '';
+    idEl.style.color = divColor;
+    this._mobileSkills.textContent = skills;
+    this._mobileReview.innerHTML = '';
+    quote.forEach(line => {
+      const p = document.createElement('div');
+      p.className = 'rb-mobile-review-line';
+      p.textContent = line;
+      this._mobileReview.appendChild(p);
+    });
   },
 
   async _displayBadgeAnimated(badge) {
@@ -1250,6 +1274,9 @@ window.ReviewBoardRenderer = {
     if (this._aiIndicator) this._aiIndicator.classList.remove('active');
 
     this._currentBadge = badge;
+
+    // Update mobile view
+    this._updateMobileView(badge, name, title, skills, quote, divColor);
   },
 
   // ─── Rotation ──────────────────────────────────────────
@@ -1609,7 +1636,45 @@ window.ReviewBoardRenderer = {
 
     contentRow.appendChild(badgePanel);
 
+    // ─── Mobile review layout ──────────────────────────────
+    const mobileView = document.createElement('div');
+    mobileView.className = 'rb-mobile';
+
+    const mobileTitle = document.createElement('div');
+    mobileTitle.className = 'rb-mobile-title';
+    mobileTitle.textContent = 'AI PERFORMANCE REVIEW';
+    mobileView.appendChild(mobileTitle);
+
+    const mobileStrip = document.createElement('div');
+    mobileStrip.className = 'rb-mobile-strip';
+    mobileStrip.innerHTML =
+      '<img class="rb-mobile-photo" src="" alt="">' +
+      '<div class="rb-mobile-info">' +
+        '<div class="rb-mobile-name"></div>' +
+        '<div class="rb-mobile-id"></div>' +
+      '</div>';
+    mobileView.appendChild(mobileStrip);
+
+    const mobileSkills = document.createElement('div');
+    mobileSkills.className = 'rb-mobile-skills';
+    mobileView.appendChild(mobileSkills);
+
+    const mobileReview = document.createElement('div');
+    mobileReview.className = 'rb-mobile-review';
+    mobileView.appendChild(mobileReview);
+
+    // Click to open badge packet
+    mobileView.addEventListener('click', () => {
+      if (this._currentBadge) this._openPacket(this._currentBadge);
+    });
+
+    this._mobileView = mobileView;
+    this._mobileStrip = mobileStrip;
+    this._mobileSkills = mobileSkills;
+    this._mobileReview = mobileReview;
+
     this._stage.appendChild(contentRow);
+    this._stage.appendChild(mobileView);
     this._stage.appendChild(this._srText);
 
     container.appendChild(this._stage);
@@ -1669,6 +1734,10 @@ window.ReviewBoardRenderer = {
     this._badgeCol = null;
     this._boardEl = null;
     this._aiIndicator = null;
+    this._mobileView = null;
+    this._mobileStrip = null;
+    this._mobileSkills = null;
+    this._mobileReview = null;
     this._srText = null;
     this._badgeCells = [];
     this._badgeCanvas = null;

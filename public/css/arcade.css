@@ -2629,12 +2629,13 @@ body.view-arcade .public-orgchart {
 
 @media (max-width: 767px) {
   .arcade-slot {
-    width: 44px;
-    height: 56px;
+    width: calc((100vw - 32px - 16px) / 5);  /* 5 per row, 8px pad + 4×4px gaps */
+    height: auto;
+    aspect-ratio: 0.82;  /* match desktop 120/146 ratio */
   }
 
   .arcade-slot-name {
-    font-size: 7px;
+    font-size: 9px;
   }
 
   .arcade-vs-text {
@@ -2658,9 +2659,8 @@ body.view-arcade .public-orgchart {
     font-size: 9px;
   }
 
-  .arcade-tab {
-    font-size: 7px;
-    padding: 5px 8px;
+  .arcade-tabs {
+    display: none;
   }
 
   .arcade-spotlight {

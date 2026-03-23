@@ -114,6 +114,8 @@ body {
   margin-top: 12px;
   flex-wrap: wrap;
 }
+.nav-short { display: none; }
+
 .app-nav-link {
   padding: 8px 20px;
   font-family: 'Inter', -apple-system, sans-serif;
@@ -1380,9 +1382,20 @@ body {
     height: 32px;
   }
 
+  .nav-full { display: none; }
+  .nav-short { display: inline; }
+  .app-nav {
+    flex-wrap: nowrap;
+  }
   .app-nav-link {
-    padding: 12px 16px;
+    padding: 10px 12px;
     font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .badge-status-pill {
+    padding: 5px 10px 5px 12px;
+    gap: 6px;
   }
 
   .preview-wrapper {
@@ -1432,18 +1445,21 @@ body {
 
   .badge-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    gap: 6px;
     padding: 0 4px;
   }
   .badge-grid-card {
     padding: 0;
     border-radius: var(--radius-md);
   }
+  .badge-grid-info {
+    padding: 4px 6px;
+  }
   .badge-grid-name {
     font-size: 11px;
   }
   .badge-grid-title {
-    font-size: 9px;
+    display: none;
   }
 
   .dept-filter-btn {
@@ -1506,7 +1522,7 @@ body {
   }
 
   .public-orgchart {
-    padding: 0 24px 40px;
+    padding: 0 12px 40px;
   }
 
   .submit-success {

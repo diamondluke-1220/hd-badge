@@ -274,45 +274,113 @@ body.view-reviewboard .public-orgchart {
   }
 }
 
-/* Mobile: stack board + badge panel vertically */
+/* ─── Mobile Review Layout ─────────────────────────────── */
+
+.rb-mobile {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .rb-stage {
-    padding: 4px 4px 8px;
-    justify-content: center;
+    padding: 8px 4px;
+    justify-content: flex-start;
     overflow-y: auto;
     top: 42px; /* thinner switcher bar on mobile */
   }
-
   .rb-content-row {
+    display: none !important;
+  }
+  .rb-mobile {
+    display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 12px;
     width: 100%;
+    padding: 0 16px;
+    gap: 16px;
+    cursor: pointer;
   }
 
-  .rb-title {
-    font-size: 13px;
-    letter-spacing: 0.15em;
+  .rb-mobile-title {
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    color: #bbb;
+    text-transform: uppercase;
+    text-align: center;
+    text-shadow: 0 0 12px rgba(200, 200, 200, 0.15);
   }
 
-  .rb-grid {
-    gap: 0;
-    padding: 2px;
-  }
-
-  /* Show badge panel below board */
-  .rb-badge-col {
-    width: 100%;
+  .rb-mobile-strip {
+    display: flex;
     align-items: center;
+    gap: 14px;
   }
 
-  .rb-badge-panel {
-    max-width: calc(100vw - 16px);
+  .rb-mobile-photo {
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    object-fit: cover;
+    object-position: center 30%;
+    border: 2px solid #555;
+    flex-shrink: 0;
+    background: #1e1e1e;
   }
 
-  /* Reveal image needs to scale with panel */
-  .rb-badge-reveal {
-    border-radius: 2px;
+  .rb-mobile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .rb-mobile-name {
+    font-family: 'Barlow', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    color: white;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rb-mobile-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #888;
+  }
+
+  .rb-mobile-skills {
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: #666;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 8px 0;
+    border-top: 1px solid #222;
+    border-bottom: 1px solid #222;
+  }
+
+  .rb-mobile-review {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 4px 0;
+  }
+
+  .rb-mobile-review-line {
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 0.08em;
+    color: #c8baa0;
+    text-transform: uppercase;
+    line-height: 1.4;
   }
 }
 
