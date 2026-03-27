@@ -808,11 +808,16 @@ async function submitBadge(photoPublic) {
       accessCss: ACCESS_CSS[state.accessLevel] || '',
       caption: state.caption,
       waveStyle: state.waveStyle,
-      photo: state.photoUrl || null,
       photoPublic,
       ...(isEdit ? { token: stored.deleteToken } : {}),
       ...(!isEdit && stored.employeeId ? { previousBadgeId: stored.employeeId, previousToken: stored.deleteToken } : {}),
     };
+    // Only send photo field if user uploaded a new one (avoids erasing existing photo on edit)
+    if (state.photoUrl) {
+      body.photo = state.photoUrl;
+    } else if (!isEdit) {
+      body.photo = null;
+    }
 
     const url = isEdit ? `/api/badge/${state._editingBadgeId}` : '/api/badge';
     const method = isEdit ? 'PUT' : 'POST';
@@ -1472,6 +1477,21 @@ if (window.location.pathname === '/orgchart') {
           state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
           state.waveStyle = data.waveStyle || 'barcode';
           state._editingBadgeId = existingId;
+
+          // Load existing headshot into preview if badge has a photo
+          if (data.hasPhoto && data.photoPublic !== false) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = img.naturalWidth;
+              canvas.height = img.naturalHeight;
+              canvas.getContext('2d').drawImage(img, 0, 0);
+              state.photoUrl = canvas.toDataURL('image/jpeg', 0.85);
+              refreshPreview();
+            };
+            img.src = `/api/badge/${existingId}/headshot?t=${Date.now()}`;
+          }
 
           // Set issued date from their creation date
           const d = new Date(data.createdAt);

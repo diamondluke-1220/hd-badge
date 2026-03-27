@@ -1044,7 +1044,7 @@ window.ReviewBoardRenderer = {
     }
 
     // Load badge tile colors then reveal
-    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
     this._hideBadgeReveal();
     this._sampleBadgeColors(imgSrc).then(colors => {
       for (let r = 0; r < this.BADGE_ROWS; r++) {
@@ -1066,7 +1066,7 @@ window.ReviewBoardRenderer = {
 
   _updateMobileView(badge, name, title, skills, quote, divColor) {
     if (!this._mobileView) return;
-    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
     const photo = this._mobileStrip.querySelector('.rb-mobile-photo');
     photo.src = imgSrc;
     photo.alt = name;
@@ -1097,7 +1097,7 @@ window.ReviewBoardRenderer = {
     if (this._aiIndicator) this._aiIndicator.classList.add('active');
 
     // Pre-sample badge colors before animation starts
-    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
     const badgeColorsPromise = this._sampleBadgeColors(imgSrc);
 
     // Hide previous reveal image before new animation
@@ -1366,7 +1366,7 @@ window.ReviewBoardRenderer = {
     this._clearBadgePanelGlow();
 
     // Pre-sample badge colors
-    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const imgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
     const badgeColorsPromise = this._sampleBadgeColors(imgSrc);
 
     // PHASE 1: Color wave across all board tiles + badge tiles
@@ -1506,7 +1506,7 @@ window.ReviewBoardRenderer = {
     this._closePacket();
 
     const name = badge.name || 'UNKNOWN';
-    const badgeImgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot';
+    const badgeImgSrc = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
 
     const overlay = document.createElement('div');
     overlay.className = 'sf-badge-card-overlay';
@@ -1712,6 +1712,16 @@ window.ReviewBoardRenderer = {
     const idx = this._allBadges.findIndex(b => b.employeeId === badge.employeeId);
     if (idx >= 0) {
       Object.keys(badge).forEach(k => { if (badge[k] !== undefined) this._allBadges[idx][k] = badge[k]; });
+    }
+    // Cache-bust any currently-visible headshot images for this badge
+    const bustUrl = '/api/badge/' + encodeURIComponent(badge.employeeId || '') + '/headshot?t=' + Date.now();
+    if (this._container) {
+      this._container.querySelectorAll('img').forEach(img => {
+        if (img.src && img.src.includes('/headshot')) {
+          const srcId = img.src.match(/\/badge\/([^/]+)\/headshot/);
+          if (srcId && srcId[1] === badge.employeeId) img.src = bustUrl;
+        }
+      });
     }
   },
 

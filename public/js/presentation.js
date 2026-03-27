@@ -208,7 +208,7 @@
       }
 
       // Set photo
-      introImg.src = `/api/badge/${member.id}/headshot`;
+      introImg.src = `/api/badge/${member.id}/headshot?t=${Date.now()}`;
       introImg.alt = member.name;
       introImg.style.animation = 'none';
       introImg.offsetHeight;

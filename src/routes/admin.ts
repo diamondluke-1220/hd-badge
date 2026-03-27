@@ -14,6 +14,7 @@ import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
 
 interface AdminDeps {
   renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
+  broadcastSSE: (event: string, data: any) => void;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
   THUMBS_DIR: string;
@@ -21,7 +22,7 @@ interface AdminDeps {
 }
 
 export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
-  const { renderBadgePlaywright, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR } = deps;
+  const { renderBadgePlaywright, broadcastSSE, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR } = deps;
 
   // ─── Badge Management ────────────────────────────────────
 
@@ -207,6 +208,12 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       const headshotPath = join(HEADSHOTS_DIR, `${id}.jpg`);
       if (existsSync(headshotPath)) {
         unlinkSync(headshotPath);
+      }
+
+      // Notify views of the update so they refresh headshots
+      const updatedForSSE = getBadge(id);
+      if (updatedForSSE) {
+        broadcastSSE('badge-updated', serializeBadge(updatedForSSE));
       }
 
       log('info', 'admin', `Photo uploaded and badge re-rendered for ${id} (${badge.name})`);
