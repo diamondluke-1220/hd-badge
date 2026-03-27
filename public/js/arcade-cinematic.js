@@ -1406,6 +1406,13 @@
       'HD-00004': 'laserFire',         // Todd — 1000 Yard Stare
     };
 
+    // Impact timing per special type (ms after FX launch when projectiles reach employee)
+    const BOSS_IMPACT_DELAY = {
+      'HD-00002': 400,  // Drew — feedback waves 0.6s flight
+      'HD-00003': 250,  // Henry — drum strikes 0.3s fall
+      // HD-00004 (Todd) omitted — has bespoke sparks + flames
+    };
+
     if (opponentType === 'boss') {
       // Band members: check for boss-specific effects, default to music notes
       const bossLauncher = opponent._bossId && this._BOSS_SPECIAL_FX[opponent._bossId];
@@ -1418,8 +1425,13 @@
           // Todd laser: delayed impact sound
           if (opponent._bossId === 'HD-00004') ArcadeSFX.playDelayed('laserImpact', 600);
         }
+        // Impact on employee portrait (skip Todd — has own impact)
+        const impactDelay = BOSS_IMPACT_DELAY[opponent._bossId];
+        if (impactDelay) this._specialImpact(overlay, empPortrait, impactDelay);
       } else {
         this._launchMusicNotes(overlay, bossPortrait, empPortrait, color);
+        // Music notes impact
+        this._specialImpact(overlay, empPortrait, 500);
       }
     } else {
       // Creatures: move-specific effects (lightning as fallback)
@@ -1433,6 +1445,18 @@
       } else {
         this._launchLightning(overlay, bossPortrait, empPortrait, color);
       }
+      // Creature special impact — timing varies by move animation duration
+      const CREATURE_IMPACT_DELAY = {
+        'ENDLESS ANECDOTE': 550,  // bubbles fly 0.9s
+        'BUDGET SLASH': 350,      // slashes sweep 0.5s
+        'HAZMAT EXPLOSION': 400,  // gas clouds 0.7s
+        'PAPER FEED FRENZY': 350, // papers fly 0.5s
+        'PACKET STORM': 400,      // packets fly 0.6s
+        'COMPLIANCE LOCKDOWN': 300, // bars slide 0.4s
+        'CODE SWITCH': 400,       // symbols fly 0.6s
+        'EXPENSE DENIED': 350,    // stamps slam 0.4s
+      };
+      this._specialImpact(overlay, empPortrait, CREATURE_IMPACT_DELAY[moveName] || 400);
     }
   },
 
@@ -1551,26 +1575,28 @@
     },
 
     'ENDLESS ANECDOTE': function(overlay, fromEl, toEl, color) {
-      // Speech bubbles flooding from right to left
+      // Speech bubbles flooding from boss toward employee (full distance)
       const overlayRect = overlay.getBoundingClientRect();
       const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
       const x1 = fromRect.left - overlayRect.left + fromRect.width / 2;
       const y1 = fromRect.top - overlayRect.top + fromRect.height / 2;
-      const travelX = -(450 + Math.random() * 300);
+      const x2 = toRect.left - overlayRect.left + toRect.width / 2;
+      const travelX = x2 - x1;
       const bubbles = ['\uD83D\uDCAC', '\uD83D\uDCAD', '\uD83D\uDDE3\uFE0F', '\u2753', '\u2755', '\uD83D\uDCA4'];
       const count = 26;
       for (let i = 0; i < count; i++) {
         setTimeout(() => {
           const el = document.createElement('div');
           el.className = 'arcade-fx-bubble';
-          const ySpread = (Math.random() - 0.5) * 180;
-          const drift = (Math.random() - 0.5) * 70;
+          const ySpread = (Math.random() - 0.5) * 240;
+          const drift = (Math.random() - 0.5) * 100;
           const size = 48 + Math.random() * 32;
           el.textContent = bubbles[Math.floor(Math.random() * bubbles.length)];
           el.style.cssText = `
             left: ${x1}px; top: ${y1 + ySpread}px;
             font-size: ${size}px;
-            --bubble-x: ${travelX + Math.random() * 100}px; --bubble-y: ${drift}px;
+            --bubble-x: ${travelX + (Math.random() - 0.5) * 120}px; --bubble-y: ${drift}px;
           `;
           overlay.appendChild(el);
           el.addEventListener('animationend', () => el.remove(), { once: true });
@@ -1954,6 +1980,24 @@
         setTimeout(() => svg.remove(), 250 + Math.random() * 100);
       }, b * 120);
     }
+  },
+
+  // ─── Special Move Impact on Employee Portrait ──────────────
+  // Timed damage flash on the employee portrait when projectiles arrive.
+  // Skipped for Todd (HD-00004) who has bespoke sparks + flames.
+  _specialImpact(overlay, toEl, delay) {
+    setTimeout(() => {
+      // Portrait red flash + shake
+      if (toEl) {
+        toEl.classList.add('special-hit-impact');
+        setTimeout(() => toEl.classList.remove('special-hit-impact'), 400);
+      }
+      // Screen shake
+      overlay.classList.add('hit-shake');
+      setTimeout(() => overlay.classList.remove('hit-shake'), 150);
+      // Impact sound
+      if (window.ArcadeSFX) ArcadeSFX.play('heavyHit');
+    }, delay);
   },
 
   _launchMusicNotes(overlay, fromEl, toEl, color) {
