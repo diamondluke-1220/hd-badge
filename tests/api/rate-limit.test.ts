@@ -25,10 +25,10 @@ describe('Rate Limiting', () => {
     expect(res.status).toBe(200);
   });
 
-  it('blocks after 3 creations (hourly limit)', async () => {
+  it('blocks after 10 creations (hourly limit)', async () => {
     const ip = '10.1.0.2';
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
       const res = await publicRequest(ctx.app, 'POST', '/api/badge',
         validBadgePayload({ name: `Rate Test ${i}` }),
         { 'x-forwarded-for': ip }
@@ -36,9 +36,9 @@ describe('Rate Limiting', () => {
       expect(res.status).toBe(200);
     }
 
-    // 4th should be blocked
+    // 11th should be blocked
     const res = await publicRequest(ctx.app, 'POST', '/api/badge',
-      validBadgePayload({ name: 'Rate Test 4' }),
+      validBadgePayload({ name: 'Rate Test 11' }),
       { 'x-forwarded-for': ip }
     );
     expect(res.status).toBe(429);
@@ -65,7 +65,7 @@ describe('Rate Limiting', () => {
   it('rate limit message uses themed text', async () => {
     const ip = '10.1.0.4';
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
       await publicRequest(ctx.app, 'POST', '/api/badge',
         validBadgePayload({ name: `Theme Test ${i}` }),
         { 'x-forwarded-for': ip }
@@ -73,7 +73,7 @@ describe('Rate Limiting', () => {
     }
 
     const res = await publicRequest(ctx.app, 'POST', '/api/badge',
-      validBadgePayload({ name: 'Theme Test 4' }),
+      validBadgePayload({ name: 'Theme Test 11' }),
       { 'x-forwarded-for': ip }
     );
     const json = await res.json();
@@ -82,7 +82,7 @@ describe('Rate Limiting', () => {
 
   it('different IPs have independent limits', async () => {
     // Exhaust limit for IP A
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
       await publicRequest(ctx.app, 'POST', '/api/badge',
         validBadgePayload({ name: `IP A ${i}` }),
         { 'x-forwarded-for': '10.1.0.5' }
@@ -101,7 +101,7 @@ describe('Rate Limiting', () => {
     const ip = '10.1.0.7';
 
     // Exhaust limit
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 10; i++) {
       await publicRequest(ctx.app, 'POST', '/api/badge',
         validBadgePayload({ name: `Reset Test ${i}` }),
         { 'x-forwarded-for': ip }

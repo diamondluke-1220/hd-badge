@@ -33,7 +33,7 @@ function getLimits(): { hourly: number; daily: number } {
   if (showModeActive) {
     return { hourly: 50, daily: 200 };
   }
-  return { hourly: 3, daily: 10 };
+  return { hourly: 10, daily: 20 };
 }
 
 /** Reset all rate limit state (for testing) */
