@@ -124,8 +124,8 @@
       };
       // Presentation mode: winner determined immediately, no QTEs
       if (isPresentation) fightState.winner = baseWinner;
-      // QTE time offset for post-fight beats (0 in presentation, 5100ms with QTEs)
-      const postFightOffset = isPresentation ? 0 : 5100;
+      // QTE time offset for post-fight beats (0 in presentation, 6500ms with QTEs)
+      const postFightOffset = isPresentation ? 0 : 6500;
 
       const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#ffffff' : '#D4A843';
@@ -708,9 +708,9 @@
       spark.style.setProperty('--spark-x', randX + '%');
       spark.style.setProperty('--spark-y', randY + '%');
 
-      // Alternate flash color
+      // Alternate flash color — attacker's color (opposite side from the spark being hit)
       const isLeft = (spark === leftSpark);
-      const accentColor = isLeft ? empColor : oppColor;
+      const accentColor = isLeft ? oppColor : empColor;
       const flashColor = hitColorToggle ? '#ffffff' : accentColor;
       spark.style.setProperty('--spark-color', flashColor);
       hitColorToggle = !hitColorToggle;
@@ -772,32 +772,27 @@
     // QTE timing: presentation mode skips QTEs entirely
     const isPresentation = window.location.pathname.startsWith('/presentation');
     // Offset applied to Act 2 remainder, QTE 2-3, and Act 3 timings
-    const QTE_OFFSET_1 = isPresentation ? 0 : 1700; // after QTE 1
-    const QTE_OFFSET_2 = isPresentation ? 0 : 3400; // after QTE 2
-    const QTE_OFFSET_3 = isPresentation ? 0 : 5100; // after QTE 3
+    // QTE 1: 1.5s window, QTE 2: 1.5s window, QTE 3: 2.5s window (4-arrow stratagem)
+    const QTE_OFFSET_1 = isPresentation ? 0 : 1700;  // after QTE 1 (1500ms + 200 margin)
+    const QTE_OFFSET_3 = isPresentation ? 0 : 6500;  // after QTE 3 (Act 3 must start after 2.5s stratagem resolves)
 
     // ── Fight mechanic decisions ─────────────────────────────
+    // Stun is now player-earned via QTEs (3/3 success), not random.
     const t = window._testFight || {};
     // Comeback: employee-only, 35% of employee wins
     const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && Math.random() < 0.35);
     // Boss finisher: boss wins + 30% chance — special move as killing blow
     const doBossFinisher = t.doBossFinisher != null ? t.doBossFinisher : (winner === 'opponent' && isBoss && !doComeback && Math.random() < 0.3);
-    // Stun interrupt: stun collides with special move charge (~20%)
-    const doStunInterrupt = t.doStunInterrupt != null ? t.doStunInterrupt : (!doComeback && !doBossFinisher && Math.random() < 0.2);
-    // Regular stun: 45% if no interrupt/comeback/finisher
-    const doStun = t.doStun != null ? t.doStun : (!doComeback && !doStunInterrupt && Math.random() < 0.45);
     // Special move timing: vary between 8-9.5s (charge starts 1.2s before)
     const specialTime = 8000 + Math.floor(Math.random() * 1500);
     const chargeLeadTime = 1200;
     const chargeStart = specialTime - chargeLeadTime; // 6800-8300ms
-    // Stun timing: early (5s) or late (after special releases + 500ms buffer)
-    const stunTime = t.stunTime != null ? t.stunTime : (Math.random() < 0.55 ? 5000 : specialTime + 500);
     // Slugfest Act 3: 25% of non-comeback/non-finisher fights get rapid exchanges
     const doSlugfest = t.doSlugfest != null ? t.doSlugfest : (!doComeback && !doBossFinisher && Math.random() < 0.25);
 
     // Log test overrides (deletion deferred until after QTEs read from it)
     if (window._testFight) {
-      console.log('[FIGHT TEST] Mechanics:', { doComeback, doBossFinisher, doStunInterrupt, doStun, stunTime, doSlugfest, specialTime });
+      console.log('[FIGHT TEST] Mechanics:', { doComeback, doBossFinisher, doSlugfest, specialTime });
     }
 
     // Jitter: ±150ms randomization per hit
@@ -844,68 +839,18 @@
     });
     allHits.push(...doubleTaps);
 
-    // ── Act 2: Stun / Special / Rally (5-11s) ────────────────
-    let act2Hits;
-    if (doStunInterrupt) {
-      // Stun interrupt: exchange → boss starts charging → employee stuns → special fizzles
-      // Stun fires at chargeStart + 500ms (mid-charge), special reduced to glancing blow
-      const postInterrupt = specialTime + 500;
-      act2Hits = [
-        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
-        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
-        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
-        // Special fires as glancing blow
-        { delay: specialTime, target: empTarget, dmg: 10, weight: 'medium', isSpecial: true },
-        // Post-interrupt: employee capitalizes on stunned opponent
-        { delay: postInterrupt + jitter(),       target: oppTarget, dmg: 6, weight: 'light' },
-        { delay: postInterrupt + 400 + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
-        { delay: postInterrupt + 800 + jitter(), target: oppTarget, dmg: 5, weight: 'light' },
-        { delay: postInterrupt + 1200 + jitter(), target: 'winner', dmg: 6, weight: 'light' },
-      ];
-    } else if (doStun && stunTime <= 5000) {
-      // Early stun (5s): stun combo (5.6-7s) → clear gap → special (8-9.5s) → rally
-      act2Hits = [
-        { delay: 5600 + jitter(), target: oppTarget, dmg: 5, weight: 'light' },
-        { delay: 5870 + jitter(), target: oppTarget, dmg: 6, weight: 'light' },
-        { delay: 6140 + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
-        { delay: 6410 + jitter(), target: oppTarget, dmg: 6, weight: 'light' },
-        { delay: 6680 + jitter(), target: oppTarget, dmg: 7, weight: 'light' },
-        // Gap before special charge starts (~800ms+)
-        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
-        // Rally after special
-        { delay: specialTime + 800  + jitter(), target: 'winner', dmg: 5, weight: 'light' },
-        { delay: specialTime + 1400 + jitter(), target: 'loser',  dmg: 7, weight: 'light' },
-        { delay: specialTime + 2000 + jitter(), target: 'winner', dmg: 6, weight: 'medium' },
-      ];
-    } else if (doStun) {
-      // Late stun (after special): exchange → special → stun combo
-      // Cap combo end at 10500ms to avoid Act 3 overlap
-      const comboStart = stunTime;
-      act2Hits = [
-        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
-        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
-        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
-        { delay: 7100  + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
-        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
-        // Stun fires 500ms after special, combo on stunned opponent
-        { delay: Math.min(comboStart, 10200) + jitter(),       target: oppTarget, dmg: 5, weight: 'light' },
-        { delay: Math.min(comboStart + 270, 10400) + jitter(), target: oppTarget, dmg: 7, weight: 'medium' },
-        { delay: Math.min(comboStart + 540, 10600),            target: oppTarget, dmg: 6, weight: 'light' },
-        { delay: Math.min(comboStart + 800, 10800),            target: oppTarget, dmg: 8, weight: 'medium' },
-      ];
-    } else {
-      // No stun: alternating exchange
-      act2Hits = [
-        { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
-        { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
-        { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
-        { delay: 7100  + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
-        { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
-        { delay: specialTime + 800  + jitter(), target: 'winner', dmg: 5, weight: 'light' },
-        { delay: specialTime + 1400 + jitter(), target: 'loser',  dmg: 7, weight: 'light' },
-        { delay: specialTime + 2000 + jitter(), target: 'winner', dmg: 8, weight: 'medium' },
-      ];
-    }
+    // ── Act 2: Exchange + Special (5-11s) ─────────────────────
+    // Stun removed — now player-earned via QTEs. Special always fires cleanly.
+    const act2Hits = [
+      { delay: 5300  + jitter(), target: 'loser',  dmg: 8,  weight: 'medium' },
+      { delay: 5900  + jitter(), target: 'winner', dmg: 7,  weight: 'light' },
+      { delay: 6500  + jitter(), target: 'loser',  dmg: 6,  weight: 'light' },
+      { delay: 7100  + jitter(), target: 'loser',  dmg: 10, weight: 'medium' },
+      { delay: specialTime, target: empTarget, dmg: 28, weight: 'heavy', isSpecial: true },
+      { delay: specialTime + 800  + jitter(), target: 'winner', dmg: 5, weight: 'light' },
+      { delay: specialTime + 1400 + jitter(), target: 'loser',  dmg: 7, weight: 'light' },
+      { delay: specialTime + 2000 + jitter(), target: 'winner', dmg: 8, weight: 'medium' },
+    ];
 
     // ── Act 3: Escalation + Finish (11-18.5s) ────────────────
     let act3Hits;
@@ -989,17 +934,22 @@
       ? oppLines[Math.floor(Math.random() * oppLines.length)]
       : pickLine(this._FIGHT_LINES_EVEN);
 
-    // Announcer beats — Act 1 unchanged, Act 2 +QTE_OFFSET_1, Act 3 +QTE_OFFSET_3
+    // Announcer beats — Acts 1-2 use neutral lines (winner not yet decided by QTEs)
+    // Act 3 uses winner/loser names (resolved after QTE 3)
     const announcerBeats = [
       [800, pickOppLine()],
       [3000, pickOppLine()],
-      [5500 + QTE_OFFSET_1, (doStun && stunTime <= 5000) ? `${badge.name.toUpperCase()} DROPS A ONE-LINER!` : pickOppLine()],
-      [7500 + QTE_OFFSET_1, (chargeStart <= 7500 && chargeStart + chargeLeadTime >= 7500) ? null : `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
-      [9800 + QTE_OFFSET_1, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
-      [12000 + QTE_OFFSET_2, pickOppLine()],
-      [15000 + QTE_OFFSET_3, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
-      [17500 + QTE_OFFSET_3, pickLine(this._FIGHT_LINES_FINISH)],
+      [5500 + QTE_OFFSET_1, pickOppLine()],
+      [7500 + QTE_OFFSET_1, (chargeStart <= 7500 && chargeStart + chargeLeadTime >= 7500) ? null : pickLine(this._FIGHT_LINES_EVEN)],
+      [9800 + QTE_OFFSET_1, pickOppLine()],
+      [12000 + QTE_OFFSET_1 + 2000, pickOppLine()],
     ];
+    // Act 3 beats — scheduled via beat() closures so they read winner AFTER QTE 3 finalizes
+    beat(15000 + QTE_OFFSET_3, () => {
+      const wName = winner === 'employee' ? badge.name : opponent.name;
+      setVSAnnouncer(`${wName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`);
+    });
+    beat(17500 + QTE_OFFSET_3, () => setVSAnnouncer(pickLine(this._FIGHT_LINES_FINISH)));
     // Comeback announcer lines
     if (doComeback) {
       announcerBeats.push(
@@ -1055,58 +1005,17 @@
       beat(13800 + QTE_OFFSET_3, () => fireStun(2500));
     }
 
-    // Stun interrupt: employee stuns mid-charge, canceling the special (Act 2 timing)
-    if (doStunInterrupt) {
-      beat(chargeStart + 500 + QTE_OFFSET_1, () => fireStun(2500));
-    }
-
-    // Regular stun (45% chance, variable timing) — Act 2 timing
-    if (doStun) {
-      beat(stunTime + QTE_OFFSET_1, () => fireStun(2500));
-    }
-
     // Special move — charge buildup then release (Act 2 timing)
+    // No stun overlap possible — stun is now QTE-earned and fires between Acts 2-3
     if (opponent.type !== 'intern' && opponent.move) {
-      if (doStunInterrupt) {
-        beat(chargeStart + QTE_OFFSET_1, () => {
-          this._startSpecialMoveCharge(overlay);
-          setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
-        });
-        beat(chargeStart + 700 + QTE_OFFSET_1, () => {
-          const classEl = overlay.querySelector('.arcade-vs-right .arcade-vs-fighter-class');
-          if (classEl) classEl.classList.remove('special-move-charging');
-          const portrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
-          if (portrait) portrait.classList.remove('special-move-charge-aura');
-          const darken = overlay.querySelector('.arcade-vs-darken-overlay');
-          if (darken) darken.classList.remove('active');
-          setVSAnnouncer('INTERRUPTED! THE SPECIAL FIZZLES!');
-        });
-        beat(specialTime + QTE_OFFSET_1, () => {
-          this._triggerSpecialMove(overlay, oppColor, opponent);
-        });
-      } else {
-        beat(chargeStart + QTE_OFFSET_1, () => {
-          const startCharge = () => {
-            this._startSpecialMoveCharge(overlay);
-            setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
-          };
-          if (_stunActive) {
-            const waitTid = setInterval(() => {
-              if (!_stunActive) {
-                clearInterval(waitTid);
-                startCharge();
-              }
-            }, 100);
-            this._timeouts.push(waitTid);
-          } else {
-            startCharge();
-          }
-        });
-        beat(specialTime + QTE_OFFSET_1, () => {
-          this._triggerSpecialMove(overlay, oppColor, opponent);
-          setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
-        });
-      }
+      beat(chargeStart + QTE_OFFSET_1, () => {
+        this._startSpecialMoveCharge(overlay);
+        setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
+      });
+      beat(specialTime + QTE_OFFSET_1, () => {
+        this._triggerSpecialMove(overlay, oppColor, opponent);
+        setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
+      });
     }
 
     // Boss finisher — second special move as killing blow (Act 3 timing)
@@ -1179,26 +1088,84 @@
     act2Hits.forEach(hit => beat(hit.delay + QTE_OFFSET_1, () => processHit(hit)));
     act3Hits.forEach(hit => beat(hit.delay + QTE_OFFSET_3, () => processHit(hit)));
 
-    // ── QTE Scheduling ──────────────────────────────────────
+    // ── QTE Power Meter + Scheduling ──────────────────────────
+    let meterSegs = [];
+    let meterEl = null;
+
     if (!isPresentation) {
-      // QTE 1: between Act 1 and Act 2
+      // Create power meter DOM (3 empty segments, left of employee portrait)
+      meterEl = document.createElement('div');
+      meterEl.className = 'arcade-qte-meter';
+      for (let i = 0; i < 3; i++) {
+        const seg = document.createElement('div');
+        seg.className = 'arcade-qte-meter-seg';
+        meterEl.appendChild(seg);
+        meterSegs.push(seg);
+      }
+      const meterLabel = document.createElement('div');
+      meterLabel.className = 'arcade-qte-meter-label';
+      meterLabel.textContent = 'PWR';
+      meterEl.appendChild(meterLabel);
+      // Append to left side container (not portrait-wrap which has overflow:hidden)
+      const empSide = overlay.querySelector('.arcade-vs-left');
+      if (empSide) empSide.appendChild(meterEl);
+
+      // Show meter when fight starts
+      beat(500, () => meterEl.classList.add('visible'));
+
+      // Meter fill/fail helper
+      const fillMeterSeg = (qteIndex, success) => {
+        const seg = meterSegs[qteIndex];
+        if (!seg) return;
+        if (success) {
+          seg.classList.add('filled');
+          if (window.ArcadeSFX) ArcadeSFX.play('lightHit');
+          // Check if meter is full
+          if (qteIndex === 2 && fightState.qteSuccesses === 3) {
+            meterEl.classList.add('full');
+          }
+        } else {
+          seg.classList.add('failed');
+        }
+      };
+
+      // QTE bonus damage — drops opponent HP bar on success (visual feedback)
+      const qteHitDamage = (level) => {
+        // Damage the opponent (loser if employee is winning, winner if not)
+        const dmg = level === 3 ? 8 : level === 2 ? 5 : 3;
+        if (winner === 'employee') {
+          loserHP = Math.max(5, loserHP - dmg * loserScale);
+          setHP(loserFill, loserTrail, loserHP);
+        } else {
+          winnerHP = Math.max(winnerFinalHP, winnerHP - dmg * winnerScale);
+          setHP(winnerFill, winnerTrail, winnerHP);
+        }
+      };
+
+      // QTE 1: single arrow (1.5s window) — light hit
       beat(4800, () => {
-        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
-          if (success) fightState.qteSuccesses++;
+        const seq = this._generateSequence(1);
+        this._fireQTE(overlay, empColor, setVSAnnouncer, seq, 1500, 1).then(success => {
+          if (success) { fightState.qteSuccesses++; qteHitDamage(1); }
+          fillMeterSeg(0, success);
         });
       });
 
-      // QTE 2: during Act 2 (overlays on fight, doesn't pause)
+      // QTE 2: 2-arrow sequence (1.5s window) — medium hit
       beat(11400, () => {
-        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
-          if (success) fightState.qteSuccesses++;
+        const seq = this._generateSequence(2);
+        this._fireQTE(overlay, empColor, setVSAnnouncer, seq, 1500, 2).then(success => {
+          if (success) { fightState.qteSuccesses++; qteHitDamage(2); }
+          fillMeterSeg(1, success);
         });
       });
 
-      // QTE 3: after Act 2, before Act 3. Finalizes winner on resolve.
+      // QTE 3: 4-arrow stratagem (2.5s window) — heavy hit + stun if 3/3
       beat(15000, () => {
-        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
-          if (success) fightState.qteSuccesses++;
+        const seq = this._generateSequence(4);
+        this._fireQTE(overlay, empColor, setVSAnnouncer, seq, 2500, 3).then(success => {
+          if (success) { fightState.qteSuccesses++; qteHitDamage(3); }
+          fillMeterSeg(2, success);
 
           // Finalize winner with QTE bonuses
           const newWinner = this._finalizeWinner(fightState, opponent);
@@ -1236,6 +1203,42 @@
           winnerScale = Math.max(0, winnerHP - winnerFinalHP) / (act3WinDmg || 1);
           loserScale = loserHP / (act3LoseDmg || 1);
 
+          // 3/3 QTE success: fire player-earned stun + combo hits (skip if comeback has its own stun)
+          if (fightState.qteSuccesses === 3 && !doComeback) {
+            const perfectLines = ['PERFECT COMBO!', 'FLAWLESS EXECUTION!', 'ALL STRATAGEMS COMPLETE!', 'MAXIMUM EMPLOYEE ENGAGEMENT!'];
+            setVSAnnouncer(perfectLines[Math.floor(Math.random() * perfectLines.length)]);
+            fireStun(2500);
+            // Rapid combo hits on stunned opponent — visual + HP damage
+            const stunSpark = overlay.querySelector('.arcade-vs-right .arcade-vs-hit-spark');
+            const stunPortrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait');
+            const comboDelays = [400, 700, 1000, 1400];
+            comboDelays.forEach(d => {
+              const tid = setTimeout(() => {
+                // HP damage per combo hit
+                loserHP = Math.max(5, loserHP - 3 * loserScale);
+                setHP(loserFill, loserTrail, loserHP);
+
+                if (stunSpark) {
+                  const rx = 10 + Math.floor(Math.random() * 80);
+                  const ry = 10 + Math.floor(Math.random() * 80);
+                  stunSpark.style.setProperty('--spark-x', rx + '%');
+                  stunSpark.style.setProperty('--spark-y', ry + '%');
+                  stunSpark.style.setProperty('--spark-color', empColor);
+                  stunSpark.classList.add('flash');
+                  setTimeout(() => stunSpark.classList.remove('flash'), 150);
+                }
+                if (stunPortrait) {
+                  stunPortrait.classList.add('hit-flash-bright');
+                  setTimeout(() => stunPortrait.classList.remove('hit-flash-bright'), 80);
+                }
+                if (window.ArcadeSFX) ArcadeSFX.play('lightHit');
+                overlay.classList.add('hit-shake');
+                setTimeout(() => overlay.classList.remove('hit-shake'), 100);
+              }, d);
+              this._timeouts.push(tid);
+            });
+          }
+
           // Clean up test overrides now that all QTEs have resolved
           if (window._testFight) delete window._testFight;
         });
@@ -1258,12 +1261,12 @@
     });
   },
 
-  // ─── QTE Prompt ────────────────────────────────────────────
-  // Returns Promise<boolean>: true = success, false = miss/timeout.
-  // Appends a center-screen prompt to the overlay with a 1.2s shrinking ring.
-  // Input: Space key or touchstart. Auto-cleans up listeners on resolve.
+  // ─── QTE Prompt — Arrow Sequence ────────────────────────────
+  // Returns Promise<boolean>: true = full sequence correct, false = miss/wrong/timeout.
+  // `sequence`: array of directions ['up','down','left','right']
+  // `window_ms`: time allowed to complete the sequence
 
-  _fireQTE(overlay, empColor, setVSAnnouncer) {
+  _fireQTE(overlay, empColor, setVSAnnouncer, sequence, window_ms, qteNumber) {
     return new Promise(resolve => {
       // Test override: skip entirely
       const t = window._testFight || {};
@@ -1273,32 +1276,55 @@
       if (Array.isArray(t.qteResults)) {
         const result = t.qteResults.shift();
         if (result) {
-          this._qteSuccessEffects(overlay, empColor, setVSAnnouncer);
+          this._qteSuccessEffects(overlay, empColor, setVSAnnouncer, qteNumber);
         } else {
-          setVSAnnouncer('MISSED IT!');
+          const missLines = ['MISSED IT!', 'WRONG KEY!', 'TOO SLOW!', 'TIMEOUT!', 'REQUEST DENIED!'];
+          setVSAnnouncer(missLines[Math.floor(Math.random() * missLines.length)]);
         }
         return resolve(!!result);
       }
 
       let resolved = false;
-      const QTE_WINDOW = 1200;
+      let step = 0;
+
+      const ARROW_CHARS = { up: '▲', down: '▼', left: '◀', right: '▶' };
+      const KEY_MAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
       // Build DOM
       const prompt = document.createElement('div');
       prompt.className = 'arcade-qte-prompt';
-      prompt.innerHTML = `
-        <div class="arcade-qte-ring"></div>
-        <div class="arcade-qte-icon">
-          <span class="arcade-qte-key">SPACE</span>
-          <span class="arcade-qte-tap">TAP!</span>
-        </div>
-        <div class="arcade-qte-label">NOW!</div>
-      `;
+
+      const arrowsDiv = document.createElement('div');
+      arrowsDiv.className = 'arcade-qte-arrows';
+
+      const arrowEls = sequence.map((dir, i) => {
+        const el = document.createElement('div');
+        el.className = 'arcade-qte-arrow' + (i === 0 ? ' active' : '');
+        el.textContent = ARROW_CHARS[dir];
+        arrowsDiv.appendChild(el);
+        return el;
+      });
+
+      const timerDiv = document.createElement('div');
+      timerDiv.className = 'arcade-qte-timer';
+      const timerFill = document.createElement('div');
+      timerFill.className = 'arcade-qte-timer-fill';
+      timerFill.style.setProperty('--qte-window', window_ms + 'ms');
+      timerDiv.appendChild(timerFill);
+
+      const hint = document.createElement('div');
+      hint.className = 'arcade-qte-hint';
+      hint.textContent = ('ontouchstart' in window) ? 'SWIPE!' : '';
+
+      prompt.appendChild(arrowsDiv);
+      prompt.appendChild(timerDiv);
+      if (hint.textContent) prompt.appendChild(hint);
       overlay.appendChild(prompt);
 
       const cleanup = () => {
         document.removeEventListener('keydown', onKey);
-        overlay.removeEventListener('touchstart', onTouch);
+        document.removeEventListener('touchstart', onTouchStart);
+        document.removeEventListener('touchend', onTouchEnd);
       };
 
       const succeed = () => {
@@ -1307,55 +1333,131 @@
         cleanup();
         clearTimeout(missTimer);
         prompt.classList.add('qte-success');
-        this._qteSuccessEffects(overlay, empColor, setVSAnnouncer);
+        this._qteSuccessEffects(overlay, empColor, setVSAnnouncer, qteNumber);
         resolve(true);
         const tid = setTimeout(() => prompt.remove(), 400);
         this._timeouts.push(tid);
       };
 
-      const miss = () => {
+      const fail = (wrongIndex) => {
         if (resolved) return;
         resolved = true;
         cleanup();
+        clearTimeout(missTimer);
+        // Mark the wrong arrow
+        if (wrongIndex != null && arrowEls[wrongIndex]) {
+          arrowEls[wrongIndex].classList.remove('active');
+          arrowEls[wrongIndex].classList.add('wrong');
+        }
         prompt.classList.add('qte-miss');
-        setVSAnnouncer('MISSED IT!');
+        const missLines = ['MISSED IT!', 'WRONG KEY!', 'TOO SLOW!', 'TIMEOUT!', 'REQUEST DENIED!'];
+        setVSAnnouncer(missLines[Math.floor(Math.random() * missLines.length)]);
         resolve(false);
         const tid = setTimeout(() => prompt.remove(), 500);
         this._timeouts.push(tid);
       };
 
-      const onKey = (e) => {
-        if (e.code === 'Space' || e.key === ' ') {
-          e.preventDefault();
-          succeed();
+      const miss = () => fail(step < sequence.length ? step : null);
+
+      const advanceStep = (dir) => {
+        if (resolved) return;
+        if (dir === sequence[step]) {
+          // Correct input
+          arrowEls[step].classList.remove('active');
+          arrowEls[step].classList.add('correct');
+          if (window.ArcadeSFX) ArcadeSFX.play('lightHit');
+          step++;
+          if (step >= sequence.length) {
+            // All correct — success
+            succeed();
+          } else {
+            // Advance to next arrow
+            arrowEls[step].classList.add('active');
+          }
+        } else {
+          // Wrong input — immediate fail
+          fail(step);
         }
       };
 
-      const onTouch = (e) => {
-        // Only count touches on the overlay itself, not propagated from child controls
+      const onKey = (e) => {
+        const dir = KEY_MAP[e.code];
+        if (dir) {
+          e.preventDefault();
+          advanceStep(dir);
+        }
+      };
+
+      // Swipe detection for mobile
+      let touchStartX = 0, touchStartY = 0;
+      const SWIPE_THRESHOLD = 30;
+
+      const onTouchStart = (e) => {
+        if (resolved) return;
+        const touch = e.touches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+      };
+
+      const onTouchEnd = (e) => {
+        if (resolved) return;
+        const touch = e.changedTouches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        // Need minimum swipe distance
+        if (absDx < SWIPE_THRESHOLD && absDy < SWIPE_THRESHOLD) return;
+
+        let dir;
+        if (absDx > absDy) {
+          dir = dx > 0 ? 'right' : 'left';
+        } else {
+          dir = dy > 0 ? 'down' : 'up';
+        }
         e.preventDefault();
-        succeed();
+        advanceStep(dir);
       };
 
       document.addEventListener('keydown', onKey);
-      overlay.addEventListener('touchstart', onTouch);
+      document.addEventListener('touchstart', onTouchStart, { passive: true });
+      document.addEventListener('touchend', onTouchEnd);
 
-      const missTimer = setTimeout(miss, QTE_WINDOW);
+      const missTimer = setTimeout(miss, window_ms);
       this._timeouts.push(missTimer);
     });
   },
 
-  // QTE success visual/audio effects (shared by live and test-override paths)
-  _qteSuccessEffects(overlay, empColor, setVSAnnouncer) {
-    // Gold aura on employee portrait
+  // Generate a random arrow sequence of given length
+  _generateSequence(length) {
+    const dirs = ['up', 'down', 'left', 'right'];
+    const t = window._testFight || {};
+    // Test override for deterministic sequences
+    if (Array.isArray(t.qteSequences)) {
+      const seq = t.qteSequences.shift();
+      if (seq) return seq;
+    }
+    const seq = [];
+    for (let i = 0; i < length; i++) {
+      seq.push(dirs[Math.floor(Math.random() * dirs.length)]);
+    }
+    return seq;
+  },
+
+  // QTE success visual/audio effects — escalates by qteNumber (1=light, 2=medium, 3=heavy)
+  _qteSuccessEffects(overlay, empColor, setVSAnnouncer, qteNumber) {
+    const level = qteNumber || 1;
+
+    // Gold outline glow on employee portrait (power-up, not damage)
     const empWrap = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
     if (empWrap) {
       empWrap.classList.add('qte-power-surge');
-      const tid = setTimeout(() => empWrap.classList.remove('qte-power-surge'), 600);
+      const tid = setTimeout(() => empWrap.classList.remove('qte-power-surge'), 800);
       this._timeouts.push(tid);
     }
 
-    // Bonus hit on opponent — flash their spark + portrait hit
+    // Bonus hit on opponent — escalating intensity
     const oppSpark = overlay.querySelector('.arcade-vs-right .arcade-vs-hit-spark');
     const oppPortrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait');
     const oppWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
@@ -1371,33 +1473,39 @@
     }
     if (oppPortrait) {
       oppPortrait.classList.add('hit-flash-bright');
-      const hitTid = setTimeout(() => oppPortrait.classList.remove('hit-flash-bright'), 80);
+      const hitTid = setTimeout(() => oppPortrait.classList.remove('hit-flash-bright'), 100);
       this._timeouts.push(hitTid);
     }
-    // Screen shake for impact
-    overlay.classList.add('hit-shake');
-    const shakeTid = setTimeout(() => overlay.classList.remove('hit-shake'), 120);
-    this._timeouts.push(shakeTid);
-    // Hitstop vibrate on both portraits
-    if (empWrap) empWrap.classList.add('hitstop-vibrate');
-    if (oppWrap) oppWrap.classList.add('hitstop-vibrate');
-    const stopTid = setTimeout(() => {
-      if (empWrap) empWrap.classList.remove('hitstop-vibrate');
-      if (oppWrap) oppWrap.classList.remove('hitstop-vibrate');
-    }, 150);
-    this._timeouts.push(stopTid);
 
-    // Division-color screen flash
-    overlay.classList.add('qte-screen-flash');
-    const flashTid = setTimeout(() => overlay.classList.remove('qte-screen-flash'), 300);
-    this._timeouts.push(flashTid);
+    // Hitstop vibrate — opponent only, duration scales with level
+    if (oppWrap) {
+      oppWrap.classList.add('hitstop-vibrate');
+      const stopDur = level === 3 ? 200 : level === 2 ? 150 : 80;
+      const stopTid = setTimeout(() => oppWrap.classList.remove('hitstop-vibrate'), stopDur);
+      this._timeouts.push(stopTid);
+    }
 
-    // Announcer
-    const lines = ['POWER SURGE!', 'CRITICAL HIT!', 'EMPLOYEE OF THE MONTH!', 'NICE TIMING!', 'MAXIMUM PRODUCTIVITY!'];
+    // Screen shake — medium+ only
+    if (level >= 2) {
+      overlay.classList.add('hit-shake');
+      const shakeTid = setTimeout(() => overlay.classList.remove('hit-shake'), 120);
+      this._timeouts.push(shakeTid);
+    }
+
+    // Announcer — office-themed, escalating intensity
+    const lines = level === 3
+      ? ['PERFORMANCE REVIEW: EXCEEDS ALL EXPECTATIONS!', 'UNLIMITED PTO ACTIVATED!', 'CORNER OFFICE ENERGY!']
+      : level === 2
+        ? ['PROMOTED TO SENIOR!', 'EXPENSE REPORT APPROVED!', 'ABOVE AND BEYOND!']
+        : ['SOLID WORK!', 'NOTED IN THE MINUTES!', 'MEETING CONTRIBUTION!'];
     setVSAnnouncer(lines[Math.floor(Math.random() * lines.length)]);
 
-    // SFX
-    if (window.ArcadeSFX) ArcadeSFX.play('heavyHit');
+    // SFX — escalating
+    if (window.ArcadeSFX) {
+      if (level === 3) ArcadeSFX.play('koImpact');
+      else if (level === 2) ArcadeSFX.play('heavyHit');
+      else ArcadeSFX.play('lightHit');
+    }
   },
 
   // ─── Finalize Winner After QTEs ──────────────────────────────
