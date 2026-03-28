@@ -624,6 +624,9 @@
     const leftWrap = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
     const rightWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
 
+    // Direct element refs needed by doHit for color logic
+    const leftSpark = overlay.querySelector('.arcade-vs-left .arcade-vs-hit-spark');
+
     // Use baseWinner for Acts 1-2 choreography (mechanics, side assignments)
     let winner = fightState.baseWinner;
     let sides = this._assignFighterSides(overlay, winner);
