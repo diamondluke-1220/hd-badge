@@ -4,29 +4,35 @@
    ═══════════════════════════════════════════════════════ */
 
 :root {
-  --bg-dark: #0a0a12;
-  --bg-panel: #13131a;
-  --bg-card: #1a1a2e;
-  --border-dim: #2a2a3e;
-  --border-bright: #4a4a6a;
-  --text-primary: #e8e8f0;
-  --text-dim: #8888aa;
-  --gold: #ffd700;
-  --gold-dim: rgba(255, 215, 0, 0.3);
+  /* Aligned with badge app design tokens */
+  --bg-dark: #1C1C22;
+  --bg-panel: #2A2A32;
+  --bg-card: #2A2A32;
+  --border-dim: #3A3A44;
+  --border-bright: #5B8DEF;
+  --text-primary: #ECF0F4;
+  --text-secondary: #D0D7DE;
+  --text-dim: #A8B2BC;
+  --text-disabled: #788490;
+  --gold: #D4A843;
+  --gold-dim: rgba(212, 168, 67, 0.3);
   --red: #ff3333;
-  --green: #00ff41;
-  --blue: #4488ff;
-  --hp-green: #00ff41;
+  --green: #22C55E;
+  --blue: #5B8DEF;
+  --blue-hover: #93B4F5;
+  --hp-green: #22C55E;
   --hp-yellow: #ffcc00;
   --hp-red: #ff3333;
-  --energy-color: #ffaa00;
+  --energy-color: #D4A843;
   --font-pixel: 'Press Start 2P', monospace;
+  --radius-sm: 6px;
+  --radius-md: 12px;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: var(--bg-dark);
+  background: #14141a;
   color: var(--text-primary);
   font-family: var(--font-pixel);
   overflow: hidden;
@@ -34,6 +40,8 @@ body {
   height: 100vh;
   user-select: none;
   -webkit-user-select: none;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 #game-root {
@@ -61,8 +69,8 @@ body {
   font-family: var(--font-pixel);
   font-size: clamp(10px, 1.4vw, 14px);
   padding: clamp(10px, 1.5vh, 16px) clamp(20px, 3vw, 40px);
-  border: 2px solid var(--gold);
-  border-radius: 4px;
+  border: 2px solid var(--blue);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
   text-transform: uppercase;
@@ -71,7 +79,7 @@ body {
 
 .game-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(255, 215, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(91, 141, 239, 0.3);
 }
 
 .game-btn:active {
@@ -79,21 +87,21 @@ body {
 }
 
 .game-btn-primary {
-  background: var(--gold);
-  color: #000;
+  background: var(--blue);
+  color: #fff;
 }
 
 .game-btn-primary:hover {
-  background: #ffe44d;
+  background: var(--blue-hover);
 }
 
 .game-btn-secondary {
   background: transparent;
-  color: var(--gold);
+  color: var(--blue);
 }
 
 .game-btn-secondary:hover {
-  background: rgba(255, 215, 0, 0.1);
+  background: rgba(91, 141, 239, 0.1);
 }
 
 /* ═══ TITLE SCREEN ═══════════════════════════════════════ */
@@ -101,7 +109,7 @@ body {
 #screen-title {
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, #1a1a2e 0%, var(--bg-dark) 70%);
+  background: radial-gradient(ellipse at center, #1e2230 0%, #14141a 70%);
 }
 
 .title-content {
@@ -113,29 +121,29 @@ body {
 }
 
 .title-logo {
-  font-size: clamp(28px, 5vw, 56px);
-  color: var(--gold);
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 4px 0 #b8960f;
+  font-size: clamp(32px, 6vw, 64px);
+  color: var(--text-primary);
+  text-shadow: 0 0 30px rgba(91, 141, 239, 0.4), 0 4px 0 #2a3a5a;
   letter-spacing: 4px;
 }
 
 .title-subtitle {
   font-size: clamp(10px, 1.6vw, 16px);
-  color: var(--text-dim);
+  color: var(--gold);
   letter-spacing: 3px;
 }
 
 .title-tagline {
-  font-size: clamp(8px, 1.2vw, 12px);
+  font-size: clamp(9px, 1.3vw, 13px);
   color: var(--text-dim);
   font-style: italic;
   max-width: 500px;
-  line-height: 1.8;
+  line-height: 2;
 }
 
 .title-footer {
-  font-size: clamp(8px, 1vw, 10px);
-  color: var(--border-bright);
+  font-size: clamp(9px, 1.1vw, 11px);
+  color: var(--text-dim);
   margin-top: clamp(16px, 3vh, 32px);
 }
 
@@ -151,7 +159,7 @@ body {
   align-items: center;
   padding-bottom: clamp(8px, 1.5vh, 16px);
   border-bottom: 1px solid var(--border-dim);
-  font-size: clamp(8px, 1.2vw, 12px);
+  font-size: clamp(9px, 1.2vw, 12px);
 }
 
 .map-hp { color: var(--hp-green); }
@@ -169,32 +177,32 @@ body {
 }
 
 .map-node {
-  width: clamp(240px, 40vw, 400px);
-  padding: clamp(10px, 1.5vh, 16px) clamp(16px, 2vw, 24px);
+  width: clamp(260px, 45vw, 440px);
+  padding: clamp(12px, 1.5vh, 18px) clamp(16px, 2vw, 24px);
   background: var(--bg-panel);
   border: 2px solid var(--border-dim);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1.5vw, 16px);
-  font-size: clamp(8px, 1.1vw, 11px);
+  gap: clamp(10px, 1.5vw, 18px);
+  font-size: clamp(9px, 1.2vw, 12px);
   transition: border-color 0.2s, background 0.2s, transform 0.1s;
 }
 
 .map-node.current {
-  border-color: var(--gold);
-  background: rgba(255, 215, 0, 0.05);
+  border-color: var(--blue);
+  background: rgba(91, 141, 239, 0.06);
   cursor: pointer;
 }
 
 .map-node.current:hover {
-  background: rgba(255, 215, 0, 0.1);
+  background: rgba(91, 141, 239, 0.12);
   transform: translateX(4px);
 }
 
 .map-node.completed {
   border-color: var(--green);
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .map-node.locked {
@@ -292,12 +300,13 @@ body {
 .combat-enemy-portrait {
   width: clamp(80px, 10vw, 120px);
   height: clamp(80px, 10vw, 120px);
-  border: 3px solid var(--red);
+  border: 3px solid #883333;
+  border-radius: var(--radius-sm);
   background: var(--bg-panel);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(24px, 4vw, 40px);
+  font-size: clamp(28px, 4vw, 44px);
   position: relative;
 }
 
@@ -363,9 +372,8 @@ body {
 
 .combat-announcer {
   font-size: clamp(10px, 1.4vw, 14px);
-  color: var(--gold);
+  color: var(--text-secondary);
   text-align: center;
-  text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
   min-height: 20px;
 }
 
@@ -374,10 +382,11 @@ body {
   display: flex;
   align-items: center;
   gap: clamp(12px, 2vw, 24px);
-  padding: clamp(6px, 1vh, 12px) 0;
+  padding: clamp(8px, 1.2vh, 14px) clamp(8px, 1vw, 12px);
   border-top: 1px solid var(--border-dim);
   border-bottom: 1px solid var(--border-dim);
-  font-size: clamp(8px, 1.1vw, 11px);
+  background: rgba(0, 0, 0, 0.2);
+  font-size: clamp(9px, 1.2vw, 12px);
 }
 
 .combat-player-hp {
@@ -435,115 +444,121 @@ body {
 
 /* Card in hand */
 .combat-card {
-  width: clamp(90px, 12vw, 140px);
+  width: clamp(150px, 17vw, 210px);
   background: var(--bg-card);
-  border: 2px solid var(--border-bright);
-  border-radius: 6px;
-  padding: clamp(6px, 1vh, 10px);
+  border: 2px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: clamp(10px, 1.2vh, 14px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   position: relative;
 }
 
 .combat-card:hover {
-  transform: translateY(-12px);
-  border-color: var(--gold);
-  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.2);
+  transform: translateY(-14px);
+  border-color: var(--blue);
+  box-shadow: 0 8px 24px rgba(91, 141, 239, 0.25);
   z-index: 10;
 }
 
 .combat-card.unplayable {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .combat-card.unplayable:hover {
   transform: none;
-  border-color: var(--border-bright);
+  border-color: var(--border-dim);
   box-shadow: none;
 }
 
 .combat-card.selected {
   transform: translateY(-20px);
   border-color: var(--gold);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 20px var(--gold-dim);
 }
 
 .combat-card-cost {
   position: absolute;
-  top: -8px;
-  left: -8px;
-  width: 24px;
-  height: 24px;
+  top: -10px;
+  left: -10px;
+  width: 28px;
+  height: 28px;
   background: var(--energy-color);
   color: #000;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(8px, 1vw, 11px);
+  font-size: clamp(10px, 1.2vw, 13px);
   font-family: var(--font-pixel);
-  border: 2px solid #000;
+  border: 2px solid var(--bg-dark);
+  font-weight: bold;
 }
 
 .combat-card-name {
-  font-size: clamp(6px, 0.8vw, 8px);
+  font-size: clamp(10px, 1.3vw, 14px);
   color: var(--text-primary);
   text-align: center;
-  min-height: 24px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .combat-card-type {
-  font-size: clamp(5px, 0.7vw, 7px);
+  font-size: clamp(9px, 1.1vw, 11px);
   color: var(--text-dim);
   text-align: center;
   text-transform: uppercase;
 }
 
 .combat-card-desc {
-  font-size: clamp(5px, 0.7vw, 7px);
-  color: var(--text-dim);
+  font-size: clamp(9px, 1.1vw, 12px);
+  color: var(--text-secondary);
   text-align: center;
-  line-height: 1.6;
+  line-height: 2;
   flex: 1;
 }
 
 .combat-card-flavor {
-  font-size: clamp(4px, 0.6vw, 6px);
-  color: var(--border-bright);
+  font-size: clamp(8px, 1vw, 11px);
+  color: var(--text-dim);
   text-align: center;
   font-style: italic;
-  line-height: 1.5;
+  line-height: 1.8;
   border-top: 1px solid var(--border-dim);
-  padding-top: 4px;
+  padding-top: 6px;
   margin-top: auto;
 }
 
-/* Card type color coding */
-.combat-card.type-attack { border-color: #884444; }
-.combat-card.type-attack:hover { border-color: var(--red); }
-.combat-card.type-skill { border-color: #446688; }
-.combat-card.type-skill:hover { border-color: var(--blue); }
-.combat-card.type-power { border-color: #886644; }
-.combat-card.type-power:hover { border-color: var(--gold); }
+/* Card type color coding — subtle left border accent */
+.combat-card.type-attack { border-left: 3px solid #cc4444; }
+.combat-card.type-attack:hover { border-color: #cc4444; border-left: 3px solid #cc4444; }
+.combat-card.type-skill { border-left: 3px solid var(--blue); }
+.combat-card.type-skill:hover { border-color: var(--blue); border-left: 3px solid var(--blue); }
+.combat-card.type-power { border-left: 3px solid var(--gold); }
+.combat-card.type-power:hover { border-color: var(--gold); border-left: 3px solid var(--gold); }
 
 /* End turn button */
 .game-btn-end-turn {
   position: absolute;
-  bottom: clamp(8px, 1.5vh, 16px);
+  bottom: clamp(12px, 2vh, 20px);
   right: clamp(12px, 2vw, 24px);
   background: var(--bg-panel);
-  color: var(--gold);
-  border: 2px solid var(--gold);
-  font-size: clamp(8px, 1vw, 11px);
-  padding: clamp(8px, 1vh, 12px) clamp(12px, 2vw, 20px);
+  color: var(--blue);
+  border: 2px solid var(--blue);
+  font-size: clamp(9px, 1.1vw, 12px);
+  padding: clamp(10px, 1.2vh, 14px) clamp(14px, 2vw, 24px);
   z-index: 20;
+}
+
+.game-btn-end-turn:hover {
+  background: rgba(91, 141, 239, 0.1);
+  box-shadow: 0 4px 16px rgba(91, 141, 239, 0.2);
 }
 
 /* ═══ REWARD SCREEN ══════════════════════════════════════ */
@@ -552,18 +567,18 @@ body {
   align-items: center;
   justify-content: center;
   gap: clamp(20px, 4vh, 40px);
-  background: radial-gradient(ellipse at center, #1a2e1a 0%, var(--bg-dark) 70%);
+  background: radial-gradient(ellipse at center, #1a2a1e 0%, #14141a 70%);
 }
 
 .reward-header {
   font-size: clamp(24px, 4vw, 48px);
-  color: var(--gold);
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 4px 0 #b8960f;
+  color: var(--green);
+  text-shadow: 0 0 20px rgba(34, 197, 94, 0.4), 0 4px 0 #0a3a14;
 }
 
 .reward-subtext {
-  font-size: clamp(8px, 1.2vw, 12px);
-  color: var(--text-dim);
+  font-size: clamp(9px, 1.2vw, 12px);
+  color: var(--text-secondary);
 }
 
 .reward-cards {
@@ -573,22 +588,22 @@ body {
 }
 
 .reward-card {
-  width: clamp(120px, 16vw, 180px);
+  width: clamp(170px, 20vw, 230px);
   background: var(--bg-card);
-  border: 2px solid var(--border-bright);
-  border-radius: 6px;
-  padding: clamp(10px, 1.5vh, 16px);
+  border: 2px solid var(--border-dim);
+  border-radius: var(--radius-sm);
+  padding: clamp(12px, 1.5vh, 18px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .reward-card:hover {
   transform: translateY(-8px);
-  border-color: var(--gold);
-  box-shadow: 0 8px 24px rgba(255, 215, 0, 0.2);
+  border-color: var(--blue);
+  box-shadow: 0 8px 24px rgba(91, 141, 239, 0.2);
 }
 
 /* ═══ GAME OVER / COMPLETE SCREENS ═══════════════════════ */
@@ -596,13 +611,13 @@ body {
 #screen-gameover {
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, #2e1a1a 0%, var(--bg-dark) 70%);
+  background: radial-gradient(ellipse at center, #2a1a1a 0%, #14141a 70%);
 }
 
 #screen-complete {
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, #1a2e1a 0%, var(--bg-dark) 70%);
+  background: radial-gradient(ellipse at center, #1a2a1e 0%, #14141a 70%);
 }
 
 .gameover-content, .complete-content {
@@ -621,23 +636,23 @@ body {
 
 .complete-title {
   font-size: clamp(24px, 4vw, 48px);
-  color: var(--gold);
-  text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 4px 0 #b8960f;
+  color: var(--green);
+  text-shadow: 0 0 20px rgba(34, 197, 94, 0.4), 0 4px 0 #0a3a14;
 }
 
 .gameover-subtitle, .complete-subtitle {
-  font-size: clamp(8px, 1.2vw, 12px);
-  color: var(--text-dim);
+  font-size: clamp(9px, 1.2vw, 12px);
+  color: var(--text-secondary);
   max-width: 400px;
-  line-height: 1.8;
+  line-height: 2;
 }
 
 .gameover-stats, .complete-stats {
-  font-size: clamp(8px, 1.1vw, 11px);
+  font-size: clamp(9px, 1.2vw, 12px);
   color: var(--text-dim);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 /* ═══ FLOATING DAMAGE NUMBERS ════════════════════════════ */

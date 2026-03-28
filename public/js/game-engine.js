@@ -533,23 +533,21 @@
       blockDisplay.style.display = 'none';
     }
 
-    // Player statuses
+    // Player statuses — render in dedicated area below info bar
     let pStatusHTML = '';
     c.playerStatuses.forEach(s => {
       const def = STATUS_DEFS[s.id];
-      if (def) pStatusHTML += `<span class="combat-status-badge ${def.type}">${def.name} ${s.stacks}</span> `;
+      if (def) pStatusHTML += `<span class="combat-status-badge ${def.type}">▲ ${def.name} ${s.stacks}</span> `;
     });
-    // Inject after energy (quick hack — will refine)
-    const energyEl = document.querySelector('.combat-player-energy');
     let existingStatusEl = document.getElementById('combat-player-statuses');
     if (!existingStatusEl) {
       existingStatusEl = document.createElement('div');
       existingStatusEl.id = 'combat-player-statuses';
-      existingStatusEl.style.display = 'flex';
-      existingStatusEl.style.gap = '4px';
-      energyEl.parentNode.insertBefore(existingStatusEl, energyEl.nextSibling);
+      existingStatusEl.style.cssText = 'display:flex;gap:6px;padding:4px 8px;font-size:clamp(8px,1vw,11px);';
+      const infoBar = document.querySelector('.combat-player-info');
+      infoBar.parentNode.insertBefore(existingStatusEl, infoBar.nextSibling);
     }
-    existingStatusEl.innerHTML = pStatusHTML;
+    existingStatusEl.innerHTML = pStatusHTML ? '<span style="color:var(--text-dim)">YOUR BUFFS:</span> ' + pStatusHTML : '';
 
     // Hand
     const handEl = document.getElementById('combat-hand');
