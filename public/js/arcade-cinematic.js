@@ -269,19 +269,22 @@
         overlay.classList.add('bg-darken');
       });
 
+      // New hire: herald burst before slide-in, celebration burst after landing
+      if (isNewHire) {
+        const fwTarget = () => overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap') || overlay;
+        beat(2600, () => {
+          this._spawnFireworks(fwTarget());
+        });
+        beat(3600, () => {
+          this._spawnFireworks(fwTarget());
+        });
+      }
+
       beat(3000, () => {
         overlay.classList.add('left-enter');
         setVSAnnouncer(isNewHire
           ? `NEW HIRE ${badge.name.toUpperCase()} REPORTS FOR DUTY!`
           : `${badge.name.toUpperCase()} ENTERS THE RING`);
-        if (isNewHire) {
-          beat(3900, () => {
-            this._spawnFireworks(overlay);
-            beat(4200, () => {
-              this._spawnFireworks(overlay);
-            });
-          });
-        }
       });
 
       beat(5000, () => {
@@ -468,7 +471,7 @@
   _spawnFireworks(container) {
     if (!container) return;
     const colors = ['#ff3366', '#ffcc00', '#00ffcc', '#ff6b35', '#00ff41', '#ff00ff', '#00d4ff'];
-    const count = 20;
+    const count = 24;
     const rect = container.getBoundingClientRect();
     const cx = rect.width / 2;
     const cy = rect.height / 2;
@@ -477,46 +480,45 @@
       const particle = document.createElement('div');
       particle.className = 'arcade-vs-firework';
       const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.4;
-      const dist = 120 + Math.random() * 180;
+      const dist = 160 + Math.random() * 240;
       const dx = Math.cos(angle) * dist;
       const dy = Math.sin(angle) * dist;
       particle.style.cssText = `
         left: ${cx}px; top: ${cy}px;
-        width: ${4 + Math.random() * 5}px;
-        height: ${4 + Math.random() * 5}px;
+        width: ${10 + Math.random() * 10}px;
+        height: ${10 + Math.random() * 10}px;
         background: ${colors[Math.floor(Math.random() * colors.length)]};
         --fw-trajectory: translate(${dx}px, ${dy}px);
-        animation-delay: ${Math.random() * 0.15}s;
-        animation-duration: ${0.8 + Math.random() * 0.6}s;
+        animation-delay: ${Math.random() * 0.12}s;
+        animation-duration: ${0.9 + Math.random() * 0.5}s;
       `;
       container.appendChild(particle);
-      // Clean up after animation
       const tid = setTimeout(() => particle.remove(), 1600);
       this._timeouts.push(tid);
     }
 
     // Second burst slightly delayed for layered effect
     const t2 = setTimeout(() => {
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 14; i++) {
         const particle = document.createElement('div');
         particle.className = 'arcade-vs-firework';
-        const angle = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.5;
-        const dist = 80 + Math.random() * 140;
+        const angle = (Math.PI * 2 * i) / 14 + (Math.random() - 0.5) * 0.5;
+        const dist = 100 + Math.random() * 180;
         const dx = Math.cos(angle) * dist;
         const dy = Math.sin(angle) * dist;
         particle.style.cssText = `
           left: ${cx}px; top: ${cy}px;
-          width: ${3 + Math.random() * 4}px;
-          height: ${3 + Math.random() * 4}px;
+          width: ${8 + Math.random() * 8}px;
+          height: ${8 + Math.random() * 8}px;
           background: ${colors[Math.floor(Math.random() * colors.length)]};
           --fw-trajectory: translate(${dx}px, ${dy}px);
-          animation-duration: ${0.6 + Math.random() * 0.5}s;
+          animation-duration: ${0.7 + Math.random() * 0.5}s;
         `;
         container.appendChild(particle);
         const tid = setTimeout(() => particle.remove(), 1400);
         this._timeouts.push(tid);
       }
-    }, 300);
+    }, 250);
     this._timeouts.push(t2);
   },
 

@@ -945,18 +945,19 @@ body.view-arcade .public-orgchart {
 /* Firework particles — burst from employee portrait */
 .arcade-vs-firework {
   position: absolute;
-  width: 6px;
-  height: 6px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   pointer-events: none;
   z-index: 12;
   animation: fireworkBurst 1.2s ease-out forwards;
+  box-shadow: 0 0 6px currentColor;
 }
 
 @keyframes fireworkBurst {
-  0% { transform: translate(0, 0) scale(1); opacity: 1; }
-  60% { opacity: 1; }
-  100% { opacity: 0; transform: var(--fw-trajectory) scale(0.3); }
+  0% { transform: translate(0, 0) scale(1.2); opacity: 1; }
+  50% { opacity: 1; }
+  100% { opacity: 0; transform: var(--fw-trajectory) scale(0.4); }
 }
 
 /* ============================================================
@@ -1036,7 +1037,7 @@ body.view-arcade .public-orgchart {
 
 .arcade-vs-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(24px, 4vw, 52px);
+  font-size: clamp(28px, 5vw, 64px);
   color: #ffcc00;
   text-shadow:
     0 0 10px #ffcc00,
