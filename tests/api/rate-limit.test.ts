@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { createTestApp, cleanup, publicRequest, validBadgePayload } from '../helpers/setup';
-import { resetRateLimits } from '../../src/rate-limit';
+import { resetRateLimits, setShowMode } from '../../src/rate-limit';
 
 let ctx: ReturnType<typeof createTestApp>;
 
@@ -45,12 +45,11 @@ describe('Rate Limiting', () => {
   });
 
   it('allows higher limits in show mode', async () => {
-    const originalShowMode = process.env.SHOW_MODE;
-    process.env.SHOW_MODE = '1';
+    setShowMode(true);
     const ip = '10.1.0.3';
 
     try {
-      // Should allow more than 3 in show mode (limit is 10/hour)
+      // Should allow more than 3 in show mode (limit is 50/hour)
       for (let i = 0; i < 5; i++) {
         const res = await publicRequest(ctx.app, 'POST', '/api/badge',
           validBadgePayload({ name: `Show Test ${i}` }),
@@ -59,11 +58,7 @@ describe('Rate Limiting', () => {
         expect(res.status).toBe(200);
       }
     } finally {
-      if (originalShowMode) {
-        process.env.SHOW_MODE = originalShowMode;
-      } else {
-        delete process.env.SHOW_MODE;
-      }
+      setShowMode(false);
     }
   });
 

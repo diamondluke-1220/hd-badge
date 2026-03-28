@@ -38,7 +38,7 @@ describe('Migrations', () => {
     const db = new Database(dbPath, { readonly: true });
     const result = db.prepare('SELECT COUNT(*) as count FROM schema_versions').get() as { count: number };
     db.close();
-    expect(result.count).toBe(5);
+    expect(result.count).toBe(6);
   });
 
   it('is idempotent on re-run', () => {
@@ -49,7 +49,7 @@ describe('Migrations', () => {
     const db = new Database(dbPath, { readonly: true });
     const result = db.prepare('SELECT COUNT(*) as count FROM schema_versions').get() as { count: number };
     db.close();
-    expect(result.count).toBe(5);
+    expect(result.count).toBe(6);
   });
 
   it('seeds 5 band members on fresh DB', () => {
