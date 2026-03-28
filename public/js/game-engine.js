@@ -390,7 +390,7 @@
     screen: 'title',
     run: null,
     combat: null,
-    stats: { cardsPlayed: 0, damageDealt: 0 },
+    stats: { cardsPlayed: 0, damageDealt: 0, stylesUsed: {}, bestTurnProfit: 0, perkTriggers: 0 },
   };
 
   function generateFloorEncounters() {
@@ -416,6 +416,7 @@
       totalProfit: 0,
       perks: [],
       encounters: generateFloorEncounters(),
+      lastHealThreshold: 0, // tracks profit milestones for profit-heals
     };
     showScreen('map');
     renderMap();
@@ -445,6 +446,7 @@
       playedThisTurn: [], // cards played this turn (for tagging)
       taggedCards: [],     // cards tagged for scoring
       fightProfit: 0,
+      selectedTarget: -1, // -1 = auto (lowest HP alive)
     };
 
     // Reset UI state from any previous tag phase
@@ -631,6 +633,11 @@
     c.fightProfit += result.profit;
     G.run.totalProfit += result.profit;
 
+    // Track run stats
+    G.stats.stylesUsed[result.style.name] = (G.stats.stylesUsed[result.style.name] || 0) + 1;
+    if (result.profit > G.stats.bestTurnProfit) G.stats.bestTurnProfit = result.profit;
+    G.stats.perkTriggers += result.triggered.length;
+
     // Show scoring announcement
     announce(`${result.style.name} — $${result.profit}`);
 
@@ -709,6 +716,9 @@
         const result = calculateProfit(autoTagged, G.run.perks, hpPct);
         c.fightProfit += result.profit;
         G.run.totalProfit += result.profit;
+        G.stats.stylesUsed[result.style.name] = (G.stats.stylesUsed[result.style.name] || 0) + 1;
+        if (result.profit > G.stats.bestTurnProfit) G.stats.bestTurnProfit = result.profit;
+        G.stats.perkTriggers += result.triggered.length;
       }
 
       G.run.floor++;
@@ -796,9 +806,10 @@
 
     // Perks
     const perkContainer = document.getElementById('map-perks');
+    const perkSlotLabel = `<span style="font-size:clamp(6px,0.8vw,8px);color:var(--text-dim)">${G.run.perks.length}/5 PERKS</span>`;
     perkContainer.innerHTML = G.run.perks.length > 0
-      ? G.run.perks.map(p => `<div class="map-perk-slot" title="${p.desc}">${p.name}</div>`).join('')
-      : '<span style="font-size:clamp(7px,0.9vw,9px);color:var(--text-dim)">No perks yet</span>';
+      ? perkSlotLabel + G.run.perks.map(p => `<div class="map-perk-slot" title="${p.desc}">${p.name}</div>`).join('')
+      : perkSlotLabel;
 
     G.run.encounters.forEach((enc, i) => {
       const node = document.createElement('div');
@@ -819,8 +830,24 @@
 
       if (state === 'current') {
         node.addEventListener('click', () => {
-          showScreen('combat');
-          initCombat(enc);
+          const tutorialSeen = localStorage.getItem('hd_tutorial_seen');
+          if (!tutorialSeen && G.run.floor === 0) {
+            // Show tutorial before first combat
+            const overlay = document.getElementById('tutorial-overlay');
+            overlay.style.display = 'flex';
+            const dismissBtn = document.getElementById('btn-dismiss-tutorial');
+            const handler = () => {
+              overlay.style.display = 'none';
+              localStorage.setItem('hd_tutorial_seen', '1');
+              dismissBtn.removeEventListener('click', handler);
+              showScreen('combat');
+              initCombat(enc);
+            };
+            dismissBtn.addEventListener('click', handler);
+          } else {
+            showScreen('combat');
+            initCombat(enc);
+          }
         });
       }
       container.appendChild(node);
@@ -837,11 +864,17 @@
     document.getElementById('combat-target-val').textContent = '$' + (QUARTERLY_TARGETS[0] || '???');
 
     // Enemies
+    // Auto-retarget if selected target is dead
+    if (c.selectedTarget >= 0 && (!c.enemies[c.selectedTarget] || c.enemies[c.selectedTarget].currentHP <= 0)) {
+      c.selectedTarget = c.enemies.findIndex(e => e.currentHP > 0);
+    }
+
     const enemyZone = document.getElementById('combat-enemies');
     enemyZone.innerHTML = '';
     c.enemies.forEach((enemy, i) => {
       const div = document.createElement('div');
-      div.className = 'combat-enemy';
+      const isTarget = (c.selectedTarget === i) || (c.selectedTarget < 0 && i === c.enemies.findIndex(e => e.currentHP > 0));
+      div.className = 'combat-enemy' + (isTarget && enemy.currentHP > 0 ? ' targeted' : '');
       if (enemy.currentHP <= 0) div.style.opacity = '0.3';
 
       const intent = enemy.intentPattern[enemy.intentIndex % enemy.intentPattern.length];
@@ -864,6 +897,16 @@
         <div class="combat-enemy-hp-text">${Math.max(0, enemy.currentHP)}/${enemy.hp}${enemy.block > 0 ? ' 🛡' + enemy.block : ''}</div>
         <div class="combat-enemy-statuses">${statusHTML}</div>
       `;
+
+      // Click to select target
+      if (enemy.currentHP > 0 && c.phase === 'playerTurn') {
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', () => {
+          c.selectedTarget = i;
+          renderCombat();
+        });
+      }
+
       enemyZone.appendChild(div);
     });
 
@@ -937,8 +980,12 @@
           if (card.target === 'self' || card.target === 'allEnemies') {
             playCard(card, 0);
           } else {
-            const aliveIdx = c.enemies.findIndex(e => e.currentHP > 0);
-            if (aliveIdx >= 0) playCard(card, aliveIdx);
+            // Use selected target if alive, otherwise auto-target lowest HP
+            let targetIdx = c.selectedTarget;
+            if (targetIdx < 0 || !c.enemies[targetIdx] || c.enemies[targetIdx].currentHP <= 0) {
+              targetIdx = c.enemies.findIndex(e => e.currentHP > 0);
+            }
+            if (targetIdx >= 0) playCard(card, targetIdx);
           }
         });
       }
@@ -1035,8 +1082,25 @@
 
   // ─── Render: Reward ──────────────────────────────────
   function renderReward() {
+    // Profit-heals: +5 HP per $500 profit milestone crossed
+    const HEAL_PER_MILESTONE = 5;
+    const MILESTONE_INTERVAL = 500;
+    const currentThreshold = Math.floor(G.run.totalProfit / MILESTONE_INTERVAL);
+    const milestonesEarned = currentThreshold - (G.run.lastHealThreshold || 0);
+    let profitHealText = '';
+    if (milestonesEarned > 0) {
+      const healAmount = milestonesEarned * HEAL_PER_MILESTONE;
+      const oldHP = G.run.playerHP;
+      G.run.playerHP = Math.min(G.run.playerHP + healAmount, G.run.playerMaxHP);
+      const actualHeal = G.run.playerHP - oldHP;
+      G.run.lastHealThreshold = currentThreshold;
+      if (actualHeal > 0) {
+        profitHealText = ` | +${actualHeal} HP (profit milestone)`;
+      }
+    }
+
     document.getElementById('reward-profit-summary').textContent =
-      `Profit extracted: $${G.combat?.fightProfit || 0} (Total: $${G.run.totalProfit})`;
+      `Profit extracted: $${G.combat?.fightProfit || 0} (Total: $${G.run.totalProfit})${profitHealText}`;
 
     // Card rewards
     const container = document.getElementById('reward-cards');
@@ -1064,15 +1128,76 @@
     });
 
     // Perk rewards (after fights 2 and 4)
+    const MAX_PERKS = 5;
     const perkSection = document.getElementById('reward-perk-section');
     if (G.run.floor === 2 || G.run.floor === 4) {
       perkSection.style.display = '';
       const perkContainer = document.getElementById('reward-perks');
       perkContainer.innerHTML = '';
 
+      const atCap = G.run.perks.length >= MAX_PERKS;
+      const sectionLabel = perkSection.querySelector('.reward-section-label');
+      if (sectionLabel) {
+        sectionLabel.textContent = atCap
+          ? `MANAGEMENT PERK (${G.run.perks.length}/${MAX_PERKS} — SELECT ONE TO REPLACE)`
+          : `MANAGEMENT PERK (${G.run.perks.length}/${MAX_PERKS})`;
+      }
+
       const available = PERK_CATALOG.filter(p => !G.run.perks.some(rp => rp.id === p.id));
       const perkChoices = shuffle(available).slice(0, 3);
 
+      let selectedNewPerk = null;
+      let selectedNewDiv = null;
+
+      // Show current perks for replacement when at cap
+      if (atCap) {
+        const currentLabel = document.createElement('div');
+        currentLabel.style.cssText = 'font-size:clamp(7px,0.9vw,9px);color:var(--text-dim);margin-bottom:8px;text-align:center';
+        currentLabel.textContent = 'YOUR CURRENT PERKS (click to replace):';
+        perkContainer.appendChild(currentLabel);
+
+        const currentRow = document.createElement('div');
+        currentRow.className = 'reward-perks';
+        currentRow.id = 'current-perks-row';
+        G.run.perks.forEach((perk, idx) => {
+          const div = document.createElement('div');
+          div.className = 'reward-perk';
+          div.style.opacity = '0.6';
+          div.innerHTML = `
+            <div class="reward-perk-name">${perk.name}</div>
+            <div class="reward-perk-desc">${perk.desc}</div>
+            <div class="reward-perk-rarity">${perk.rarity}</div>
+          `;
+          div.addEventListener('click', () => {
+            if (!selectedNewPerk) return;
+            // Replace this perk with the selected new one
+            G.run.perks[idx] = selectedNewPerk;
+            // Disable everything
+            perkContainer.querySelectorAll('.reward-perk').forEach(p => {
+              p.style.opacity = '0.3';
+              p.style.pointerEvents = 'none';
+            });
+            div.style.opacity = '1';
+            div.style.borderColor = 'var(--suit-tickets)';
+            div.innerHTML = `
+              <div class="reward-perk-name">${selectedNewPerk.name}</div>
+              <div class="reward-perk-desc">${selectedNewPerk.desc}</div>
+              <div class="reward-perk-rarity" style="color:var(--gold)">REPLACED</div>
+            `;
+            if (selectedNewDiv) selectedNewDiv.style.borderColor = 'var(--gold)';
+          });
+          currentRow.appendChild(div);
+        });
+        perkContainer.appendChild(currentRow);
+
+        const newLabel = document.createElement('div');
+        newLabel.style.cssText = 'font-size:clamp(7px,0.9vw,9px);color:var(--text-dim);margin:12px 0 8px;text-align:center';
+        newLabel.textContent = 'NEW PERKS (select one first, then click above to swap):';
+        perkContainer.appendChild(newLabel);
+      }
+
+      const newRow = document.createElement('div');
+      newRow.className = 'reward-perks';
       perkChoices.forEach(perkDef => {
         const div = document.createElement('div');
         div.className = 'reward-perk';
@@ -1082,17 +1207,26 @@
           <div class="reward-perk-rarity">${perkDef.rarity}</div>
         `;
         div.addEventListener('click', () => {
-          G.run.perks.push(perkDef);
-          // Disable all perk choices (one pick only)
-          perkContainer.querySelectorAll('.reward-perk').forEach(p => {
-            p.style.opacity = '0.3';
-            p.style.pointerEvents = 'none';
-          });
-          div.style.opacity = '1';
-          div.style.borderColor = 'var(--gold)';
+          if (atCap) {
+            // Select new perk for replacement (highlight it, wait for current perk click)
+            newRow.querySelectorAll('.reward-perk').forEach(p => p.style.borderColor = '');
+            div.style.borderColor = 'var(--gold)';
+            selectedNewPerk = perkDef;
+            selectedNewDiv = div;
+          } else {
+            // Under cap: just add it
+            G.run.perks.push(perkDef);
+            perkContainer.querySelectorAll('.reward-perk').forEach(p => {
+              p.style.opacity = '0.3';
+              p.style.pointerEvents = 'none';
+            });
+            div.style.opacity = '1';
+            div.style.borderColor = 'var(--gold)';
+          }
         });
-        perkContainer.appendChild(div);
+        newRow.appendChild(div);
       });
+      perkContainer.appendChild(newRow);
     } else {
       perkSection.style.display = 'none';
     }
@@ -1186,11 +1320,40 @@
     }
   }
 
+  // ─── Score Telemetry ────────────────────────────────
+  function submitScore(win) {
+    if (!validatedBadgeId) return;
+    fetch('/api/game/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employeeId: validatedBadgeId,
+        profit: G.run.totalProfit,
+        floor: G.run.floor,
+        perksUsed: G.run.perks.map(p => p.id),
+        cardsPlayed: G.stats.cardsPlayed,
+        win,
+      }),
+    }).catch(() => {}); // fire-and-forget
+  }
+
   // ─── Render: Game Over / Complete ────────────────────
+  function renderRunStats(prefix) {
+    document.getElementById(`${prefix}-best-turn`).textContent = G.stats.bestTurnProfit;
+    document.getElementById(`${prefix}-perk-triggers`).textContent = G.stats.perkTriggers;
+    const stylesEl = document.getElementById(`${prefix}-styles`);
+    const entries = Object.entries(G.stats.stylesUsed).sort((a, b) => b[1] - a[1]);
+    if (entries.length > 0) {
+      stylesEl.innerHTML = 'Styles: ' + entries.map(([name, count]) => `${name} x${count}`).join(', ');
+    }
+  }
+
   function renderGameOver() {
     document.getElementById('gameover-fights').textContent = G.run.floor;
     document.getElementById('gameover-profit').textContent = G.run.totalProfit;
     document.getElementById('gameover-cards').textContent = G.stats.cardsPlayed;
+    renderRunStats('gameover');
+    submitScore(false);
   }
 
   function renderComplete() {
@@ -1208,6 +1371,68 @@
     else if (profit >= 500) grade = 'C — Probationary';
 
     document.getElementById('complete-grade').textContent = grade;
+    renderRunStats('complete');
+    submitScore(true);
+  }
+
+  // ─── Badge Gate ─────────────────────────────────────
+  let validatedBadgeId = null;
+  let validatedBadgeName = null;
+
+  function showGameButtons() {
+    document.getElementById('btn-start-run').style.display = '';
+    const existingSave = loadGame();
+    if (existingSave) {
+      const btn = document.getElementById('btn-continue-run');
+      btn.style.display = '';
+      btn.textContent = `CONTINUE RUN (Floor ${existingSave.run.floor + 1}/7)`;
+    }
+  }
+
+  async function validateBadge(badgeId) {
+    const status = document.getElementById('badge-status');
+    status.style.color = 'var(--text-dim)';
+    status.textContent = 'Verifying...';
+    try {
+      const res = await fetch(`/api/badge/${encodeURIComponent(badgeId)}`);
+      if (!res.ok) {
+        status.style.color = 'var(--red)';
+        status.textContent = 'Badge not found. Check your ID.';
+        return false;
+      }
+      const data = await res.json();
+      validatedBadgeId = data.employeeId;
+      validatedBadgeName = data.name;
+      localStorage.setItem('hd_game_badge_id', validatedBadgeId);
+      status.style.color = 'var(--green)';
+      status.textContent = `Welcome, ${data.name}`;
+      showGameButtons();
+      return true;
+    } catch (e) {
+      status.style.color = 'var(--red)';
+      status.textContent = 'Connection error. Try again.';
+      return false;
+    }
+  }
+
+  document.getElementById('btn-validate-badge').addEventListener('click', () => {
+    const input = document.getElementById('badge-id-input');
+    const id = input.value.trim().toUpperCase();
+    if (id) validateBadge(id);
+  });
+
+  document.getElementById('badge-id-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      const id = e.target.value.trim().toUpperCase();
+      if (id) validateBadge(id);
+    }
+  });
+
+  // Auto-restore saved badge ID
+  const savedBadgeId = localStorage.getItem('hd_game_badge_id');
+  if (savedBadgeId) {
+    document.getElementById('badge-id-input').value = savedBadgeId;
+    validateBadge(savedBadgeId);
   }
 
   // ─── Event Binding ───────────────────────────────────
@@ -1221,14 +1446,6 @@
     const save = loadGame();
     if (save) restoreGame(save);
   });
-
-  // Check for saved game on load
-  const existingSave = loadGame();
-  if (existingSave) {
-    const btn = document.getElementById('btn-continue-run');
-    btn.style.display = '';
-    btn.textContent = `CONTINUE RUN (Floor ${existingSave.run.floor + 1}/7)`;
-  }
 
   document.getElementById('btn-end-turn').addEventListener('click', () => {
     if (G.combat?.phase === 'playerTurn') enterTagPhase();

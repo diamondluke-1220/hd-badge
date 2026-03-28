@@ -11,14 +11,57 @@
 <body>
   <div id="game-root">
 
+    <!-- TUTORIAL OVERLAY -->
+    <div id="tutorial-overlay" style="display:none">
+      <div class="tutorial-content">
+        <div class="tutorial-title">HOW TO PLAY</div>
+
+        <div class="tutorial-section">
+          <div class="tutorial-heading">COMBAT</div>
+          <div class="tutorial-text">Play cards to deal damage and block attacks. Each card costs energy (3/turn). Beat the employee to win.</div>
+        </div>
+
+        <div class="tutorial-section">
+          <div class="tutorial-heading">THE TAG PHASE</div>
+          <div class="tutorial-text">After playing cards, click FILE REPORT. Then TAG up to 3 played cards for your performance report. The suits you tag determine your profit.</div>
+        </div>
+
+        <div class="tutorial-section">
+          <div class="tutorial-heading">MANAGEMENT STYLES</div>
+          <div class="tutorial-text">
+            <span style="color:var(--gold)">3 different suits</span> = Cross-Functional (x5 profit)<br>
+            <span style="color:var(--gold)">3 same suit</span> = Board Resolution (x8 profit)<br>
+            <span style="color:var(--gold)">2 same suit</span> = Follow-Up (x2 profit)<br>
+            <span style="color:var(--text-dim)">No match</span> = Ad Hoc (x1 profit)
+          </div>
+        </div>
+
+        <div class="tutorial-section">
+          <div class="tutorial-heading">KEY INSIGHT</div>
+          <div class="tutorial-text" style="color:var(--gold)">Diversity beats pairs! Cross-Functional (x5) is easier AND better than Follow-Up (x2). Tag cards from different suits.</div>
+        </div>
+
+        <button class="game-btn game-btn-primary" id="btn-dismiss-tutorial">GOT IT — LET'S RESTRUCTURE</button>
+      </div>
+    </div>
+
     <!-- TITLE SCREEN -->
     <div id="screen-title" class="game-screen active">
       <div class="title-content">
         <div class="title-logo">HELP DESK</div>
         <div class="title-subtitle">EXECUTIVE EDITION</div>
         <div class="title-tagline">You're the new CEO. The employees won't go quietly.</div>
+        <div class="title-badge-gate" id="badge-gate">
+          <label for="badge-id-input" style="font-size:clamp(7px,0.9vw,9px);color:var(--text-dim)">ENTER YOUR BADGE ID</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <input type="text" id="badge-id-input" placeholder="HD-00042" autocomplete="off"
+              style="font-family:'Press Start 2P';font-size:clamp(8px,1vw,11px);background:var(--bg-dark);color:var(--text-primary);border:2px solid var(--border-dim);border-radius:6px;padding:8px 12px;width:140px;text-align:center;text-transform:uppercase">
+            <button class="game-btn game-btn-secondary" id="btn-validate-badge" style="font-size:clamp(6px,0.8vw,8px);padding:8px 12px">VERIFY</button>
+          </div>
+          <div id="badge-status" style="font-size:clamp(6px,0.8vw,8px);margin-top:6px;min-height:14px"></div>
+        </div>
         <button class="game-btn game-btn-primary" id="btn-continue-run" style="display:none">CONTINUE RUN</button>
-        <button class="game-btn game-btn-primary" id="btn-start-run">NEW RESTRUCTURING</button>
+        <button class="game-btn game-btn-primary" id="btn-start-run" style="display:none">NEW RESTRUCTURING</button>
         <div class="title-footer">Quarter 1: IT Department</div>
       </div>
     </div>
@@ -189,6 +232,9 @@
           <div>Departments restructured: <span id="gameover-fights">0</span> / 7</div>
           <div>Profit extracted: $<span id="gameover-profit">0</span></div>
           <div>Cards played: <span id="gameover-cards">0</span></div>
+          <div>Best single turn: $<span id="gameover-best-turn">0</span></div>
+          <div>Perk triggers: <span id="gameover-perk-triggers">0</span></div>
+          <div id="gameover-styles" style="margin-top:6px"></div>
         </div>
         <button class="game-btn game-btn-primary" id="btn-retry">HOSTILE TAKEOVER</button>
       </div>
@@ -204,6 +250,9 @@
           <div>HP remaining: <span id="complete-hp">0</span></div>
           <div>Perks acquired: <span id="complete-perks">0</span></div>
           <div>Cards played: <span id="complete-cards">0</span></div>
+          <div>Best single turn: $<span id="complete-best-turn">0</span></div>
+          <div>Perk triggers: <span id="complete-perk-triggers">0</span></div>
+          <div id="complete-styles" style="margin-top:6px"></div>
         </div>
         <div class="complete-grade" id="complete-grade"></div>
         <button class="game-btn game-btn-primary" id="btn-new-run">NEXT QUARTER</button>

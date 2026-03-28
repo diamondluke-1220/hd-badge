@@ -197,6 +197,23 @@ export function initDb(dbPath: string) {
     }
   });
 
+  // v7: Game scores telemetry table
+  runMigration(7, 'Create game_scores table for Executive Edition telemetry', () => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS game_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        employee_id TEXT NOT NULL,
+        profit INTEGER NOT NULL DEFAULT 0,
+        floor INTEGER NOT NULL DEFAULT 0,
+        perks_used TEXT DEFAULT '[]',
+        cards_played INTEGER NOT NULL DEFAULT 0,
+        win INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_game_scores_employee ON game_scores(employee_id)');
+  });
+
   // Prepare all statements
   stmts = {
     insertBadge: db.prepare(`
@@ -701,6 +718,27 @@ export function deleteDemoBadges(): number {
 export function listAllBadgeIds(): Set<string> {
   const rows = db.prepare('SELECT employee_id FROM badges').all() as { employee_id: string }[];
   return new Set(rows.map(r => r.employee_id));
+}
+
+export function saveGameScore(data: {
+  employeeId: string;
+  profit: number;
+  floor: number;
+  perksUsed: string[];
+  cardsPlayed: number;
+  win: boolean;
+}): void {
+  db.prepare(`
+    INSERT INTO game_scores (employee_id, profit, floor, perks_used, cards_played, win)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    data.employeeId,
+    Math.floor(data.profit),
+    Math.floor(data.floor),
+    JSON.stringify(data.perksUsed),
+    Math.floor(data.cardsPlayed),
+    data.win ? 1 : 0,
+  );
 }
 
 export function closeDb() {

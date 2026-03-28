@@ -6,7 +6,7 @@ import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
-import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge } from '../db';
+import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore } from '../db';
 import { checkRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
@@ -579,5 +579,37 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
   app.get('/api/orgchart/stats', (c) => {
     return c.json(getStats());
+  });
+
+  // ─── Game Score Telemetry ─────────────────────────────────
+
+  app.post('/api/game/score', async (c) => {
+    try {
+      const body = await c.req.json();
+      const { employeeId, profit, floor, perksUsed, cardsPlayed, win } = body;
+
+      if (!employeeId || typeof profit !== 'number' || typeof floor !== 'number') {
+        return c.json({ success: false, error: 'Missing required fields' }, 400);
+      }
+
+      const badge = getBadge(employeeId);
+      if (!badge) {
+        return c.json({ success: false, error: 'Invalid badge ID' }, 404);
+      }
+
+      saveGameScore({
+        employeeId,
+        profit,
+        floor,
+        perksUsed: perksUsed || [],
+        cardsPlayed: cardsPlayed || 0,
+        win: !!win,
+      });
+
+      return c.json({ success: true });
+    } catch (e) {
+      log('error', 'Game score save failed', e);
+      return c.json({ success: false, error: 'Internal error' }, 500);
+    }
   });
 }

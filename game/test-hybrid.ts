@@ -417,6 +417,7 @@ for (let r = 0; r < floorRuns; r++) {
   let fightsWon = 0;
   let runProfit = 0;
   const runPerks: PerkInstance[] = [];
+  let lastHealThreshold = 0;
 
   // 5 normal fights
   for (let f = 0; f < 5; f++) {
@@ -445,10 +446,11 @@ for (let r = 0; r < floorRuns; r++) {
       }
     }
 
-    // Perk reward (1 random perk after fight 2 and fight 4)
+    // Perk reward (1 random perk after fight 2 and fight 4, max 5)
+    const MAX_PERKS = 5;
     if ((f === 1 || f === 3) && PERK_CATALOG.length > 0) {
       const availablePerks = PERK_CATALOG.filter(p => !runPerks.some(rp => rp.id === p.id));
-      if (availablePerks.length > 0) {
+      if (availablePerks.length > 0 && runPerks.length < MAX_PERKS) {
         const perkDef = availablePerks[Math.floor(Math.random() * availablePerks.length)];
         runPerks.push({ ...perkDef, slotIndex: runPerks.length });
       }
@@ -468,6 +470,16 @@ for (let r = 0; r < floorRuns; r++) {
           runProfit -= REMOVE_COST;
         }
       }
+    }
+
+    // Profit-heals: +5 HP per $500 profit milestone
+    const MILESTONE_INTERVAL = 500;
+    const HEAL_PER_MILESTONE = 5;
+    const currentThreshold = Math.floor(runProfit / MILESTONE_INTERVAL);
+    const milestonesEarned = currentThreshold - lastHealThreshold;
+    if (milestonesEarned > 0) {
+      hp = Math.min(hp + milestonesEarned * HEAL_PER_MILESTONE, MAX_HP);
+      lastHealThreshold = currentThreshold;
     }
 
     hp = Math.min(hp + 6, MAX_HP);
