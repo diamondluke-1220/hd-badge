@@ -1355,6 +1355,38 @@
       this._timeouts.push(tid);
     }
 
+    // Bonus hit on opponent — flash their spark + portrait hit
+    const oppSpark = overlay.querySelector('.arcade-vs-right .arcade-vs-hit-spark');
+    const oppPortrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait');
+    const oppWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
+    if (oppSpark) {
+      const randX = 10 + Math.floor(Math.random() * 80);
+      const randY = 10 + Math.floor(Math.random() * 80);
+      oppSpark.style.setProperty('--spark-x', randX + '%');
+      oppSpark.style.setProperty('--spark-y', randY + '%');
+      oppSpark.style.setProperty('--spark-color', empColor);
+      oppSpark.classList.add('flash');
+      const sparkTid = setTimeout(() => oppSpark.classList.remove('flash'), 150);
+      this._timeouts.push(sparkTid);
+    }
+    if (oppPortrait) {
+      oppPortrait.classList.add('hit-flash-bright');
+      const hitTid = setTimeout(() => oppPortrait.classList.remove('hit-flash-bright'), 80);
+      this._timeouts.push(hitTid);
+    }
+    // Screen shake for impact
+    overlay.classList.add('hit-shake');
+    const shakeTid = setTimeout(() => overlay.classList.remove('hit-shake'), 120);
+    this._timeouts.push(shakeTid);
+    // Hitstop vibrate on both portraits
+    if (empWrap) empWrap.classList.add('hitstop-vibrate');
+    if (oppWrap) oppWrap.classList.add('hitstop-vibrate');
+    const stopTid = setTimeout(() => {
+      if (empWrap) empWrap.classList.remove('hitstop-vibrate');
+      if (oppWrap) oppWrap.classList.remove('hitstop-vibrate');
+    }, 150);
+    this._timeouts.push(stopTid);
+
     // Division-color screen flash
     overlay.classList.add('qte-screen-flash');
     const flashTid = setTimeout(() => overlay.classList.remove('qte-screen-flash'), 300);
