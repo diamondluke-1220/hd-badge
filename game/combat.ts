@@ -278,8 +278,12 @@ export function resolveEnemyTurn(state: CombatState, events: GameEvent[]): void 
       }
     }
 
-    // Advance intent
-    enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intentPattern.length;
+    // Advance intent: random enemies jump to random slot, scripted enemies cycle
+    if (enemy.randomIntents) {
+      enemy.intentIndex = Math.floor(Math.random() * enemy.intentPattern.length);
+    } else {
+      enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intentPattern.length;
+    }
   }
 }
 

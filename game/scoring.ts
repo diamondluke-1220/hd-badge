@@ -11,6 +11,7 @@ import { isPerkTriggered } from './perks';
 export interface TaggedCard {
   suit: Suit;
   rank: number; // 1-10, contributes to base KPI
+  rankBonus?: number; // +N from upgrades
   cardName: string; // for display
 }
 
@@ -52,8 +53,9 @@ export function calculateProfit(ctx: ScoringContext): ScoringBreakdown {
   const taggedSuits = ctx.taggedCards.map(c => c.suit);
   const style = detectStyle(taggedSuits);
 
-  // Base KPI from card ranks
-  const rankSum = ctx.taggedCards.reduce((sum, c) => sum + c.rank, 0);
+  // Base KPI from card ranks (includes upgrade bonuses)
+  const rankSum = ctx.taggedCards.reduce((sum, c) => sum + c.rank + (c.rankBonus ?? 0), 0);
+  const uniqueSuitCount = new Set(taggedSuits).size;
 
   // Evaluate perks in slot order (order matters!)
   let perkAdditiveKPI = 0;
@@ -74,10 +76,15 @@ export function calculateProfit(ctx: ScoringContext): ScoringBreakdown {
     if (!isPerkTriggered(perk, triggerContext)) continue;
 
     switch (perk.effect.type) {
-      case 'add_kpi':
-        perkAdditiveKPI += perk.effect.value;
-        activatedPerks.push({ perkName: perk.name, effect: `+${perk.effect.value} KPI` });
+      case 'add_kpi': {
+        // Synergy Bonus scales: +5 KPI per unique suit tagged
+        const kpiValue = perk.id === 'synergy_bonus'
+          ? perk.effect.value * uniqueSuitCount
+          : perk.effect.value;
+        perkAdditiveKPI += kpiValue;
+        activatedPerks.push({ perkName: perk.name, effect: `+${kpiValue} KPI` });
         break;
+      }
       case 'add_leverage':
         perkAdditiveLeverage += perk.effect.value;
         activatedPerks.push({ perkName: perk.name, effect: `+${perk.effect.value} Leverage` });
@@ -116,10 +123,10 @@ export function calculateProfit(ctx: ScoringContext): ScoringBreakdown {
 export const QUARTERLY_TARGETS = [
   300,   // Ante 1 — achievable with basic styles, no perks
   800,   // Ante 2 — needs decent styles or 1 perk
-  2000,  // Ante 3 — needs good styles + perks
-  5000,  // Ante 4 — needs multiplicative perks
-  11000, // Ante 5 (future)
-  20000, // Ante 6 (future)
+  2500,  // Ante 3 — needs good styles + perks
+  6000,  // Ante 4 — needs multiplicative perks
+  12000, // Ante 5 — needs stacked xMult + upgrades
+  25000, // Ante 6 — endgame, needs near-perfect perk build
 ];
 
 /**

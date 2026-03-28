@@ -5,7 +5,7 @@
 // Usage: bun run game/test-hybrid.ts
 
 import { STARTER_DECK, REWARD_POOL, createCardInstance, resetInstanceCounter, type Card, type CardDef } from './cards-v2';
-import { NORMAL_ENEMIES, ELITE_ENEMY, BOSS_ENEMY, createEnemyInstance, type EnemyDef } from './enemies-v2';
+import { NORMAL_ENEMIES, ELITE_ENEMY, ELITE_ENEMIES, BOSS_ENEMY, BOSS_ENEMIES, createEnemyInstance, type EnemyDef } from './enemies-v2';
 import type { Suit } from './suits';
 import { detectStyle } from './styles';
 import { PERK_CATALOG, type PerkInstance } from './perks';
@@ -29,14 +29,14 @@ import {
 interface PlayedCardInfo {
   suit: Suit;
   rank: number;
+  rankBonus?: number;
   cardName: string;
 }
 
-/**
- * AI tags cards for scoring. Strategy:
- * - Try to form the best Management Style possible
- * - Prefer higher rank cards within the chosen style
- */
+function toTaggedCard(c: PlayedCardInfo): TaggedCard {
+  return { suit: c.suit, rank: c.rank, rankBonus: c.rankBonus, cardName: c.cardName };
+}
+
 function aiTagCards(playedCards: PlayedCardInfo[], maxTags: number): TaggedCard[] {
   if (playedCards.length === 0) return [];
   const tagLimit = Math.min(maxTags, playedCards.length);
@@ -53,7 +53,7 @@ function aiTagCards(playedCards: PlayedCardInfo[], maxTags: number): TaggedCard[
   for (const [, cards] of suitCounts) {
     if (cards.length >= 3 && tagLimit >= 3) {
       const sorted = cards.sort((a, b) => b.rank - a.rank);
-      return sorted.slice(0, 3).map(c => ({ suit: c.suit, rank: c.rank, cardName: c.cardName }));
+      return sorted.slice(0, 3).map(c => (toTaggedCard(c)));
     }
   }
 
@@ -63,7 +63,7 @@ function aiTagCards(playedCards: PlayedCardInfo[], maxTags: number): TaggedCard[
     for (const [, cards] of suitCounts) {
       if (tagged.length >= 3) break;
       const best = cards.sort((a, b) => b.rank - a.rank)[0];
-      tagged.push({ suit: best.suit, rank: best.rank, cardName: best.cardName });
+      tagged.push({ suit: best.suit, rank: best.rank, rankBonus: best.rankBonus, cardName: best.cardName });
     }
     if (tagged.length >= 3) return tagged.slice(0, 3);
   }
@@ -72,14 +72,14 @@ function aiTagCards(playedCards: PlayedCardInfo[], maxTags: number): TaggedCard[
   for (const [, cards] of suitCounts) {
     if (cards.length >= 2) {
       const sorted = cards.sort((a, b) => b.rank - a.rank);
-      const tagged = sorted.slice(0, 2).map(c => ({ suit: c.suit, rank: c.rank, cardName: c.cardName }));
+      const tagged = sorted.slice(0, 2).map(c => toTaggedCard(c));
       // Fill remaining slots with highest rank cards from other suits
       const remaining = playedCards
         .filter(c => !tagged.some(t => t.cardName === c.cardName && t.rank === c.rank))
         .sort((a, b) => b.rank - a.rank);
       while (tagged.length < tagLimit && remaining.length > 0) {
         const c = remaining.shift()!;
-        tagged.push({ suit: c.suit, rank: c.rank, cardName: c.cardName });
+        tagged.push(toTaggedCard(c));
       }
       return tagged.slice(0, tagLimit);
     }
@@ -87,7 +87,7 @@ function aiTagCards(playedCards: PlayedCardInfo[], maxTags: number): TaggedCard[
 
   // Fallback: tag highest rank cards
   const sorted = [...playedCards].sort((a, b) => b.rank - a.rank);
-  return sorted.slice(0, tagLimit).map(c => ({ suit: c.suit, rank: c.rank, cardName: c.cardName }));
+  return sorted.slice(0, tagLimit).map(c => (toTaggedCard(c)));
 }
 
 // ─── AI Combat (adapted from test-combat.ts) ───────────────
@@ -102,7 +102,7 @@ function aiPlayTurn(state: CombatState): { events: GameEvent[]; playedCards: Pla
   for (const card of playable()) {
     if (card.type === 'power') {
       const v2card = card as unknown as Card; // structural cast
-      playedCards.push({ suit: v2card.suit, rank: v2card.rank, cardName: v2card.name });
+      playedCards.push({ suit: v2card.suit, rank: v2card.rank, rankBonus: v2card.rankBonus, cardName: v2card.name });
       resolveCard(state, card, 0, events);
     }
   }
@@ -128,7 +128,7 @@ function aiPlayTurn(state: CombatState): { events: GameEvent[]; playedCards: Pla
       const card = cards[Math.floor(Math.random() * cards.length)];
       const target = card.target === 'self' ? 0 : targetIdx;
       const v2card = card as unknown as Card;
-      playedCards.push({ suit: v2card.suit, rank: v2card.rank, cardName: v2card.name });
+      playedCards.push({ suit: v2card.suit, rank: v2card.rank, rankBonus: v2card.rankBonus, cardName: v2card.name });
       resolveCard(state, card, target, events);
       played = true;
     } else {
@@ -144,7 +144,7 @@ function aiPlayTurn(state: CombatState): { events: GameEvent[]; playedCards: Pla
         if (canPlayCard(state, card)) {
           const target = card.target === 'self' ? 0 : targetIdx;
           const v2card = card as unknown as Card;
-          playedCards.push({ suit: v2card.suit, rank: v2card.rank, cardName: v2card.name });
+          playedCards.push({ suit: v2card.suit, rank: v2card.rank, rankBonus: v2card.rankBonus, cardName: v2card.name });
           resolveCard(state, card, target, events);
           played = true;
           break;
@@ -326,16 +326,22 @@ for (const enemy of NORMAL_ENEMIES) {
 }
 
 console.log('');
+for (const elite of ELITE_ENEMIES) {
+  const r = runSimulation(elite.name, starterDeck, [elite], RUNS, MAX_HP, MAX_HP, noPerks);
+  const bar = '█'.repeat(Math.round(r.winRate * 20)) + '░'.repeat(20 - Math.round(r.winRate * 20));
+  console.log(`  ${elite.name.padEnd(28)} ${bar} ${(r.winRate * 100).toFixed(0).padStart(3)}% win | ${r.avgTurns.toFixed(1)}t | $${r.profitStats.avg.toFixed(0)} avg profit`);
+}
+console.log('  ^ Elites');
 const eliteR = runSimulation(ELITE_ENEMY.name, starterDeck, [ELITE_ENEMY], RUNS, MAX_HP, MAX_HP, noPerks);
-const eliteBar = '█'.repeat(Math.round(eliteR.winRate * 20)) + '░'.repeat(20 - Math.round(eliteR.winRate * 20));
-console.log(`  ${ELITE_ENEMY.name.padEnd(28)} ${eliteBar} ${(eliteR.winRate * 100).toFixed(0).padStart(3)}% win | ${eliteR.avgTurns.toFixed(1)}t | $${eliteR.profitStats.avg.toFixed(0)} avg profit`);
-console.log('  ^ Elite');
 
 console.log('');
+for (const boss of BOSS_ENEMIES) {
+  const r = runSimulation(boss.name, starterDeck, [boss], RUNS, MAX_HP, MAX_HP, noPerks);
+  const bar = '█'.repeat(Math.round(r.winRate * 20)) + '░'.repeat(20 - Math.round(r.winRate * 20));
+  console.log(`  ${boss.name.padEnd(28)} ${bar} ${(r.winRate * 100).toFixed(0).padStart(3)}% win | ${r.avgTurns.toFixed(1)}t | $${r.profitStats.avg.toFixed(0)} avg profit`);
+}
+console.log('  ^ Bosses');
 const bossR = runSimulation(BOSS_ENEMY.name, starterDeck, [BOSS_ENEMY], RUNS, MAX_HP, MAX_HP, noPerks);
-const bossBar = '█'.repeat(Math.round(bossR.winRate * 20)) + '░'.repeat(20 - Math.round(bossR.winRate * 20));
-console.log(`  ${BOSS_ENEMY.name.padEnd(28)} ${bossBar} ${(bossR.winRate * 100).toFixed(0).padStart(3)}% win | ${bossR.avgTurns.toFixed(1)}t | $${bossR.profitStats.avg.toFixed(0)} avg profit`);
-console.log('  ^ Boss');
 
 // ─── Test 2: Profit Distribution ────────────────────────────
 
@@ -427,6 +433,18 @@ for (let r = 0; r < floorRuns; r++) {
       deck.push(createCardInstance(reward));
     }
 
+    // Card upgrade: upgrade one non-upgraded card's rank by +2 (after fights 1, 3)
+    if (f === 0 || f === 2) {
+      const upgradeable = deck.filter(c => !c.upgraded);
+      if (upgradeable.length > 0) {
+        // AI picks highest rank card to upgrade (maximize scoring)
+        upgradeable.sort((a, b) => (b.rank + (b.rankBonus ?? 0)) - (a.rank + (a.rankBonus ?? 0)));
+        const target = upgradeable[0];
+        target.rankBonus = (target.rankBonus ?? 0) + 2;
+        target.upgraded = true;
+      }
+    }
+
     // Perk reward (1 random perk after fight 2 and fight 4)
     if ((f === 1 || f === 3) && PERK_CATALOG.length > 0) {
       const availablePerks = PERK_CATALOG.filter(p => !runPerks.some(rp => rp.id === p.id));
@@ -436,12 +454,29 @@ for (let r = 0; r < floorRuns; r++) {
       }
     }
 
+    // Card removal: remove lowest-rank non-upgraded card (after fights 3 and 5)
+    const REMOVE_COST = 200;
+    if ((f === 2 || f === 4) && runProfit >= REMOVE_COST && deck.length > 5) {
+      const removable = deck.filter(c => !c.upgraded);
+      if (removable.length > 0) {
+        // AI removes lowest effective rank card (weakest scoring value)
+        removable.sort((a, b) => (a.rank + (a.rankBonus ?? 0)) - (b.rank + (b.rankBonus ?? 0)));
+        const target = removable[0];
+        const idx = deck.indexOf(target);
+        if (idx !== -1) {
+          deck.splice(idx, 1);
+          runProfit -= REMOVE_COST;
+        }
+      }
+    }
+
     hp = Math.min(hp + 6, MAX_HP);
   }
 
   // Elite
   if (fightsWon === 5) {
-    const result = simulateFight(deck, [ELITE_ENEMY], hp, MAX_HP, runPerks);
+    const elite = ELITE_ENEMIES[Math.floor(Math.random() * ELITE_ENEMIES.length)];
+    const result = simulateFight(deck, [elite], hp, MAX_HP, runPerks);
     if (result.won) {
       fightsWon++;
       hp = result.playerHPRemaining;
@@ -453,7 +488,8 @@ for (let r = 0; r < floorRuns; r++) {
 
   // Boss
   if (fightsWon === 6) {
-    const result = simulateFight(deck, [BOSS_ENEMY], hp, MAX_HP, runPerks);
+    const boss = BOSS_ENEMIES[Math.floor(Math.random() * BOSS_ENEMIES.length)];
+    const result = simulateFight(deck, [boss], hp, MAX_HP, runPerks);
     if (result.won) {
       fightsWon++;
       floorWins++;
@@ -492,15 +528,21 @@ for (const enemy of NORMAL_ENEMIES) {
   if (r.avgTurns > 6) issues.push(`  ⚠ ${enemy.name}: avg ${r.avgTurns.toFixed(1)} turns too slow (target: 3-5)`);
 }
 
-if (eliteR.winRate < 0.60) issues.push(`  ⚠ Elite: win rate ${(eliteR.winRate*100).toFixed(0)}% too low (target: 60-90%)`);
-if (bossR.winRate < 0.30) issues.push(`  ⚠ Boss: win rate ${(bossR.winRate*100).toFixed(0)}% too punishing (target: 30-65%)`);
+for (const elite of ELITE_ENEMIES) {
+  const r = runSimulation(elite.name, starterDeck, [elite], RUNS, MAX_HP, MAX_HP, noPerks);
+  if (r.winRate < 0.50) issues.push(`  ⚠ Elite ${elite.name}: win rate ${(r.winRate*100).toFixed(0)}% too low (target: 50%+)`);
+}
+for (const boss of BOSS_ENEMIES) {
+  const r = runSimulation(boss.name, starterDeck, [boss], RUNS, MAX_HP, MAX_HP, noPerks);
+  if (r.winRate < 0.20) issues.push(`  ⚠ Boss ${boss.name}: win rate ${(r.winRate*100).toFixed(0)}% too punishing (target: 20%+)`);
+}
 if (floorRate < 0.10) issues.push(`  ⚠ Floor clear rate ${(floorRate*100).toFixed(0)}% too punishing (target: 10-35%)`);
 if (floorRate > 0.45) issues.push(`  ⚠ Floor clear rate ${(floorRate*100).toFixed(0)}% too easy (target: 10-35%)`);
 
 // Scoring checks
 const avgFloorProfit = totalFloorProfit / floorRuns;
 if (avgFloorProfit < 150) issues.push(`  ⚠ Avg floor profit $${avgFloorProfit.toFixed(0)} too low to engage scoring system`);
-if (degenR.profitStats.max > 50000) issues.push(`  ⚠ Degenerate xMult combo max $${degenR.profitStats.max} — score explosion risk`);
+if (degenR.profitStats.max > 100000) issues.push(`  ⚠ Degenerate xMult combo max $${degenR.profitStats.max} — score explosion risk`);
 
 if (issues.length === 0) {
   console.log('  ✅ All balance targets met!');

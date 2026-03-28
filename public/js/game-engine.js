@@ -75,31 +75,139 @@
     { id: 'reorganization', name: 'Reorganization', cost: 2, type: 'skill', suit: 'orgchart', rank: 8,
       target: 'self', effects: [{ type: 'block', value: 20 }, { type: 'draw', value: 2 }],
       flavor: 'New org chart. Same problems. But hey, new titles.' },
+    // New cards (20 more, 5 per suit)
+    // Tickets
+    { id: 'cable_management', name: 'Cable Management', cost: 0, type: 'skill', suit: 'tickets', rank: 1,
+      target: 'self', effects: [{ type: 'draw', value: 1 }],
+      flavor: 'Untangle one thing. Tangle three others.' },
+    { id: 'reboot_it', name: 'Reboot It', cost: 1, type: 'skill', suit: 'tickets', rank: 3,
+      target: 'self', effects: [{ type: 'block', value: 4 }, { type: 'draw', value: 2 }],
+      flavor: 'Have you tried turning it off and on again?' },
+    { id: 'zero_day', name: 'Zero Day', cost: 2, type: 'attack', suit: 'tickets', rank: 8,
+      target: 'enemy', effects: [{ type: 'damage', value: 12 }, { type: 'applyStatus', status: 'unpatched', value: 3 }],
+      flavor: 'Discovered at 4:59 PM on a Friday.' },
+    { id: 'stack_overflow', name: 'Stack Overflow', cost: 1, type: 'attack', suit: 'tickets', rank: 5,
+      target: 'enemy', effects: [{ type: 'damage', value: 4 }, { type: 'damage', value: 4 }],
+      flavor: 'Copy. Paste. Pray.' },
+    { id: 'server_room_lockout', name: 'Server Room Lockout', cost: 2, type: 'skill', suit: 'tickets', rank: 6,
+      target: 'self', effects: [{ type: 'block', value: 15 }],
+      flavor: 'Badge expired. Nobody knows the combo. Perfect.' },
+    // Bureaucracy
+    { id: 'memo_to_self', name: 'Memo to Self', cost: 0, type: 'skill', suit: 'bureaucracy', rank: 2,
+      target: 'self', effects: [{ type: 'draw', value: 1 }, { type: 'energy', value: 1 }],
+      flavor: 'Note: stop writing memos to self.' },
+    { id: 'audit_trail', name: 'Audit Trail', cost: 1, type: 'skill', suit: 'bureaucracy', rank: 4,
+      target: 'enemy', effects: [{ type: 'applyStatus', status: 'micromanaged', value: 2 }, { type: 'draw', value: 1 }],
+      flavor: 'Every click logged. Every email archived. Every bathroom break timed.' },
+    { id: 'nda', name: 'NDA', cost: 1, type: 'skill', suit: 'bureaucracy', rank: 7,
+      target: 'self', effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+      flavor: "You can't talk about what you can't talk about." },
+    { id: 'regulatory_filing', name: 'Regulatory Filing', cost: 2, type: 'attack', suit: 'bureaucracy', rank: 9,
+      target: 'enemy', effects: [{ type: 'damage', value: 8 }, { type: 'applyStatus', status: 'micromanaged', value: 3 }],
+      flavor: 'Form 10-K. 200 pages. Due yesterday.' },
+    { id: 'rubber_stamp', name: 'Rubber Stamp', cost: 0, type: 'skill', suit: 'bureaucracy', rank: 1,
+      target: 'self', effects: [{ type: 'block', value: 3 }],
+      flavor: 'APPROVED. Wait, what did I just approve?' },
+    // Meetings
+    { id: 'standing_meeting', name: 'Standing Meeting', cost: 1, type: 'skill', suit: 'meetings', rank: 2,
+      target: 'self', effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+      flavor: 'We stand because sitting implies commitment.' },
+    { id: 'double_booked', name: 'Double Booked', cost: 1, type: 'skill', suit: 'meetings', rank: 4,
+      target: 'self', effects: [{ type: 'draw', value: 2 }],
+      flavor: "Sorry, I have a conflict. Also sorry, I have a conflict." },
+    { id: 'town_hall', name: 'Town Hall', cost: 2, type: 'skill', suit: 'meetings', rank: 7,
+      target: 'self', effects: [{ type: 'block', value: 12 }, { type: 'heal', value: 4 }],
+      flavor: 'We value your feedback. Please hold all questions.' },
+    { id: 'calendar_tetris', name: 'Calendar Tetris', cost: 0, type: 'skill', suit: 'meetings', rank: 1,
+      target: 'self', effects: [{ type: 'energy', value: 1 }],
+      flavor: 'Found a 15-minute gap. Guard it with your life.' },
+    { id: 'offsite_retreat', name: 'Offsite Retreat', cost: 2, type: 'power', suit: 'meetings', rank: 8,
+      target: 'self', effects: [{ type: 'applyStatus', status: 'caffeinated', value: 4 }],
+      flavor: 'Trust falls, breakout sessions, and surprisingly good catering.' },
+    // Org Chart
+    { id: 'temp_worker', name: 'Temp Worker', cost: 0, type: 'attack', suit: 'orgchart', rank: 1,
+      target: 'enemy', effects: [{ type: 'damage', value: 3 }],
+      flavor: 'Here today, gone tomorrow. Literally.' },
+    { id: 'lateral_move', name: 'Lateral Move', cost: 1, type: 'skill', suit: 'orgchart', rank: 3,
+      target: 'self', effects: [{ type: 'block', value: 5 }, { type: 'draw', value: 1 }],
+      flavor: 'Same title, different desk, no raise.' },
+    { id: 'golden_handshake', name: 'Golden Handshake', cost: 1, type: 'skill', suit: 'orgchart', rank: 6,
+      target: 'self', effects: [{ type: 'heal', value: 10 }],
+      flavor: "Here's your severance. Please sign this waiver." },
+    { id: 'corporate_retreat', name: 'Corporate Retreat', cost: 2, type: 'attack', suit: 'orgchart', rank: 10,
+      target: 'allEnemies', effects: [{ type: 'damage', value: 8 }, { type: 'applyStatus', status: 'burnout', value: 2 }],
+      flavor: 'Mandatory fun. Two days of trust exercises nobody asked for.' },
+    { id: 'nepotism_hire', name: 'Nepotism Hire', cost: 1, type: 'attack', suit: 'orgchart', rank: 4,
+      target: 'enemy', effects: [{ type: 'damage', value: 6 }, { type: 'draw', value: 1 }],
+      flavor: "The CEO's nephew. He's... trying his best." },
   ];
 
   // ─── ENEMY DATA (v2 — Executive themed) ──────────────
-  const FLOOR_ENCOUNTERS = [
-    { type: 'normal', dept: 'IT', enemies: [{ id: 'the_slacker', name: 'The Slacker', hp: 30, dept: 'IT',
+  const NORMAL_POOL = [
+    { id: 'the_slacker', name: 'The Slacker', hp: 30, dept: 'IT',
       tagline: 'Doing the bare minimum since orientation.', icon: '😴',
-      intentPattern: [{ type: 'attack', value: 8 },{ type: 'defend', value: 6 },{ type: 'attack', value: 12 }] }] },
-    { type: 'normal', dept: 'HR', enemies: [{ id: 'passive_aggressive_pam', name: 'Passive-Aggressive Pam', hp: 36, dept: 'HR',
+      intentPattern: [{ type: 'attack', value: 8 },{ type: 'defend', value: 6 },{ type: 'attack', value: 12 }] },
+    { id: 'passive_aggressive_pam', name: 'Passive-Aggressive Pam', hp: 36, dept: 'HR',
       tagline: 'Per my last email, which you clearly didn\'t read.', icon: '💅',
-      intentPattern: [{ type: 'debuff', value: 2, status: 'micromanaged' },{ type: 'attack', value: 10 },{ type: 'multiAttack', value: 4, times: 3 }] }] },
-    { type: 'normal', dept: 'Operations', enemies: [{ id: 'union_rep', name: 'Union Rep', hp: 42, dept: 'Operations',
+      intentPattern: [{ type: 'debuff', value: 2, status: 'micromanaged' },{ type: 'attack', value: 10 },{ type: 'multiAttack', value: 4, times: 3 }] },
+    { id: 'union_rep', name: 'Union Rep', hp: 42, dept: 'Operations',
       tagline: 'Article 7, Section 3, Paragraph 2. Read it.', icon: '✊',
-      intentPattern: [{ type: 'defend', value: 12 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'attack', value: 14 },{ type: 'defend', value: 10 }] }] },
-    { type: 'normal', dept: 'Compliance', enemies: [{ id: 'whistleblower', name: 'The Whistleblower', hp: 28, dept: 'Compliance',
+      intentPattern: [{ type: 'defend', value: 12 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'attack', value: 14 },{ type: 'defend', value: 10 }] },
+    { id: 'whistleblower', name: 'The Whistleblower', hp: 28, dept: 'Compliance',
       tagline: 'I have documentation. All of it.', icon: '📢',
-      intentPattern: [{ type: 'debuff', value: 2, status: 'unpatched' },{ type: 'attack', value: 16 },{ type: 'debuff', value: 3, status: 'burnout' }] }] },
-    { type: 'normal', dept: 'IT', enemies: [{ id: 'phantom_printer', name: 'The Phantom Printer', hp: 28, dept: 'IT',
+      intentPattern: [{ type: 'debuff', value: 2, status: 'unpatched' },{ type: 'attack', value: 16 },{ type: 'debuff', value: 3, status: 'burnout' }] },
+    { id: 'phantom_printer', name: 'The Phantom Printer', hp: 28, dept: 'IT',
       tagline: 'PC LOAD LETTER.', icon: '🖨️',
-      intentPattern: [{ type: 'defend', value: 14 },{ type: 'defend', value: 12 },{ type: 'attack', value: 20 }] }] },
-    { type: 'elite', dept: 'All', enemies: [{ id: 'tenured_employee', name: 'The Tenured Employee', hp: 76, dept: 'All',
+      intentPattern: [{ type: 'defend', value: 14 },{ type: 'defend', value: 12 },{ type: 'attack', value: 20 }] },
+    // New enemies from arcade roster
+    { id: 'network_wizard', name: 'The Network Wizard', hp: 32, dept: 'IT',
+      tagline: "It's always DNS.", icon: '🧙', randomIntents: true,
+      intentPattern: [{ type: 'attack', value: 10 },{ type: 'multiAttack', value: 4, times: 3 },{ type: 'defend', value: 8 },{ type: 'debuff', value: 2, status: 'unpatched' }] },
+    { id: 'watercooler_will', name: 'Watercooler Will', hp: 34, dept: 'Operations',
+      tagline: 'Oh hey, quick question...', icon: '🚰', randomIntents: true,
+      intentPattern: [{ type: 'debuff', value: 2, status: 'burnout' },{ type: 'attack', value: 8 },{ type: 'debuff', value: 1, status: 'micromanaged' },{ type: 'defend', value: 10 }] },
+    { id: 'hr_nancy', name: 'HR Nancy', hp: 38, dept: 'HR',
+      tagline: 'Just a quick mandatory training.', icon: '📋', randomIntents: true,
+      intentPattern: [{ type: 'defend', value: 12 },{ type: 'debuff', value: 2, status: 'micromanaged' },{ type: 'attack', value: 10 },{ type: 'debuff', value: 2, status: 'burnout' }] },
+    { id: 'dirty_microwave', name: 'The Dirty Microwave', hp: 26, dept: 'Facilities',
+      tagline: 'WHO LEFT FISH IN HERE?!', icon: '📡', randomIntents: true,
+      intentPattern: [{ type: 'attack', value: 14 },{ type: 'attack', value: 18 },{ type: 'debuff', value: 3, status: 'burnout' }] },
+    { id: 'mfa_guardian', name: 'The MFA Guardian', hp: 30, dept: 'IT',
+      tagline: 'Enter your code. 3 seconds.', icon: '🔐', randomIntents: true,
+      intentPattern: [{ type: 'attack', value: 12 },{ type: 'defend', value: 10 },{ type: 'attack', value: 8 },{ type: 'multiAttack', value: 3, times: 3 }] },
+    { id: 'sally_accounting', name: 'Sally in Accounting', hp: 36, dept: 'Finance',
+      tagline: 'This fight will be 1040-EZ.', icon: '🧮', randomIntents: true,
+      intentPattern: [{ type: 'attack', value: 10 },{ type: 'debuff', value: 2, status: 'micromanaged' },{ type: 'heal', value: 8 },{ type: 'defend', value: 8 }] },
+  ];
+
+  const ELITE_POOL = [
+    { id: 'tenured_employee', name: 'The Tenured Employee', hp: 76, dept: 'All',
       tagline: "Can't fire me. Won't retire. Knows where the bodies are buried.", icon: '🪨',
-      intentPattern: [{ type: 'attack', value: 12 },{ type: 'buff', value: 3, status: 'seniority' },{ type: 'multiAttack', value: 5, times: 3 },{ type: 'heal', value: 12 },{ type: 'attack', value: 18 }] }] },
-    { type: 'boss', dept: 'IT', enemies: [{ id: 'help_desk', name: 'Help Desk', hp: 92, dept: 'IT',
+      intentPattern: [{ type: 'attack', value: 12 },{ type: 'buff', value: 3, status: 'seniority' },{ type: 'multiAttack', value: 5, times: 3 },{ type: 'heal', value: 12 },{ type: 'attack', value: 18 }] },
+    { id: 'the_consultant', name: 'The Consultant', hp: 72, dept: 'All',
+      tagline: 'Twice the pay. Half the work.', icon: '💼', randomIntents: true,
+      intentPattern: [{ type: 'attack', value: 18 },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'heal', value: 14 },{ type: 'attack', value: 14 },{ type: 'defend', value: 16 }] },
+    { id: 'the_intern', name: 'The Intern', hp: 64, dept: 'All',
+      tagline: "I'm just happy to be here.", icon: '📎', randomIntents: true,
+      intentPattern: [{ type: 'multiAttack', value: 4, times: 4 },{ type: 'attack', value: 10 },{ type: 'multiAttack', value: 3, times: 5 },{ type: 'buff', value: 3, status: 'caffeinated' }] },
+  ];
+
+  const BOSS_POOL = [
+    { id: 'help_desk', name: 'Help Desk', hp: 92, dept: 'IT',
       tagline: 'We ARE the Help Desk. We filed a ticket about YOU.', icon: '🎸',
-      intentPattern: [{ type: 'attack', value: 16 },{ type: 'buff', value: 3, status: 'seniority' },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'heal', value: 12 },{ type: 'debuff', value: 2, status: 'unpatched' },{ type: 'attack', value: 22 }] }] },
+      intentPattern: [{ type: 'attack', value: 16 },{ type: 'buff', value: 3, status: 'seniority' },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'heal', value: 12 },{ type: 'debuff', value: 2, status: 'unpatched' },{ type: 'attack', value: 22 }] },
+    { id: 'boss_luke', name: 'Luke', hp: 88, dept: 'IT',
+      tagline: "I'm escalating this to ME.", icon: '🎤',
+      intentPattern: [{ type: 'attack', value: 10 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'attack', value: 14 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'attack', value: 18 },{ type: 'multiAttack', value: 6, times: 3 }] },
+    { id: 'boss_drew', name: 'Drew', hp: 85, dept: 'Audio',
+      tagline: "You're about to get feedback.", icon: '🎸',
+      intentPattern: [{ type: 'attack', value: 12 },{ type: 'debuff', value: 2, status: 'burnout' },{ type: 'attack', value: 16 },{ type: 'buff', value: 3, status: 'seniority' },{ type: 'multiAttack', value: 5, times: 3 },{ type: 'attack', value: 20 }] },
+    { id: 'boss_henry', name: 'Henry', hp: 95, dept: 'Operations',
+      tagline: 'Brace for impact.', icon: '🥁',
+      intentPattern: [{ type: 'multiAttack', value: 4, times: 3 },{ type: 'defend', value: 14 },{ type: 'multiAttack', value: 5, times: 3 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'multiAttack', value: 6, times: 4 }] },
+    { id: 'boss_todd', name: 'Todd', hp: 96, dept: 'Power',
+      tagline: 'Stare Intensifies....', icon: '⚡',
+      intentPattern: [{ type: 'attack', value: 14 },{ type: 'debuff', value: 3, status: 'micromanaged' },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'debuff', value: 3, status: 'burnout' },{ type: 'attack', value: 22 },{ type: 'debuff', value: 2, status: 'unpatched' }] },
   ];
 
   // ─── STATUS DEFINITIONS ──────────────────────────────
@@ -148,15 +256,34 @@
       trigger: 'hp75', effect: { type: 'mult_lev', value: 1.5 } },
     { id: 'hostile_ceo', name: 'Hostile CEO', desc: 'x1.5 Leverage always.', rarity: 'rare',
       trigger: 'always', effect: { type: 'mult_lev', value: 1.5 } },
+    // New perks — scoring ceiling expansion
+    { id: 'red_tape_royale', name: 'Red Tape Royale', desc: 'x1.5 Leverage when 2+ Bureaucracy tagged.', rarity: 'uncommon',
+      trigger: 'bc2', effect: { type: 'mult_lev', value: 1.5 } },
+    { id: 'meeting_overload', name: 'Meeting Overload', desc: 'x1.5 Leverage when 2+ Meetings tagged.', rarity: 'uncommon',
+      trigger: 'mt2', effect: { type: 'mult_lev', value: 1.5 } },
+    { id: 'org_chart_domination', name: 'Org Chart Domination', desc: 'x1.5 Leverage when 2+ Org Chart tagged.', rarity: 'uncommon',
+      trigger: 'oc2', effect: { type: 'mult_lev', value: 1.5 } },
+    { id: 'unanimous_vote', name: 'Unanimous Vote', desc: 'x2.5 Leverage on Board Resolution.', rarity: 'rare',
+      trigger: 'board_res', effect: { type: 'mult_lev', value: 2.5 } },
+    { id: 'synergy_bonus', name: 'Synergy Bonus', desc: '+5 KPI per unique suit tagged.', rarity: 'common',
+      trigger: 'cards1', effect: { type: 'add_kpi', value: 5 } },
+    { id: 'desperation_play', name: 'Desperation Play', desc: 'x2 Leverage when HP<30%.', rarity: 'rare',
+      trigger: 'hp_low30', effect: { type: 'mult_lev', value: 2 } },
   ];
 
   function isPerkTriggered(perk, ctx) {
     switch (perk.trigger) {
       case 'always': return true;
+      case 'cards1': return ctx.tagCount >= 1;
       case 'cards3': return ctx.tagCount >= 3;
       case 'tickets2': return (ctx.suitCounts.tickets || 0) >= 2;
+      case 'bc2': return (ctx.suitCounts.bureaucracy || 0) >= 2;
+      case 'mt2': return (ctx.suitCounts.meetings || 0) >= 2;
+      case 'oc2': return (ctx.suitCounts.orgchart || 0) >= 2;
       case 'style3': return ctx.style.rank >= 3;
+      case 'board_res': return ctx.style.id === 'board_resolution';
       case 'hp75': return ctx.hpPct >= 75;
+      case 'hp_low30': return ctx.hpPct < 30 && ctx.hpPct > 0;
       default: return false;
     }
   }
@@ -164,10 +291,11 @@
   function calculateProfit(taggedCards, perks, hpPct) {
     const suits = taggedCards.map(c => c.suit);
     const style = detectStyle(suits);
-    const rankSum = taggedCards.reduce((s, c) => s + c.rank, 0);
+    const rankSum = taggedCards.reduce((s, c) => s + c.rank + (c.rankBonus || 0), 0);
 
     const suitCounts = {};
     suits.forEach(s => suitCounts[s] = (suitCounts[s] || 0) + 1);
+    const uniqueSuits = Object.keys(suitCounts).length;
     const ctx = { style, tagCount: taggedCards.length, suitCounts, hpPct };
 
     let addKPI = 0, addLev = 0, multLev = 1;
@@ -177,7 +305,10 @@
       if (!isPerkTriggered(perk, ctx)) continue;
       triggered.push(perk);
       switch (perk.effect.type) {
-        case 'add_kpi': addKPI += perk.effect.value; break;
+        case 'add_kpi':
+          // Synergy Bonus: +5 per unique suit tagged
+          addKPI += perk.id === 'synergy_bonus' ? perk.effect.value * uniqueSuits : perk.effect.value;
+          break;
         case 'add_lev': addLev += perk.effect.value; break;
         case 'mult_lev': multLev *= perk.effect.value; break;
       }
@@ -190,7 +321,7 @@
     return { style, rankSum, totalKPI, totalLev, profit, triggered, multLev };
   }
 
-  const QUARTERLY_TARGETS = [300, 800, 2000, 5000, 11000, 20000];
+  const QUARTERLY_TARGETS = [300, 800, 2500, 6000, 12000, 25000];
 
   // ─── Utility ─────────────────────────────────────────
   function shuffle(arr) {
@@ -262,6 +393,18 @@
     stats: { cardsPlayed: 0, damageDealt: 0 },
   };
 
+  function generateFloorEncounters() {
+    // 5 random normals + 1 random elite + 1 random boss
+    const normals = shuffle(NORMAL_POOL).slice(0, 5).map(e => ({ type: 'normal', dept: e.dept, enemies: [e] }));
+    const elite = ELITE_POOL[Math.floor(Math.random() * ELITE_POOL.length)];
+    const boss = BOSS_POOL[Math.floor(Math.random() * BOSS_POOL.length)];
+    return [
+      ...normals,
+      { type: 'elite', dept: elite.dept, enemies: [elite] },
+      { type: 'boss', dept: boss.dept, enemies: [boss] },
+    ];
+  }
+
   function startRun() {
     _nextId = 0;
     G.stats = { cardsPlayed: 0, damageDealt: 0 };
@@ -272,6 +415,7 @@
       floor: 0,
       totalProfit: 0,
       perks: [],
+      encounters: generateFloorEncounters(),
     };
     showScreen('map');
     renderMap();
@@ -280,7 +424,9 @@
   // ─── Combat Engine ───────────────────────────────────
   function initCombat(encounter) {
     const enemies = encounter.enemies.map(def => ({
-      ...def, currentHP: def.hp, block: 0, intentIndex: 0, statusEffects: [],
+      ...def, currentHP: def.hp, block: 0,
+      intentIndex: def.randomIntents ? Math.floor(Math.random() * def.intentPattern.length) : 0,
+      statusEffects: [],
     }));
 
     G.combat = {
@@ -532,7 +678,11 @@
         case 'debuff': if (intent.status) applyStatusTo(c.playerStatuses, intent.status, intent.value); break;
         case 'heal': { const h = Math.min(intent.value, enemy.hp - enemy.currentHP); enemy.currentHP += h; break; }
       }
-      enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intentPattern.length;
+      if (enemy.randomIntents) {
+        enemy.intentIndex = Math.floor(Math.random() * enemy.intentPattern.length);
+      } else {
+        enemy.intentIndex = (enemy.intentIndex + 1) % enemy.intentPattern.length;
+      }
     });
 
     c.enemies.forEach(e => { e.block = 0; });
@@ -544,6 +694,7 @@
 
   function checkCombatEnd() {
     if (G.run.playerHP <= 0) {
+      clearSave();
       showScreen('gameover');
       renderGameOver();
       return true;
@@ -561,7 +712,8 @@
       }
 
       G.run.floor++;
-      if (G.run.floor >= FLOOR_ENCOUNTERS.length) {
+      if (G.run.floor >= G.run.encounters.length) {
+        clearSave();
         showScreen('complete');
         renderComplete();
       } else {
@@ -573,12 +725,58 @@
     return false;
   }
 
+  // ─── Save/Load (localStorage) ────────────────────────
+  const SAVE_KEY = 'hd_executive_save';
+
+  function saveGame() {
+    if (!G.run) return;
+    try {
+      const save = {
+        run: {
+          playerHP: G.run.playerHP,
+          playerMaxHP: G.run.playerMaxHP,
+          deck: G.run.deck,
+          floor: G.run.floor,
+          totalProfit: G.run.totalProfit,
+          perks: G.run.perks,
+          encounters: G.run.encounters,
+        },
+        stats: G.stats,
+        screen: G.screen,
+      };
+      localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+    } catch (e) { /* localStorage full or unavailable */ }
+  }
+
+  function loadGame() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) { return null; }
+  }
+
+  function clearSave() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ok */ }
+  }
+
+  function restoreGame(save) {
+    _nextId = save.run.deck.reduce((max, c) => Math.max(max, (c._uid || 0) + 1), 0);
+    G.stats = save.stats;
+    G.run = save.run;
+    G.combat = null;
+    showScreen('map');
+    renderMap();
+  }
+
   // ─── Screen Management ───────────────────────────────
   function showScreen(name) {
     G.screen = name;
     document.querySelectorAll('.game-screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById('screen-' + name);
     if (el) el.classList.add('active');
+    // Auto-save on map screen (between fights)
+    if (name === 'map' && G.run) saveGame();
   }
 
   function announce(text) {
@@ -602,7 +800,7 @@
       ? G.run.perks.map(p => `<div class="map-perk-slot" title="${p.desc}">${p.name}</div>`).join('')
       : '<span style="font-size:clamp(7px,0.9vw,9px);color:var(--text-dim)">No perks yet</span>';
 
-    FLOOR_ENCOUNTERS.forEach((enc, i) => {
+    G.run.encounters.forEach((enc, i) => {
       const node = document.createElement('div');
       const state = i < G.run.floor ? 'completed' : i === G.run.floor ? 'current' : 'locked';
       node.className = `map-node ${enc.type} ${state}`;
@@ -728,7 +926,7 @@
         <div class="combat-card-name">${card.name}</div>
         <div class="combat-card-meta">
           <span class="combat-card-type">${card.type}</span>
-          <span class="combat-card-rank">R${card.rank}</span>
+          <span class="combat-card-rank">R${card.rank + (card.rankBonus || 0)}${card.upgraded ? '+' : ''}</span>
         </div>
         <div class="combat-card-desc">${describeCard(card)}</div>
         ${card.flavor ? `<div class="combat-card-flavor">${card.flavor}</div>` : ''}
@@ -795,7 +993,7 @@
       div.innerHTML = `
         <div class="tag-card-suit-label suit-color-${card.suit}">${SUIT_NAMES[card.suit] || '?'}</div>
         <div class="tag-card-name">${card.name}</div>
-        <div class="tag-card-rank">Rank ${card.rank}</div>
+        <div class="tag-card-rank">Rank ${card.rank + (card.rankBonus || 0)}</div>
       `;
       div.addEventListener('click', () => toggleTag(card._uid));
       cardsContainer.appendChild(div);
@@ -898,6 +1096,94 @@
     } else {
       perkSection.style.display = 'none';
     }
+
+    // Card upgrade (after fights 1 and 3)
+    const upgradeSection = document.getElementById('reward-upgrade-section');
+    if (upgradeSection) {
+      if (G.run.floor === 1 || G.run.floor === 3) {
+        upgradeSection.style.display = '';
+        const upgradeContainer = document.getElementById('reward-upgrades');
+        upgradeContainer.innerHTML = '';
+
+        const upgradeable = G.run.deck.filter(c => !c.upgraded);
+        const upgradeChoices = shuffle(upgradeable).slice(0, 3);
+
+        upgradeChoices.forEach(card => {
+          const div = document.createElement('div');
+          div.className = `reward-card suit-${card.suit}`;
+          const currentRank = card.rank + (card.rankBonus || 0);
+          div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:10px;background:var(--energy-color);color:#000;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center">${card.cost}</span>
+              <span class="combat-card-suit suit-${card.suit}" style="position:relative;top:0;right:0">${SUIT_ICONS[card.suit] || ''}</span>
+            </div>
+            <div class="combat-card-name" style="font-size:clamp(7px,1vw,10px)">${card.name}</div>
+            <div class="combat-card-meta"><span class="combat-card-type">${card.type}</span><span class="combat-card-rank">R${currentRank} → R${currentRank + 2}</span></div>
+            <div class="combat-card-desc" style="font-size:clamp(6px,0.8vw,9px);color:var(--gold)">+2 Rank (KPI boost)</div>
+          `;
+          div.addEventListener('click', () => {
+            card.rankBonus = (card.rankBonus || 0) + 2;
+            card.upgraded = true;
+            // Disable all upgrade choices
+            upgradeContainer.querySelectorAll('.reward-card').forEach(c => {
+              c.style.opacity = '0.3';
+              c.style.pointerEvents = 'none';
+            });
+            div.style.opacity = '1';
+            div.style.borderColor = 'var(--gold)';
+          });
+          upgradeContainer.appendChild(div);
+        });
+      } else {
+        upgradeSection.style.display = 'none';
+      }
+    }
+
+    // Card removal (after fights 3 and 5)
+    const REMOVE_COST = 200;
+    const removeSection = document.getElementById('reward-remove-section');
+    if (removeSection) {
+      if ((G.run.floor === 3 || G.run.floor === 5) && G.run.totalProfit >= REMOVE_COST && G.run.deck.length > 5) {
+        removeSection.style.display = '';
+        document.getElementById('remove-cost').textContent = `$${REMOVE_COST}`;
+        const removeContainer = document.getElementById('reward-removals');
+        removeContainer.innerHTML = '';
+
+        G.run.deck.forEach((card, idx) => {
+          const div = document.createElement('div');
+          div.className = `reward-card suit-${card.suit}`;
+          const effectiveRank = card.rank + (card.rankBonus || 0);
+          div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:10px;background:var(--energy-color);color:#000;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center">${card.cost}</span>
+              <span class="combat-card-suit suit-${card.suit}" style="position:relative;top:0;right:0">${SUIT_ICONS[card.suit] || ''}</span>
+            </div>
+            <div class="combat-card-name" style="font-size:clamp(7px,1vw,10px)">${card.name}</div>
+            <div class="combat-card-meta"><span class="combat-card-type">${card.type}</span><span class="combat-card-rank">R${effectiveRank}${card.upgraded ? '+' : ''}</span></div>
+            <div class="combat-card-desc" style="font-size:clamp(6px,0.8vw,9px);color:var(--suit-tickets)">Remove from deck</div>
+          `;
+          div.addEventListener('click', () => {
+            if (G.run.deck.length <= 5) return;
+            G.run.deck.splice(idx, 1);
+            G.run.totalProfit -= REMOVE_COST;
+            // Disable all removal choices
+            removeContainer.querySelectorAll('.reward-card').forEach(c => {
+              c.style.opacity = '0.3';
+              c.style.pointerEvents = 'none';
+            });
+            div.style.opacity = '1';
+            div.style.borderColor = 'var(--suit-tickets)';
+            div.querySelector('.combat-card-desc').textContent = 'REMOVED';
+            // Update profit display
+            document.getElementById('reward-profit-summary').textContent =
+              `Profit extracted: $${G.combat?.fightProfit || 0} (Total: $${G.run.totalProfit})`;
+          });
+          removeContainer.appendChild(div);
+        });
+      } else {
+        removeSection.style.display = 'none';
+      }
+    }
   }
 
   // ─── Render: Game Over / Complete ────────────────────
@@ -925,7 +1211,24 @@
   }
 
   // ─── Event Binding ───────────────────────────────────
-  document.getElementById('btn-start-run').addEventListener('click', startRun);
+  document.getElementById('btn-start-run').addEventListener('click', () => {
+    clearSave();
+    startRun();
+  });
+
+  // Continue button (restore saved run)
+  document.getElementById('btn-continue-run').addEventListener('click', () => {
+    const save = loadGame();
+    if (save) restoreGame(save);
+  });
+
+  // Check for saved game on load
+  const existingSave = loadGame();
+  if (existingSave) {
+    const btn = document.getElementById('btn-continue-run');
+    btn.style.display = '';
+    btn.textContent = `CONTINUE RUN (Floor ${existingSave.run.floor + 1}/7)`;
+  }
 
   document.getElementById('btn-end-turn').addEventListener('click', () => {
     if (G.combat?.phase === 'playerTurn') enterTagPhase();

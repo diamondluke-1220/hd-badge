@@ -10,7 +10,10 @@ export type PerkTrigger =
   | { type: 'on_style'; styleId: string } // fires when specific style is detected
   | { type: 'on_suit_tagged'; suit: Suit; minCount: number } // fires when N+ of suit tagged
   | { type: 'on_cards_tagged'; minCount: number } // fires when N+ cards tagged
-  | { type: 'on_combat_hp_above'; percent: number }; // fires when HP > X% after combat
+  | { type: 'on_combat_hp_above'; percent: number } // fires when HP > X% after combat
+  | { type: 'on_combat_hp_below'; percent: number } // fires when HP < X% after combat
+  | { type: 'on_board_resolution' } // fires only on Board Resolution style
+  | { type: 'on_suit_majority'; suit: Suit }; // fires when majority (2+/3) of tagged cards are this suit
 
 export type PerkEffect =
   | { type: 'add_kpi'; value: number } // +flat KPI (chips)
@@ -78,6 +81,50 @@ export const PERK_CATALOG: PerkDef[] = [
     rarity: 'rare',
     trigger: { type: 'always' },
     effect: { type: 'mult_leverage', value: 1.5 } },
+
+  // === NEW PERKS (scoring ceiling expansion) ===
+
+  // 7. Suit-conditional xMult — Bureaucracy
+  { id: 'red_tape_royale', name: 'Red Tape Royale',
+    description: '×1.5 Leverage when 2+ Bureaucracy tagged.',
+    rarity: 'uncommon',
+    trigger: { type: 'on_suit_majority', suit: 'bureaucracy' },
+    effect: { type: 'mult_leverage', value: 1.5 } },
+
+  // 8. Suit-conditional xMult — Meetings
+  { id: 'meeting_overload', name: 'Meeting Overload',
+    description: '×1.5 Leverage when 2+ Meetings tagged.',
+    rarity: 'uncommon',
+    trigger: { type: 'on_suit_majority', suit: 'meetings' },
+    effect: { type: 'mult_leverage', value: 1.5 } },
+
+  // 9. Suit-conditional xMult — Org Chart
+  { id: 'org_chart_domination', name: 'Org Chart Domination',
+    description: '×1.5 Leverage when 2+ Org Chart tagged.',
+    rarity: 'uncommon',
+    trigger: { type: 'on_suit_majority', suit: 'orgchart' },
+    effect: { type: 'mult_leverage', value: 1.5 } },
+
+  // 10. Board Resolution reward — makes the 2% style legendary
+  { id: 'unanimous_vote', name: 'Unanimous Vote',
+    description: '×2.5 Leverage on Board Resolution.',
+    rarity: 'rare',
+    trigger: { type: 'on_board_resolution' },
+    effect: { type: 'mult_leverage', value: 2.5 } },
+
+  // 11. Scaling additive KPI — rewards suit diversity
+  { id: 'synergy_bonus', name: 'Synergy Bonus',
+    description: '+5 KPI per unique suit tagged.',
+    rarity: 'common',
+    trigger: { type: 'on_cards_tagged', minCount: 1 },
+    effect: { type: 'add_kpi', value: 5 } },
+
+  // 12. Low-HP risk/reward xMult — conflicts with Golden Parachute by design
+  { id: 'desperation_play', name: 'Desperation Play',
+    description: '×2 Leverage when HP below 30%.',
+    rarity: 'rare',
+    trigger: { type: 'on_combat_hp_below', percent: 30 },
+    effect: { type: 'mult_leverage', value: 2 } },
 ];
 
 // Also make Micromanager trigger on Board Resolution too
@@ -110,6 +157,14 @@ export function isPerkTriggered(
       return context.taggedSuits.length >= trigger.minCount;
     case 'on_combat_hp_above':
       return context.playerHPPercent >= trigger.percent;
+    case 'on_combat_hp_below':
+      return context.playerHPPercent < trigger.percent && context.playerHPPercent > 0;
+    case 'on_board_resolution':
+      return context.style.id === 'board_resolution';
+    case 'on_suit_majority': {
+      const count = context.taggedSuits.filter(s => s === trigger.suit).length;
+      return count >= 2;
+    }
     default:
       return false;
   }

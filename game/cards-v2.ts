@@ -18,6 +18,8 @@ export interface CardDef {
   type: 'attack' | 'skill' | 'power';
   suit: Suit;
   rank: number; // 1-10, used for KPI scoring
+  rankBonus?: number; // +N from upgrades (default 0)
+  upgraded?: boolean; // true if card has been upgraded
   rarity: 'starter' | 'common' | 'uncommon' | 'rare';
   target: 'enemy' | 'self' | 'allEnemies';
   effects: CardEffect[];
@@ -168,4 +170,130 @@ export const REWARD_POOL: CardDef[] = [
     rarity: 'rare', target: 'self',
     effects: [{ type: 'block', value: 20 }, { type: 'draw', value: 2 }],
     flavor: 'New org chart. Same problems. But hey, new titles.' },
+
+  // ─── New Reward Cards (20 cards, 5 per suit) ────────────────
+
+  // Tickets (5 new)
+  { id: 'cable_management', name: 'Cable Management', cost: 0, type: 'skill',
+    suit: 'tickets', rank: 1,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'draw', value: 1 }],
+    flavor: 'Untangle one thing. Tangle three others.' },
+
+  { id: 'reboot_it', name: 'Reboot It', cost: 1, type: 'skill',
+    suit: 'tickets', rank: 3,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'block', value: 4 }, { type: 'draw', value: 2 }],
+    flavor: 'Have you tried turning it off and on again?' },
+
+  { id: 'zero_day', name: 'Zero Day', cost: 2, type: 'attack',
+    suit: 'tickets', rank: 8,
+    rarity: 'uncommon', target: 'enemy',
+    effects: [{ type: 'damage', value: 12 }, { type: 'applyStatus', status: 'unpatched', value: 3 }],
+    flavor: 'Discovered at 4:59 PM on a Friday.' },
+
+  { id: 'stack_overflow', name: 'Stack Overflow', cost: 1, type: 'attack',
+    suit: 'tickets', rank: 5,
+    rarity: 'common', target: 'enemy',
+    effects: [{ type: 'damage', value: 4 }, { type: 'damage', value: 4 }],
+    flavor: 'Copy. Paste. Pray.' },
+
+  { id: 'server_room_lockout', name: 'Server Room Lockout', cost: 2, type: 'skill',
+    suit: 'tickets', rank: 6,
+    rarity: 'uncommon', target: 'self',
+    effects: [{ type: 'block', value: 15 }],
+    flavor: 'Badge expired. Nobody knows the combo. Perfect.' },
+
+  // Bureaucracy (5 new)
+  { id: 'memo_to_self', name: 'Memo to Self', cost: 0, type: 'skill',
+    suit: 'bureaucracy', rank: 2,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'draw', value: 1 }, { type: 'energy', value: 1 }],
+    flavor: 'Note: stop writing memos to self.' },
+
+  { id: 'audit_trail', name: 'Audit Trail', cost: 1, type: 'skill',
+    suit: 'bureaucracy', rank: 4,
+    rarity: 'common', target: 'enemy',
+    effects: [{ type: 'applyStatus', status: 'micromanaged', value: 2 }, { type: 'draw', value: 1 }],
+    flavor: 'Every click logged. Every email archived. Every bathroom break timed.' },
+
+  { id: 'nda', name: 'NDA', cost: 1, type: 'skill',
+    suit: 'bureaucracy', rank: 7,
+    rarity: 'uncommon', target: 'self',
+    effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+    flavor: 'You can\'t talk about what you can\'t talk about.' },
+
+  { id: 'regulatory_filing', name: 'Regulatory Filing', cost: 2, type: 'attack',
+    suit: 'bureaucracy', rank: 9,
+    rarity: 'rare', target: 'enemy',
+    effects: [{ type: 'damage', value: 8 }, { type: 'applyStatus', status: 'micromanaged', value: 3 }],
+    flavor: 'Form 10-K. 200 pages. Due yesterday.' },
+
+  { id: 'rubber_stamp', name: 'Rubber Stamp', cost: 0, type: 'skill',
+    suit: 'bureaucracy', rank: 1,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'block', value: 3 }],
+    flavor: 'APPROVED. Wait, what did I just approve?' },
+
+  // Meetings (5 new)
+  { id: 'standing_meeting', name: 'Standing Meeting', cost: 1, type: 'skill',
+    suit: 'meetings', rank: 2,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+    flavor: 'We stand because sitting implies commitment.' },
+
+  { id: 'double_booked', name: 'Double Booked', cost: 1, type: 'skill',
+    suit: 'meetings', rank: 4,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'draw', value: 2 }],
+    flavor: 'Sorry, I have a conflict. Also sorry, I have a conflict.' },
+
+  { id: 'town_hall', name: 'Town Hall', cost: 2, type: 'skill',
+    suit: 'meetings', rank: 7,
+    rarity: 'uncommon', target: 'self',
+    effects: [{ type: 'block', value: 12 }, { type: 'heal', value: 4 }],
+    flavor: 'We value your feedback. Please hold all questions.' },
+
+  { id: 'calendar_tetris', name: 'Calendar Tetris', cost: 0, type: 'skill',
+    suit: 'meetings', rank: 1,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'energy', value: 1 }],
+    flavor: 'Found a 15-minute gap. Guard it with your life.' },
+
+  { id: 'offsite_retreat', name: 'Offsite Retreat', cost: 2, type: 'power',
+    suit: 'meetings', rank: 8,
+    rarity: 'rare', target: 'self',
+    effects: [{ type: 'applyStatus', status: 'caffeinated', value: 4 }],
+    flavor: 'Trust falls, breakout sessions, and surprisingly good catering.' },
+
+  // Org Chart (5 new)
+  { id: 'temp_worker', name: 'Temp Worker', cost: 0, type: 'attack',
+    suit: 'orgchart', rank: 1,
+    rarity: 'common', target: 'enemy',
+    effects: [{ type: 'damage', value: 3 }],
+    flavor: 'Here today, gone tomorrow. Literally.' },
+
+  { id: 'lateral_move', name: 'Lateral Move', cost: 1, type: 'skill',
+    suit: 'orgchart', rank: 3,
+    rarity: 'common', target: 'self',
+    effects: [{ type: 'block', value: 5 }, { type: 'draw', value: 1 }],
+    flavor: 'Same title, different desk, no raise.' },
+
+  { id: 'golden_handshake', name: 'Golden Handshake', cost: 1, type: 'skill',
+    suit: 'orgchart', rank: 6,
+    rarity: 'uncommon', target: 'self',
+    effects: [{ type: 'heal', value: 10 }],
+    flavor: 'Here\'s your severance. Please sign this waiver.' },
+
+  { id: 'corporate_retreat', name: 'Corporate Retreat', cost: 2, type: 'attack',
+    suit: 'orgchart', rank: 10,
+    rarity: 'rare', target: 'allEnemies',
+    effects: [{ type: 'damage', value: 8 }, { type: 'applyStatus', status: 'burnout', value: 2 }],
+    flavor: 'Mandatory fun. Two days of trust exercises nobody asked for.' },
+
+  { id: 'nepotism_hire', name: 'Nepotism Hire', cost: 1, type: 'attack',
+    suit: 'orgchart', rank: 4,
+    rarity: 'common', target: 'enemy',
+    effects: [{ type: 'damage', value: 6 }, { type: 'draw', value: 1 }],
+    flavor: "The CEO's nephew. He's... trying his best." },
 ];
