@@ -82,10 +82,27 @@ function getCurrentViewMode() {
   return 'grid';
 }
 
+// Preload headshot image so it's cached before animations start
+function preloadHeadshot(employeeId) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    const img = new Image();
+    img.onload = finish;
+    img.onerror = finish; // Don't block on failure
+    img.src = `/api/badge/${employeeId}/headshot`;
+    // Safety timeout — don't wait longer than 4s
+    setTimeout(finish, 4000);
+  });
+}
+
 async function processLiveQueue() {
   liveIsAnimating = true;
   while (liveAnimationQueue.length > 0) {
     const badge = liveAnimationQueue.shift();
+
+    // Preload headshot before any view animation
+    if (badge.employeeId) await preloadHeadshot(badge.employeeId);
 
     updateTicker(badge);
     updateDonut(badge);
