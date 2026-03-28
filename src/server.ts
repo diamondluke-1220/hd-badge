@@ -537,6 +537,7 @@ app.get('/orgchart', serveStatic({ path: './public/index.html' }));
 app.get('/presentation', serveStatic({ path: './public/presentation.html' }));
 app.get('/admin', serveStatic({ path: './public/admin.html' }));
 app.get('/recover', serveStatic({ path: './public/recover.html' }));
+app.get('/game', serveStatic({ path: './public/game.html' }));
 
 // ─── Static Files (must be LAST) ─────────────────────────
 
