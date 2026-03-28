@@ -180,7 +180,8 @@ app.use('*', async (c, next) => {
 
 function getClientIp(c: any): string {
   if (process.env.TRUST_PROXY === '1') {
-    return c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+    return c.req.header('cf-connecting-ip')
+      || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
       || c.req.header('x-real-ip')
       || 'unknown';
   }
@@ -584,7 +585,8 @@ export default {
     if (url.pathname === '/api/badges/stream') {
       // Extract client IP for per-IP SSE limiting
       const ip = (process.env.TRUST_PROXY === '1'
-        ? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+        ? req.headers.get('cf-connecting-ip')
+          || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
         : server?.requestIP?.(req)?.address) || 'unknown';
       return handleSSEDirect(ip);
     }
