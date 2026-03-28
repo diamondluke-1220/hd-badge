@@ -264,6 +264,8 @@ body {
 
 #screen-combat {
   padding: clamp(4px, 1vh, 8px) clamp(8px, 1.5vw, 16px);
+  position: relative;
+  overflow: hidden;
 }
 
 /* Top bar — profit + target */
@@ -670,6 +672,35 @@ body {
   color: var(--profit-green);
 }
 
+/* Suit color classes (used on tag cards, style guide dots) */
+.suit-color-tickets { color: var(--suit-tickets); }
+.suit-color-bureaucracy { color: var(--suit-bureaucracy); }
+.suit-color-meetings { color: var(--suit-meetings); }
+.suit-color-orgchart { color: var(--suit-orgchart); }
+
+.tag-card-suit-label {
+  font-size: clamp(7px, 0.9vw, 9px);
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+/* Style guide colored dots */
+.sg-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 2px;
+  vertical-align: middle;
+}
+
+.sg-dot.suit-color-tickets { background: var(--suit-tickets); }
+.sg-dot.suit-color-bureaucracy { background: var(--suit-bureaucracy); }
+.sg-dot.suit-color-meetings { background: var(--suit-meetings); }
+.sg-dot.suit-color-orgchart { background: var(--suit-orgchart); }
+
 .tag-zone-preview {
   display: flex;
   align-items: center;
@@ -715,9 +746,9 @@ body {
   justify-content: center;
   align-items: flex-end;
   gap: clamp(4px, 0.8vw, 8px);
-  padding: clamp(4px, 1vh, 10px) 0;
-  min-height: 24%;
-  flex-shrink: 0;
+  padding: clamp(4px, 1vh, 10px) 0 clamp(40px, 5vh, 56px) 0;
+  min-height: 20%;
+  flex-shrink: 1;
 }
 
 /* Card in hand */
@@ -777,16 +808,19 @@ body {
 
 .combat-card-suit {
   position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  top: -6px;
+  right: -6px;
+  padding: 2px 6px;
+  border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: clamp(8px, 1vw, 11px);
+  font-weight: 700;
   border: 2px solid var(--bg-dark);
+  letter-spacing: 0;
+  color: #000;
 }
 
 .combat-card-suit.suit-tickets { background: var(--suit-tickets); }

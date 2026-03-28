@@ -7,8 +7,8 @@
   'use strict';
 
   // ─── SUIT SYSTEM ─────────────────────────────────────
-  const SUIT_ICONS = { tickets: '🎫', bureaucracy: '📋', meetings: '🗓️', orgchart: '👔' };
-  const SUIT_LABELS = { tickets: 'Tickets', bureaucracy: 'Bureaucracy', meetings: 'Meetings', orgchart: 'Org Chart' };
+  const SUIT_ICONS = { tickets: 'TK', bureaucracy: 'BC', meetings: 'MT', orgchart: 'OC' };
+  const SUIT_NAMES = { tickets: 'Tickets', bureaucracy: 'Bureaucracy', meetings: 'Meetings', orgchart: 'Org Chart' };
 
   // ─── CARD DATA (v2 — Executive Edition) ──────────────
   const STARTER_DECK = [
@@ -793,7 +793,7 @@
       const isTagged = c.taggedCards.some(t => t._uid === card._uid);
       div.className = `tag-card${isTagged ? ' tagged' : ''}`;
       div.innerHTML = `
-        <div class="tag-card-suit">${SUIT_ICONS[card.suit] || '?'}</div>
+        <div class="tag-card-suit-label suit-color-${card.suit}">${SUIT_NAMES[card.suit] || '?'}</div>
         <div class="tag-card-name">${card.name}</div>
         <div class="tag-card-rank">Rank ${card.rank}</div>
       `;
@@ -850,7 +850,7 @@
       div.innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <span style="font-size:10px;background:var(--energy-color);color:#000;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center">${cardDef.cost}</span>
-          <span style="font-size:14px">${SUIT_ICONS[cardDef.suit] || ''}</span>
+          <span class="combat-card-suit suit-${cardDef.suit}" style="position:relative;top:0;right:0">${SUIT_ICONS[cardDef.suit] || ''}</span>
         </div>
         <div class="combat-card-name" style="font-size:clamp(7px,1vw,10px)">${cardDef.name}</div>
         <div class="combat-card-meta"><span class="combat-card-type">${cardDef.type}</span><span class="combat-card-rank">R${cardDef.rank}</span></div>
