@@ -1804,6 +1804,116 @@ body.view-arcade .public-orgchart {
   100% { filter: brightness(1) saturate(1); transform: scale(1) translateX(0); }
 }
 
+/* ─── QTE Prompt ────────────────────────────────────────── */
+
+.arcade-qte-prompt {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  width: clamp(80px, 12vw, 140px);
+  height: clamp(80px, 12vw, 140px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  animation: qteAppear 0.3s ease-out forwards;
+  pointer-events: none;
+}
+
+.arcade-qte-ring {
+  position: absolute;
+  inset: 0;
+  border: 4px solid #ffd700;
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5), inset 0 0 12px rgba(255, 215, 0, 0.15);
+  animation: qteRingShrink 1.2s linear forwards;
+}
+
+.arcade-qte-icon {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(12px, 1.8vw, 18px);
+  color: #ffd700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.8);
+  animation: qtePulse 0.3s ease-in-out infinite alternate;
+  z-index: 1;
+}
+
+.arcade-qte-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(10px, 1.4vw, 16px);
+  color: #fff;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+  margin-top: 4px;
+  z-index: 1;
+}
+
+/* Desktop shows SPACE, mobile shows TAP! */
+.arcade-qte-tap { display: none; }
+.touch-device .arcade-qte-key { display: none; }
+.touch-device .arcade-qte-tap { display: block; }
+
+@keyframes qteAppear {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes qteRingShrink {
+  from { transform: scale(2); opacity: 1; }
+  to { transform: scale(1); opacity: 0.3; }
+}
+
+@keyframes qtePulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.15); }
+}
+
+/* QTE success — flash + scale pop */
+.arcade-qte-prompt.qte-success {
+  animation: qteSuccessFlash 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes qteSuccessFlash {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  50% { transform: translate(-50%, -50%) scale(1.5); opacity: 1; filter: brightness(3); }
+  100% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+}
+
+/* QTE miss — drift right + fade */
+.arcade-qte-prompt.qte-miss {
+  animation: qteMissFade 0.5s ease-out forwards;
+}
+@keyframes qteMissFade {
+  0% { opacity: 1; transform: translate(-50%, -50%); }
+  30% { opacity: 0.5; transform: translate(calc(-50% + 20px), -50%); }
+  100% { opacity: 0; transform: translate(calc(-50% + 40px), -50%); }
+}
+
+/* Gold aura on employee portrait after QTE success */
+.arcade-vs-portrait-wrap.qte-power-surge {
+  animation: qtePowerSurge 0.6s ease-out;
+  box-shadow: 0 0 30px #ffd700, 0 0 60px rgba(255, 215, 0, 0.4);
+}
+@keyframes qtePowerSurge {
+  0% { filter: brightness(2) saturate(0.5); box-shadow: 0 0 50px #ffd700, 0 0 100px rgba(255, 215, 0, 0.6); }
+  100% { filter: brightness(1) saturate(1); box-shadow: 0 0 30px #ffd700, 0 0 60px rgba(255, 215, 0, 0.4); }
+}
+
+/* Division-color screen flash on QTE success */
+.arcade-vs-overlay.qte-screen-flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--emp-color, #ffd700);
+  z-index: 24;
+  pointer-events: none;
+  animation: qteScreenFlash 0.3s ease-out forwards;
+}
+@keyframes qteScreenFlash {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
 /* Hitstop freeze vibration */
 .arcade-vs-portrait-wrap.hitstop-vibrate {
   animation: hitstopVibrate 0.05s linear infinite;
@@ -2554,6 +2664,10 @@ body.view-arcade .public-orgchart {
   .arcade-announcer-text.tick-pulse { animation: none; }
   .arcade-vs-portrait.hit-flash-bright { animation: none; }
   .arcade-vs-portrait-wrap.special-hit-impact { animation: none; }
+  .arcade-qte-prompt { animation: none; opacity: 1; }
+  .arcade-qte-ring { animation: none; border-color: #ffd700; }
+  .arcade-qte-icon { animation: none; }
+  .arcade-vs-portrait-wrap.qte-power-surge { animation: none; box-shadow: none; }
   .arcade-vs-portrait-wrap.hitstop-vibrate { animation: none; }
   .arcade-vs-speed-lines { display: none; }
   .arcade-vs-overlay.ko-zoom { animation: none; }
@@ -2636,6 +2750,10 @@ body.view-arcade .public-orgchart {
 .fx-off .arcade-fx-denied-stamp,
 .fx-off .arcade-vs-combo-counter { animation: none; display: none; }
 .fx-off .arcade-vs-portrait-wrap.boss-electric-entrance { animation: none; }
+.fx-off .arcade-qte-prompt { animation: none; opacity: 1; }
+.fx-off .arcade-qte-ring { animation: none; border-color: #ffd700; }
+.fx-off .arcade-qte-icon { animation: none; }
+.fx-off .arcade-vs-portrait-wrap.qte-power-surge { animation: none; box-shadow: none; }
 
 
 /* ============================================================
@@ -2664,6 +2782,11 @@ body.view-arcade .public-orgchart {
 
   .arcade-vs-quote-bubble {
     display: none;
+  }
+
+  .arcade-qte-prompt {
+    width: clamp(70px, 20vw, 100px);
+    height: clamp(70px, 20vw, 100px);
   }
 
   .arcade-header-text {

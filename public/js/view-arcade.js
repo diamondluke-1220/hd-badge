@@ -174,6 +174,9 @@ window.ArcadeRenderer = {
     this._bgIndex = 0;
     this._isVSActive = false;
 
+    // Touch device detection for QTE prompts (SPACE vs TAP label)
+    if ('ontouchstart' in window) container.classList.add('touch-device');
+
     // Preload sample-based SFX
     if (window.ArcadeSFX && ArcadeSFX.preload) ArcadeSFX.preload();
 

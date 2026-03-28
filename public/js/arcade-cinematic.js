@@ -115,7 +115,17 @@
     return new Promise(resolve => {
       const beat = this._createBeat();
       const opponent = this._pickOpponent();
-      const winner = this._determineWinner(opponent);
+      const isPresentation = window.location.pathname.startsWith('/presentation');
+      const baseWinner = this._determineWinner(opponent);
+      const fightState = {
+        baseWinner,
+        winner: null,        // set after QTE 3 (or immediately in presentation mode)
+        qteSuccesses: 0,
+      };
+      // Presentation mode: winner determined immediately, no QTEs
+      if (isPresentation) fightState.winner = baseWinner;
+      // QTE time offset for post-fight beats (0 in presentation, 5100ms with QTEs)
+      const postFightOffset = isPresentation ? 0 : 5100;
 
       const employeeColor = DIVISION_ACCENT_COLORS[div] || '#ffd700';
       const opponentColor = opponent.type === 'creature' ? '#ff0040' : opponent.type === 'intern' ? '#ffffff' : '#D4A843';
@@ -123,7 +133,7 @@
       // Log test override info (actual deletion happens in _animateFight after mechanics read it)
       const _tf = window._testFight;
       if (_tf) {
-        console.log('[FIGHT TEST]', { opponent: opponent.type, name: opponent.name, move: opponent.move, winner });
+        console.log('[FIGHT TEST]', { opponent: opponent.type, name: opponent.name, move: opponent.move, baseWinner });
       }
 
       // Pick background: bosses get corner-office (80%) or random, creatures pick from their pool
@@ -362,20 +372,20 @@
           bubble.style.transition = 'opacity 0.3s ease';
           bubble.style.opacity = '0';
         }
-        this._animateFight(overlay, winner, badge, opponent, employeeColor, opponentColor, setVSAnnouncer);
+        this._animateFight(overlay, fightState, badge, opponent, employeeColor, opponentColor, setVSAnnouncer);
       });
 
-      beat(32000, () => {
+      beat(32000 + postFightOffset, () => {
         const bubbleCleanup = overlay.querySelector('.arcade-vs-quote-bubble');
         if (bubbleCleanup) bubbleCleanup.style.display = 'none';
 
         const leftSide = overlay.querySelector('.arcade-vs-left');
         const rightSide = overlay.querySelector('.arcade-vs-right');
+        const w = fightState.winner;
 
         if (window.ArcadeSFX) ArcadeSFX.play('winner');
 
-        if (winner === 'employee') {
-          // Winner text under employee (left)
+        if (w === 'employee') {
           if (leftSide) {
             const winResult = document.createElement('div');
             winResult.className = 'arcade-vs-side-result arcade-vs-side-result-win';
@@ -387,7 +397,6 @@
             requestAnimationFrame(() => winResult.classList.add('reveal'));
             this._spawnConfetti(leftSide, employeeColor);
           }
-          // Defeat text under opponent (right)
           if (rightSide) {
             const loseResult = document.createElement('div');
             loseResult.className = 'arcade-vs-side-result arcade-vs-side-result-lose';
@@ -400,7 +409,6 @@
           }
           this._markFightResult(badge.employeeId, 'winner');
         } else {
-          // Winner text under opponent (right)
           if (rightSide) {
             const winResult = document.createElement('div');
             winResult.className = 'arcade-vs-side-result arcade-vs-side-result-win';
@@ -412,7 +420,6 @@
             requestAnimationFrame(() => winResult.classList.add('reveal'));
             this._spawnConfetti(rightSide, opponentColor);
           }
-          // Defeat text under employee (left)
           if (leftSide) {
             const loseResult = document.createElement('div');
             loseResult.className = 'arcade-vs-side-result arcade-vs-side-result-lose';
@@ -426,27 +433,27 @@
           this._markFightResult(badge.employeeId, 'loser');
         }
 
-        setVSAnnouncer(winner === 'employee'
+        setVSAnnouncer(w === 'employee'
           ? `${badge.name.toUpperCase()} WINS!`
           : `${opponent.name.toUpperCase()} WINS!`);
       });
 
       // Second confetti burst for extended celebration
-      beat(34000, () => {
-        const winnerSide = winner === 'employee'
+      beat(34000 + postFightOffset, () => {
+        const w = fightState.winner;
+        const winnerSide = w === 'employee'
           ? overlay.querySelector('.arcade-vs-left')
           : overlay.querySelector('.arcade-vs-right');
-        const winColor = winner === 'employee' ? employeeColor : opponentColor;
+        const winColor = w === 'employee' ? employeeColor : opponentColor;
         if (winnerSide) this._spawnConfetti(winnerSide, winColor);
       });
 
-      beat(36000, () => {
+      beat(36000 + postFightOffset, () => {
         overlay.classList.add('dissolve');
-        // Resolve immediately when dissolve starts so breather text shows during fade
         resolve();
-        beat(36600, () => {
+        beat(36600 + postFightOffset, () => {
           overlay.remove();
-          beat(38600, () => {
+          beat(38600 + postFightOffset, () => {
             // Fight result markers persist on slots — no cleanup needed
           });
         });
@@ -604,7 +611,7 @@
     'Sally in Accounting': ['RECEIPT REQUIRED!', 'SUBMIT YOUR TIME!', 'OVER BUDGET!', 'THAT LINE ITEM IS FLAGGED!'],
   },
 
-  _animateFight(overlay, winner, badge, opponent, empColor, oppColor, setVSAnnouncer) {
+  _animateFight(overlay, fightState, badge, opponent, empColor, oppColor, setVSAnnouncer) {
     const hpContainer = overlay.querySelector('.arcade-vs-hp-container');
     if (!hpContainer) return;
 
@@ -612,23 +619,15 @@
     hpContainer.style.display = '';
     hpContainer.classList.add('visible');
 
-    const leftFill = overlay.querySelector('.arcade-vs-hp-left .arcade-vs-hp-fill');
-    const rightFill = overlay.querySelector('.arcade-vs-hp-right .arcade-vs-hp-fill');
-    const leftTrail = overlay.querySelector('.arcade-vs-hp-left .arcade-vs-hp-trail');
-    const rightTrail = overlay.querySelector('.arcade-vs-hp-right .arcade-vs-hp-trail');
-    const leftSpark = overlay.querySelector('.arcade-vs-left .arcade-vs-hit-spark');
-    const rightSpark = overlay.querySelector('.arcade-vs-right .arcade-vs-hit-spark');
     const leftPortrait = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait');
     const rightPortrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait');
     const leftWrap = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
     const rightWrap = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
 
-    const loserFill = winner === 'employee' ? rightFill : leftFill;
-    const loserTrail = winner === 'employee' ? rightTrail : leftTrail;
-    const loserSpark = winner === 'employee' ? rightSpark : leftSpark;
-    const winnerFill = winner === 'employee' ? leftFill : rightFill;
-    const winnerTrail = winner === 'employee' ? leftTrail : rightTrail;
-    const winnerSpark = winner === 'employee' ? leftSpark : rightSpark;
+    // Use baseWinner for Acts 1-2 choreography (mechanics, side assignments)
+    let winner = fightState.baseWinner;
+    let sides = this._assignFighterSides(overlay, winner);
+    let { loserFill, loserTrail, loserSpark, winnerFill, winnerTrail, winnerSpark } = sides;
     const winnerName = winner === 'employee' ? badge.name : opponent.name;
     const loserName = winner === 'employee' ? opponent.name : badge.name;
 
@@ -767,10 +766,17 @@
     const oppTarget = winner === 'employee' ? 'loser' : 'winner';
     const isBoss = opponent.type === 'boss';
 
+    // QTE timing: presentation mode skips QTEs entirely
+    const isPresentation = window.location.pathname.startsWith('/presentation');
+    // Offset applied to Act 2 remainder, QTE 2-3, and Act 3 timings
+    const QTE_OFFSET_1 = isPresentation ? 0 : 1700; // after QTE 1
+    const QTE_OFFSET_2 = isPresentation ? 0 : 3400; // after QTE 2
+    const QTE_OFFSET_3 = isPresentation ? 0 : 5100; // after QTE 3
+
     // ── Fight mechanic decisions ─────────────────────────────
     const t = window._testFight || {};
-    // Comeback: employee-only, 25% of employee wins
-    const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && Math.random() < 0.25);
+    // Comeback: employee-only, 35% of employee wins
+    const doComeback = t.doComeback != null ? t.doComeback : (winner === 'employee' && Math.random() < 0.35);
     // Boss finisher: boss wins + 30% chance — special move as killing blow
     const doBossFinisher = t.doBossFinisher != null ? t.doBossFinisher : (winner === 'opponent' && isBoss && !doComeback && Math.random() < 0.3);
     // Stun interrupt: stun collides with special move charge (~20%)
@@ -786,10 +792,9 @@
     // Slugfest Act 3: 25% of non-comeback/non-finisher fights get rapid exchanges
     const doSlugfest = t.doSlugfest != null ? t.doSlugfest : (!doComeback && !doBossFinisher && Math.random() < 0.25);
 
-    // Auto-clear test overrides now that all mechanics have been read
+    // Log test overrides (deletion deferred until after QTEs read from it)
     if (window._testFight) {
       console.log('[FIGHT TEST] Mechanics:', { doComeback, doBossFinisher, doStunInterrupt, doStun, stunTime, doSlugfest, specialTime });
-      delete window._testFight;
     }
 
     // Jitter: ±150ms randomization per hit
@@ -961,18 +966,19 @@
       ];
     }
 
-    allHits.push(...act2Hits, ...act3Hits);
-
-    // Pre-calculate HP scaling so winner ends at winnerFinalHP and loser at 0
+    // ── HP Scaling ─────────────────────────────────────────
+    // Pre-calculate scales for the full fight (Acts 1+2+3).
+    // After QTE 3, Act 3 scales get recalculated from current HP.
+    const allCombined = [...allHits, ...act2Hits, ...act3Hits];
     let runWinnerDmg = 0;
     let runLoserDmg = 0;
-    allHits.forEach(h => {
+    allCombined.forEach(h => {
       if (h.final) return;
       if (h.target === 'winner') runWinnerDmg += h.dmg;
       else runLoserDmg += h.dmg;
     });
-    const winnerScale = (100 - winnerFinalHP) / (runWinnerDmg || 1);
-    const loserScale = 100 / (runLoserDmg || 1);
+    let winnerScale = (100 - winnerFinalHP) / (runWinnerDmg || 1);
+    let loserScale = 100 / (runLoserDmg || 1);
 
     // Opponent-specific announcer lines (50% chance to use when available)
     const oppLines = this._CREATURE_FIGHT_LINES[opponent.name];
@@ -980,22 +986,22 @@
       ? oppLines[Math.floor(Math.random() * oppLines.length)]
       : pickLine(this._FIGHT_LINES_EVEN);
 
-    // Announcer beats
+    // Announcer beats — Act 1 unchanged, Act 2 +QTE_OFFSET_1, Act 3 +QTE_OFFSET_3
     const announcerBeats = [
       [800, pickOppLine()],
       [3000, pickOppLine()],
-      [5500, (doStun && stunTime <= 5000) ? `${badge.name.toUpperCase()} DROPS A ONE-LINER!` : pickOppLine()],
-      [7500, (chargeStart <= 7500 && chargeStart + chargeLeadTime >= 7500) ? null : `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
-      [9800, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
-      [12000, pickOppLine()],
-      [15000, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
-      [17500, pickLine(this._FIGHT_LINES_FINISH)],
+      [5500 + QTE_OFFSET_1, (doStun && stunTime <= 5000) ? `${badge.name.toUpperCase()} DROPS A ONE-LINER!` : pickOppLine()],
+      [7500 + QTE_OFFSET_1, (chargeStart <= 7500 && chargeStart + chargeLeadTime >= 7500) ? null : `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
+      [9800 + QTE_OFFSET_1, `${loserName.toUpperCase()} ${pickLine(this._FIGHT_LINES_RALLY)}`],
+      [12000 + QTE_OFFSET_2, pickOppLine()],
+      [15000 + QTE_OFFSET_3, `${winnerName.toUpperCase()} ${pickLine(this._FIGHT_LINES_WINNING)}`],
+      [17500 + QTE_OFFSET_3, pickLine(this._FIGHT_LINES_FINISH)],
     ];
     // Comeback announcer lines
     if (doComeback) {
       announcerBeats.push(
-        [13600, pickLine(this._FIGHT_LINES_COMEBACK_SHOCK)],
-        [14800, pickLine(this._FIGHT_LINES_COMEBACK_RALLY)]
+        [13600 + QTE_OFFSET_3, pickLine(this._FIGHT_LINES_COMEBACK_SHOCK)],
+        [14800 + QTE_OFFSET_3, pickLine(this._FIGHT_LINES_COMEBACK_RALLY)]
       );
     }
     announcerBeats.filter(([, line]) => line !== null).forEach(([delay, line]) => beat(delay, () => setVSAnnouncer(line)));
@@ -1041,32 +1047,29 @@
       this._timeouts.push(cleanupTid);
     };
 
-    // Comeback stun: employee fires stun during the near-death pause
+    // Comeback stun: employee fires stun during the near-death pause (Act 3 timing)
     if (doComeback) {
-      beat(13800, () => fireStun(2500));
+      beat(13800 + QTE_OFFSET_3, () => fireStun(2500));
     }
 
-    // Stun interrupt: employee stuns mid-charge, canceling the special
+    // Stun interrupt: employee stuns mid-charge, canceling the special (Act 2 timing)
     if (doStunInterrupt) {
-      beat(chargeStart + 500, () => fireStun(2500));
+      beat(chargeStart + 500 + QTE_OFFSET_1, () => fireStun(2500));
     }
 
-    // Regular stun (45% chance, variable timing)
-    // All stuns get 2500ms — enough to read the quote. Special charge waits for stun to clear.
+    // Regular stun (45% chance, variable timing) — Act 2 timing
     if (doStun) {
-      beat(stunTime, () => fireStun(2500));
+      beat(stunTime + QTE_OFFSET_1, () => fireStun(2500));
     }
 
-    // Special move — charge buildup then release (bosses + creatures, not interns)
+    // Special move — charge buildup then release (Act 2 timing)
     if (opponent.type !== 'intern' && opponent.move) {
       if (doStunInterrupt) {
-        // Stun interrupt: boss starts charging, employee stuns, special fizzles
-        beat(chargeStart, () => {
+        beat(chargeStart + QTE_OFFSET_1, () => {
           this._startSpecialMoveCharge(overlay);
           setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
         });
-        // Stun fires mid-charge — cancel charge aura 200ms after stun appears
-        beat(chargeStart + 700, () => {
+        beat(chargeStart + 700 + QTE_OFFSET_1, () => {
           const classEl = overlay.querySelector('.arcade-vs-right .arcade-vs-fighter-class');
           if (classEl) classEl.classList.remove('special-move-charging');
           const portrait = overlay.querySelector('.arcade-vs-right .arcade-vs-portrait-wrap');
@@ -1075,19 +1078,16 @@
           if (darken) darken.classList.remove('active');
           setVSAnnouncer('INTERRUPTED! THE SPECIAL FIZZLES!');
         });
-        // Reduced-power release (glancing blow)
-        beat(specialTime, () => {
+        beat(specialTime + QTE_OFFSET_1, () => {
           this._triggerSpecialMove(overlay, oppColor, opponent);
         });
       } else {
-        // Normal special move — delay charge if stun is still active
-        beat(chargeStart, () => {
+        beat(chargeStart + QTE_OFFSET_1, () => {
           const startCharge = () => {
             this._startSpecialMoveCharge(overlay);
             setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING UP...`);
           };
           if (_stunActive) {
-            // Wait for stun to clear, then start charge
             const waitTid = setInterval(() => {
               if (!_stunActive) {
                 clearInterval(waitTid);
@@ -1099,20 +1099,20 @@
             startCharge();
           }
         });
-        beat(specialTime, () => {
+        beat(specialTime + QTE_OFFSET_1, () => {
           this._triggerSpecialMove(overlay, oppColor, opponent);
           setVSAnnouncer(`${opponent.name.toUpperCase()} USES ${opponent.move}!`);
         });
       }
     }
 
-    // Boss finisher — second special move as killing blow in Act 3
+    // Boss finisher — second special move as killing blow (Act 3 timing)
     if (doBossFinisher && opponent.move) {
-      beat(16500, () => {
+      beat(16500 + QTE_OFFSET_3, () => {
         this._startSpecialMoveCharge(overlay);
         setVSAnnouncer(`${opponent.name.toUpperCase()} IS CHARGING... FINISHING MOVE!`);
       });
-      beat(17800, () => {
+      beat(17800 + QTE_OFFSET_3, () => {
         this._triggerSpecialMove(overlay, oppColor, opponent);
         setVSAnnouncer(pickLine([
           'FINISHING MOVE!', 'EXECUTIVE DECISION!', 'NO APPEALS!', 'MEETING ADJOURNED... PERMANENTLY!'
@@ -1120,75 +1120,290 @@
       });
     }
 
-    // Slowdown visual cue before KO
-    beat(18000, () => {
+    // Slowdown visual cue before KO (Act 3 timing)
+    beat(18000 + QTE_OFFSET_3, () => {
       overlay.classList.add('ko-slowdown');
     });
 
-    // Schedule all hits
-    allHits.forEach(hit => {
-      beat(hit.delay, () => {
-        if (hit.final) {
-          loserHP = 0;
-          setHP(loserFill, loserTrail, 0);
+    // ── Hit Processing Helper ───────────────────────────────
+    const processHit = (hit) => {
+      if (hit.final) {
+        loserHP = 0;
+        setHP(loserFill, loserTrail, 0);
 
-          // Determine which portrait/spark to hit
-          // Boss finisher: special FX IS the KO — skip regular hit visual
-          if (!hit.isFinisher) {
-            const spark = loserSpark;
-            const portrait = winner === 'employee' ? rightPortrait : leftPortrait;
-            doHit(spark, portrait, 'ko');
-          } else {
-            // Play KO sound only (special FX handles the visual)
-            if (window.ArcadeSFX) ArcadeSFX.play('koImpact');
-          }
-
-          // Camera zoom on KO
-          overlay.classList.remove('ko-slowdown');
-          overlay.classList.add('ko-zoom');
-
-          // K.O. text
-          const koSpark = loserSpark;
-          const loserSide = koSpark.closest('.arcade-vs-side');
-          if (loserSide) {
-            const koEl = document.createElement('div');
-            koEl.className = 'arcade-vs-ko-text';
-            koEl.textContent = 'K.O.';
-            loserSide.appendChild(koEl);
-          }
-          return;
-        }
-
-        // Determine spark and portrait targets
-        let spark, portrait;
-        if (hit.target === 'winner') {
-          spark = winnerSpark;
-          portrait = winner === 'employee' ? leftPortrait : rightPortrait;
-          winnerHP -= hit.dmg * winnerScale;
-          winnerHP = Math.max(winnerFinalHP, winnerHP);
-          setHP(winnerFill, winnerTrail, winnerHP);
+        if (!hit.isFinisher) {
+          const spark = loserSpark;
+          const portrait = winner === 'employee' ? rightPortrait : leftPortrait;
+          doHit(spark, portrait, 'ko');
         } else {
-          spark = loserSpark;
-          portrait = winner === 'employee' ? rightPortrait : leftPortrait;
-          loserHP -= hit.dmg * loserScale;
-          loserHP = Math.max(5, loserHP);
-          setHP(loserFill, loserTrail, loserHP);
+          if (window.ArcadeSFX) ArcadeSFX.play('koImpact');
         }
-        doHit(spark, portrait, hit.weight || 'light');
-        updateCombo(hit.target);
+
+        overlay.classList.remove('ko-slowdown');
+        overlay.classList.add('ko-zoom');
+
+        const koSpark = loserSpark;
+        const loserSide = koSpark.closest('.arcade-vs-side');
+        if (loserSide) {
+          const koEl = document.createElement('div');
+          koEl.className = 'arcade-vs-ko-text';
+          koEl.textContent = 'K.O.';
+          loserSide.appendChild(koEl);
+        }
+        return;
+      }
+
+      let spark, portrait;
+      if (hit.target === 'winner') {
+        spark = winnerSpark;
+        portrait = winner === 'employee' ? leftPortrait : rightPortrait;
+        winnerHP -= hit.dmg * winnerScale;
+        winnerHP = Math.max(winnerFinalHP, winnerHP);
+        setHP(winnerFill, winnerTrail, winnerHP);
+      } else {
+        spark = loserSpark;
+        portrait = winner === 'employee' ? rightPortrait : leftPortrait;
+        loserHP -= hit.dmg * loserScale;
+        loserHP = Math.max(5, loserHP);
+        setHP(loserFill, loserTrail, loserHP);
+      }
+      doHit(spark, portrait, hit.weight || 'light');
+      updateCombo(hit.target);
+    };
+
+    // ── Schedule Hits — Act 1 (no offset), Act 2 (+QTE_OFFSET_1), Act 3 (+QTE_OFFSET_3)
+    allHits.forEach(hit => beat(hit.delay, () => processHit(hit)));
+    act2Hits.forEach(hit => beat(hit.delay + QTE_OFFSET_1, () => processHit(hit)));
+    act3Hits.forEach(hit => beat(hit.delay + QTE_OFFSET_3, () => processHit(hit)));
+
+    // ── QTE Scheduling ──────────────────────────────────────
+    if (!isPresentation) {
+      // QTE 1: between Act 1 and Act 2
+      beat(4800, () => {
+        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
+          if (success) fightState.qteSuccesses++;
+        });
       });
-    });
 
-    // Clean up combo counter before KO result
-    beat(18400, () => { if (comboEl) { comboEl.remove(); comboEl = null; } });
+      // QTE 2: during Act 2 (overlays on fight, doesn't pause)
+      beat(11400, () => {
+        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
+          if (success) fightState.qteSuccesses++;
+        });
+      });
 
-    // Loser portrait dims after K.O.
-    beat(19000, () => {
+      // QTE 3: after Act 2, before Act 3. Finalizes winner on resolve.
+      beat(15000, () => {
+        this._fireQTE(overlay, empColor, setVSAnnouncer).then(success => {
+          if (success) fightState.qteSuccesses++;
+
+          // Finalize winner with QTE bonuses
+          const newWinner = this._finalizeWinner(fightState, opponent);
+          fightState.winner = newWinner;
+
+          if (newWinner !== winner) {
+            // Winner flipped — swap HP and re-assign sides
+            const tmpHP = winnerHP;
+            winnerHP = loserHP;
+            loserHP = tmpHP;
+
+            winner = newWinner;
+            const newSides = this._assignFighterSides(overlay, winner);
+            loserFill = newSides.loserFill;
+            loserTrail = newSides.loserTrail;
+            loserSpark = newSides.loserSpark;
+            winnerFill = newSides.winnerFill;
+            winnerTrail = newSides.winnerTrail;
+            winnerSpark = newSides.winnerSpark;
+
+            // Update HP bar visuals to match swapped sides
+            setHP(winnerFill, winnerTrail, winnerHP);
+            setHP(loserFill, loserTrail, loserHP);
+          } else {
+            fightState.winner = winner;
+          }
+
+          // Recalculate Act 3 scales from current HP
+          let act3WinDmg = 0, act3LoseDmg = 0;
+          act3Hits.forEach(h => {
+            if (h.final) return;
+            if (h.target === 'winner') act3WinDmg += h.dmg;
+            else act3LoseDmg += h.dmg;
+          });
+          winnerScale = Math.max(0, winnerHP - winnerFinalHP) / (act3WinDmg || 1);
+          loserScale = loserHP / (act3LoseDmg || 1);
+
+          // Clean up test overrides now that all QTEs have resolved
+          if (window._testFight) delete window._testFight;
+        });
+      });
+    } else {
+      // Presentation mode: no QTEs, set winner immediately
+      fightState.winner = fightState.baseWinner;
+      if (window._testFight) delete window._testFight;
+    }
+
+    // Clean up combo counter before KO result (Act 3 timing)
+    beat(18400 + QTE_OFFSET_3, () => { if (comboEl) { comboEl.remove(); comboEl = null; } });
+
+    // Loser portrait dims after K.O. (Act 3 timing)
+    beat(19000 + QTE_OFFSET_3, () => {
       const loserSide = winner === 'employee'
         ? overlay.querySelector('.arcade-vs-right')
         : overlay.querySelector('.arcade-vs-left');
       if (loserSide) loserSide.classList.add('defeated');
     });
+  },
+
+  // ─── QTE Prompt ────────────────────────────────────────────
+  // Returns Promise<boolean>: true = success, false = miss/timeout.
+  // Appends a center-screen prompt to the overlay with a 1.2s shrinking ring.
+  // Input: Space key or touchstart. Auto-cleans up listeners on resolve.
+
+  _fireQTE(overlay, empColor, setVSAnnouncer) {
+    return new Promise(resolve => {
+      // Test override: skip entirely
+      const t = window._testFight || {};
+      if (t.skipQTE) return resolve(false);
+
+      // Test override: use pre-set result array
+      if (Array.isArray(t.qteResults)) {
+        const result = t.qteResults.shift();
+        if (result) {
+          this._qteSuccessEffects(overlay, empColor, setVSAnnouncer);
+        } else {
+          setVSAnnouncer('MISSED IT!');
+        }
+        return resolve(!!result);
+      }
+
+      let resolved = false;
+      const QTE_WINDOW = 1200;
+
+      // Build DOM
+      const prompt = document.createElement('div');
+      prompt.className = 'arcade-qte-prompt';
+      prompt.innerHTML = `
+        <div class="arcade-qte-ring"></div>
+        <div class="arcade-qte-icon">
+          <span class="arcade-qte-key">SPACE</span>
+          <span class="arcade-qte-tap">TAP!</span>
+        </div>
+        <div class="arcade-qte-label">NOW!</div>
+      `;
+      overlay.appendChild(prompt);
+
+      const cleanup = () => {
+        document.removeEventListener('keydown', onKey);
+        overlay.removeEventListener('touchstart', onTouch);
+      };
+
+      const succeed = () => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        clearTimeout(missTimer);
+        prompt.classList.add('qte-success');
+        this._qteSuccessEffects(overlay, empColor, setVSAnnouncer);
+        resolve(true);
+        const tid = setTimeout(() => prompt.remove(), 400);
+        this._timeouts.push(tid);
+      };
+
+      const miss = () => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        prompt.classList.add('qte-miss');
+        setVSAnnouncer('MISSED IT!');
+        resolve(false);
+        const tid = setTimeout(() => prompt.remove(), 500);
+        this._timeouts.push(tid);
+      };
+
+      const onKey = (e) => {
+        if (e.code === 'Space' || e.key === ' ') {
+          e.preventDefault();
+          succeed();
+        }
+      };
+
+      const onTouch = (e) => {
+        // Only count touches on the overlay itself, not propagated from child controls
+        e.preventDefault();
+        succeed();
+      };
+
+      document.addEventListener('keydown', onKey);
+      overlay.addEventListener('touchstart', onTouch);
+
+      const missTimer = setTimeout(miss, QTE_WINDOW);
+      this._timeouts.push(missTimer);
+    });
+  },
+
+  // QTE success visual/audio effects (shared by live and test-override paths)
+  _qteSuccessEffects(overlay, empColor, setVSAnnouncer) {
+    // Gold aura on employee portrait
+    const empWrap = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
+    if (empWrap) {
+      empWrap.classList.add('qte-power-surge');
+      const tid = setTimeout(() => empWrap.classList.remove('qte-power-surge'), 600);
+      this._timeouts.push(tid);
+    }
+
+    // Division-color screen flash
+    overlay.classList.add('qte-screen-flash');
+    const flashTid = setTimeout(() => overlay.classList.remove('qte-screen-flash'), 300);
+    this._timeouts.push(flashTid);
+
+    // Announcer
+    const lines = ['POWER SURGE!', 'CRITICAL HIT!', 'EMPLOYEE OF THE MONTH!', 'NICE TIMING!', 'MAXIMUM PRODUCTIVITY!'];
+    setVSAnnouncer(lines[Math.floor(Math.random() * lines.length)]);
+
+    // SFX
+    if (window.ArcadeSFX) ArcadeSFX.play('heavyHit');
+  },
+
+  // ─── Finalize Winner After QTEs ──────────────────────────────
+  // Re-rolls winner based on base probability + QTE bonus.
+
+  _finalizeWinner(fightState, opponent) {
+    // Respect test override
+    const t = window._testFight || {};
+    if (t.winner) return t.winner;
+
+    // Base probability (employee wins)
+    let prob;
+    if (opponent.type === 'intern') prob = 0.80;
+    else if (opponent.type === 'boss') prob = 0.35;
+    else prob = 0.50; // creature
+
+    // QTE bonus: +15% per success, capped at 95%
+    prob = Math.min(0.95, prob + fightState.qteSuccesses * 0.15);
+
+    return Math.random() < prob ? 'employee' : 'opponent';
+  },
+
+  // ─── Fighter Side Assignments ─────────────────────────────────
+  // Extracts the winner/loser element mapping. Called once for Acts 1-2,
+  // then again after QTE 3 if winner changes.
+
+  _assignFighterSides(overlay, winner) {
+    const leftFill = overlay.querySelector('.arcade-vs-hp-left .arcade-vs-hp-fill');
+    const rightFill = overlay.querySelector('.arcade-vs-hp-right .arcade-vs-hp-fill');
+    const leftTrail = overlay.querySelector('.arcade-vs-hp-left .arcade-vs-hp-trail');
+    const rightTrail = overlay.querySelector('.arcade-vs-hp-right .arcade-vs-hp-trail');
+    const leftSpark = overlay.querySelector('.arcade-vs-left .arcade-vs-hit-spark');
+    const rightSpark = overlay.querySelector('.arcade-vs-right .arcade-vs-hit-spark');
+    return {
+      loserFill:   winner === 'employee' ? rightFill : leftFill,
+      loserTrail:  winner === 'employee' ? rightTrail : leftTrail,
+      loserSpark:  winner === 'employee' ? rightSpark : leftSpark,
+      winnerFill:  winner === 'employee' ? leftFill : rightFill,
+      winnerTrail: winner === 'employee' ? leftTrail : rightTrail,
+      winnerSpark: winner === 'employee' ? leftSpark : rightSpark,
+    };
   },
 
   // ─── Fight Result Slot Marking ──────────────────────────────
