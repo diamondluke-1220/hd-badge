@@ -295,7 +295,7 @@ export function startTurn(state: CombatState, events: GameEvent[]): void {
   state.playerBlock = 0;
 
   // Documented: gain block at turn start
-  const docStacks = getStacks(state.playerStatuses, 'documented');
+  const docStacks = getStacks(state.playerStatuses, 'jargon');
   if (docStacks > 0) {
     state.playerBlock += docStacks;
     events.push({ type: 'BLOCK', value: docStacks });

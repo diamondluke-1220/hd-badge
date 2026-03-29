@@ -40,7 +40,7 @@ export function resetInstanceCounter() { _nextInstanceId = 0; }
 
 export const STARTER_DECK: CardDef[] = [
   // Tickets (3) — IT escalations, patches, troubleshooting
-  { id: 'escalate_to_level_2', name: 'Escalate to Level 2', cost: 1, type: 'attack',
+  { id: 'escalation', name: 'Escalation', cost: 1, type: 'attack',
     suit: 'tickets', rank: 6,
     rarity: 'starter', target: 'enemy',
     effects: [{ type: 'damage', value: 6 }],
@@ -52,18 +52,18 @@ export const STARTER_DECK: CardDef[] = [
     effects: [{ type: 'damage', value: 8 }],
     flavor: 'Your password has expired. No, the old one won\'t work.' },
 
-  { id: 'works_on_my_machine', name: 'Works On My Machine', cost: 1, type: 'skill',
+  { id: 'womm', name: 'WOMM', cost: 1, type: 'skill',
     suit: 'tickets', rank: 4,
     rarity: 'starter', target: 'self',
     effects: [{ type: 'block', value: 5 }, { type: 'draw', value: 1 }],
-    flavor: 'Works on my machine. Closing ticket.' },
+    flavor: 'Works On My Machine. Closing ticket.' },
 
   // Bureaucracy (3) — red tape, policies, CYA
-  { id: 'per_my_last_email', name: 'Per My Last Email', cost: 1, type: 'attack',
+  { id: 'last_email', name: 'Last Email', cost: 1, type: 'attack',
     suit: 'bureaucracy', rank: 5,
     rarity: 'starter', target: 'enemy',
     effects: [{ type: 'damage', value: 5 }, { type: 'applyStatus', status: 'micromanaged', value: 1 }],
-    flavor: 'As I clearly stated in my previous correspondence...' },
+    flavor: 'Per my last email, which you clearly didn\'t read.' },
 
   { id: 'reply_all', name: 'Reply All', cost: 2, type: 'attack',
     suit: 'bureaucracy', rank: 7,
@@ -71,14 +71,14 @@ export const STARTER_DECK: CardDef[] = [
     effects: [{ type: 'damage', value: 7 }],
     flavor: '312 recipients. No one asked for this.' },
 
-  { id: 'documentation', name: 'Documentation', cost: 1, type: 'power',
+  { id: 'cya', name: 'CYA', cost: 1, type: 'power',
     suit: 'bureaucracy', rank: 3,
     rarity: 'starter', target: 'self',
-    effects: [{ type: 'applyStatus', status: 'documented', value: 2 }],
-    flavor: 'Wrote it down. Updated the wiki. Screenshot for good measure.' },
+    effects: [{ type: 'applyStatus', status: 'jargon', value: 2 }],
+    flavor: 'Cover Your Ass. The foundation of corporate survival.' },
 
   // Meetings (2) — stalling, blocking, culture
-  { id: 'schedule_a_meeting', name: 'Schedule A Meeting', cost: 1, type: 'skill',
+  { id: 'time_block', name: 'Time Block', cost: 1, type: 'skill',
     suit: 'meetings', rank: 5,
     rarity: 'starter', target: 'self',
     effects: [{ type: 'block', value: 7 }],
@@ -195,10 +195,10 @@ export const REWARD_POOL: CardDef[] = [
   { id: 'stack_overflow', name: 'Stack Overflow', cost: 1, type: 'attack',
     suit: 'tickets', rank: 5,
     rarity: 'common', target: 'enemy',
-    effects: [{ type: 'damage', value: 4 }, { type: 'damage', value: 4 }],
+    effects: [{ type: 'multiHit', value: 4, times: 2 }],
     flavor: 'Copy. Paste. Pray.' },
 
-  { id: 'server_room_lockout', name: 'Server Room Lockout', cost: 2, type: 'skill',
+  { id: 'lockout', name: 'Lockout', cost: 2, type: 'skill',
     suit: 'tickets', rank: 6,
     rarity: 'uncommon', target: 'self',
     effects: [{ type: 'block', value: 15 }],
@@ -215,12 +215,12 @@ export const REWARD_POOL: CardDef[] = [
     suit: 'bureaucracy', rank: 4,
     rarity: 'common', target: 'enemy',
     effects: [{ type: 'applyStatus', status: 'micromanaged', value: 2 }, { type: 'draw', value: 1 }],
-    flavor: 'Every click logged. Every email archived. Every bathroom break timed.' },
+    flavor: 'Every click logged. Every break timed.' },
 
   { id: 'nda', name: 'NDA', cost: 1, type: 'skill',
     suit: 'bureaucracy', rank: 7,
     rarity: 'uncommon', target: 'self',
-    effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+    effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'jargon', value: 1 }],
     flavor: 'You can\'t talk about what you can\'t talk about.' },
 
   { id: 'regulatory_filing', name: 'Regulatory Filing', cost: 2, type: 'attack',
@@ -236,11 +236,11 @@ export const REWARD_POOL: CardDef[] = [
     flavor: 'APPROVED. Wait, what did I just approve?' },
 
   // Meetings (5 new)
-  { id: 'standing_meeting', name: 'Standing Meeting', cost: 1, type: 'skill',
+  { id: 'raci', name: 'RACI', cost: 1, type: 'skill',
     suit: 'meetings', rank: 2,
     rarity: 'common', target: 'self',
-    effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'documented', value: 1 }],
-    flavor: 'We stand because sitting implies commitment.' },
+    effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'jargon', value: 1 }],
+    flavor: 'Responsible, Accountable, Consulted, Ignored.' },
 
   { id: 'double_booked', name: 'Double Booked', cost: 1, type: 'skill',
     suit: 'meetings', rank: 4,
@@ -264,7 +264,7 @@ export const REWARD_POOL: CardDef[] = [
     suit: 'meetings', rank: 8,
     rarity: 'rare', target: 'self',
     effects: [{ type: 'applyStatus', status: 'caffeinated', value: 4 }],
-    flavor: 'Trust falls, breakout sessions, and surprisingly good catering.' },
+    flavor: 'Trust falls and surprisingly good catering.' },
 
   // Org Chart (5 new)
   { id: 'temp_worker', name: 'Temp Worker', cost: 0, type: 'attack',

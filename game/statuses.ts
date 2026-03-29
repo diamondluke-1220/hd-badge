@@ -37,9 +37,9 @@ export const STATUS_DEFS: Record<string, StatusDef> = {
     id: 'micromanaged', name: 'Micromanaged', type: 'debuff', decrements: true,
     description: 'Deals 25% less damage. Loses 1 stack each turn.',
   },
-  documented: {
-    id: 'documented', name: 'Documented', type: 'buff', decrements: false,
-    description: 'Gain {N} block at start of each turn. Permanent.',
+  jargon: {
+    id: 'jargon', name: 'Jargon', type: 'buff', decrements: false,
+    description: 'Gain {N} block per turn. They can\'t parse your corporate speak.',
   },
 };
 

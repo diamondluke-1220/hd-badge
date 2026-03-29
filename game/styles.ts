@@ -22,9 +22,6 @@ export const MANAGEMENT_STYLES: ManagementStyle[] = [
   { id: 'follow_up', name: 'Follow-Up', description: '2 cards of the same suit.',
     baseKPI: 10, baseLeverage: 2, rank: 1, tagLimit: 3 },
 
-  { id: 'policy_update', name: 'Policy Update', description: '3 cards of the same suit.',
-    baseKPI: 20, baseLeverage: 4, rank: 2, tagLimit: 3 },
-
   { id: 'cross_functional', name: 'Cross-Functional', description: '3 cards, each a different suit.',
     baseKPI: 25, baseLeverage: 5, rank: 3, tagLimit: 3 },
 
@@ -69,36 +66,22 @@ export function detectStyle(taggedSuits: Suit[]): ManagementStyle {
   const uniqueSuits = counts.length;
 
   // Check from highest rank down
-  // Board Resolution: all 3 same suit
+  // Board Resolution: all 3 same suit (rank 4)
   if (n >= 3 && maxCount >= 3) {
-    return MANAGEMENT_STYLES[4]; // Board Resolution
+    return MANAGEMENT_STYLES[3]; // Board Resolution
   }
 
-  // Cross-Functional: 3 different suits
+  // Cross-Functional: 3 different suits (rank 3)
   if (n >= 3 && uniqueSuits >= 3) {
-    return MANAGEMENT_STYLES[3]; // Cross-Functional
+    return MANAGEMENT_STYLES[2]; // Cross-Functional
   }
 
-  // Policy Update: 3 of same suit (but we already caught that above as Board Resolution)
-  // This handles the case where you tag 3 cards, 2 same + 1 different — not Policy Update.
-  // Policy Update requires 3 same — which IS Board Resolution for tag limit 3.
-  // So for 3-tag system: Policy Update = impossible (it IS Board Resolution).
-  // Let's redefine: Policy Update = 2 same suit + 1 other (weaker than Cross-Functional)
-  // Actually, let me reconsider the hierarchy for 3-card hands:
-
-  // For 3 tagged cards, possible combos:
-  // AAA = Board Resolution (best)
-  // ABC = Cross-Functional (3 unique suits)
-  // AAB = Follow-Up (pair, with an extra card)
-  // This is the natural hierarchy. Policy Update doesn't fit 3-card hands.
-
-  // Follow-Up: 2 of same suit
+  // Follow-Up: 2 of same suit (rank 1)
   if (maxCount >= 2) {
     return MANAGEMENT_STYLES[1]; // Follow-Up
   }
 
-  // Ad Hoc: no matches (but with 4 suits and 3 cards, we'd always have at most 3 unique)
-  // This can only happen with 1 tagged card
+  // Ad Hoc: no matches (rank 0)
   return MANAGEMENT_STYLES[0]; // Ad Hoc
 }
 

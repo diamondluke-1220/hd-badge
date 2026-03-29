@@ -12,25 +12,25 @@
 
   // ─── CARD DATA (v2 — Executive Edition) ──────────────
   const STARTER_DECK = [
-    { id: 'escalate_to_level_2', name: 'Escalate to Level 2', cost: 1, type: 'attack', suit: 'tickets', rank: 6,
+    { id: 'escalation', name: 'Escalation', cost: 1, type: 'attack', suit: 'tickets', rank: 6,
       target: 'enemy', effects: [{ type: 'damage', value: 6 }],
       flavor: 'Not your problem anymore. Forwarded with high importance.' },
     { id: 'password_expired', name: 'Password Expired', cost: 1, type: 'attack', suit: 'tickets', rank: 8,
       target: 'enemy', effects: [{ type: 'damage', value: 8 }],
       flavor: "Your password has expired. No, the old one won't work." },
-    { id: 'works_on_my_machine', name: 'Works On My Machine', cost: 1, type: 'skill', suit: 'tickets', rank: 4,
+    { id: 'womm', name: 'WOMM', cost: 1, type: 'skill', suit: 'tickets', rank: 4,
       target: 'self', effects: [{ type: 'block', value: 5 }, { type: 'draw', value: 1 }],
-      flavor: 'Works on my machine. Closing ticket.' },
-    { id: 'per_my_last_email', name: 'Per My Last Email', cost: 1, type: 'attack', suit: 'bureaucracy', rank: 5,
+      flavor: 'Works On My Machine. Closing ticket.' },
+    { id: 'last_email', name: 'Last Email', cost: 1, type: 'attack', suit: 'bureaucracy', rank: 5,
       target: 'enemy', effects: [{ type: 'damage', value: 5 }, { type: 'applyStatus', status: 'micromanaged', value: 1 }],
-      flavor: 'As I clearly stated in my previous correspondence...' },
+      flavor: 'Per my last email, which you clearly didn\'t read.' },
     { id: 'reply_all', name: 'Reply All', cost: 2, type: 'attack', suit: 'bureaucracy', rank: 7,
       target: 'allEnemies', effects: [{ type: 'damage', value: 7 }],
       flavor: '312 recipients. No one asked for this.' },
-    { id: 'documentation', name: 'Documentation', cost: 1, type: 'power', suit: 'bureaucracy', rank: 3,
-      target: 'self', effects: [{ type: 'applyStatus', status: 'documented', value: 2 }],
-      flavor: 'Wrote it down. Updated the wiki. Screenshot for good measure.' },
-    { id: 'schedule_a_meeting', name: 'Schedule A Meeting', cost: 1, type: 'skill', suit: 'meetings', rank: 5,
+    { id: 'cya', name: 'CYA', cost: 1, type: 'power', suit: 'bureaucracy', rank: 3,
+      target: 'self', effects: [{ type: 'applyStatus', status: 'jargon', value: 2 }],
+      flavor: 'Cover Your Ass. The foundation of corporate survival.' },
+    { id: 'time_block', name: 'Time Block', cost: 1, type: 'skill', suit: 'meetings', rank: 5,
       target: 'self', effects: [{ type: 'block', value: 7 }],
       flavor: 'Nothing productive will happen, but nobody can touch you.' },
     { id: 'all_hands', name: 'All-Hands', cost: 1, type: 'skill', suit: 'meetings', rank: 4,
@@ -87,9 +87,9 @@
       target: 'enemy', effects: [{ type: 'damage', value: 12 }, { type: 'applyStatus', status: 'unpatched', value: 3 }],
       flavor: 'Discovered at 4:59 PM on a Friday.' },
     { id: 'stack_overflow', name: 'Stack Overflow', cost: 1, type: 'attack', suit: 'tickets', rank: 5,
-      target: 'enemy', effects: [{ type: 'damage', value: 4 }, { type: 'damage', value: 4 }],
+      target: 'enemy', effects: [{ type: 'multiHit', value: 4, times: 2 }],
       flavor: 'Copy. Paste. Pray.' },
-    { id: 'server_room_lockout', name: 'Server Room Lockout', cost: 2, type: 'skill', suit: 'tickets', rank: 6,
+    { id: 'lockout', name: 'Lockout', cost: 2, type: 'skill', suit: 'tickets', rank: 6,
       target: 'self', effects: [{ type: 'block', value: 15 }],
       flavor: 'Badge expired. Nobody knows the combo. Perfect.' },
     // Bureaucracy
@@ -98,9 +98,9 @@
       flavor: 'Note: stop writing memos to self.' },
     { id: 'audit_trail', name: 'Audit Trail', cost: 1, type: 'skill', suit: 'bureaucracy', rank: 4,
       target: 'enemy', effects: [{ type: 'applyStatus', status: 'micromanaged', value: 2 }, { type: 'draw', value: 1 }],
-      flavor: 'Every click logged. Every email archived. Every bathroom break timed.' },
+      flavor: 'Every click logged. Every break timed.' },
     { id: 'nda', name: 'NDA', cost: 1, type: 'skill', suit: 'bureaucracy', rank: 7,
-      target: 'self', effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'documented', value: 1 }],
+      target: 'self', effects: [{ type: 'block', value: 10 }, { type: 'applyStatus', status: 'jargon', value: 1 }],
       flavor: "You can't talk about what you can't talk about." },
     { id: 'regulatory_filing', name: 'Regulatory Filing', cost: 2, type: 'attack', suit: 'bureaucracy', rank: 9,
       target: 'enemy', effects: [{ type: 'damage', value: 8 }, { type: 'applyStatus', status: 'micromanaged', value: 3 }],
@@ -109,9 +109,9 @@
       target: 'self', effects: [{ type: 'block', value: 3 }],
       flavor: 'APPROVED. Wait, what did I just approve?' },
     // Meetings
-    { id: 'standing_meeting', name: 'Standing Meeting', cost: 1, type: 'skill', suit: 'meetings', rank: 2,
-      target: 'self', effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'documented', value: 1 }],
-      flavor: 'We stand because sitting implies commitment.' },
+    { id: 'raci', name: 'RACI', cost: 1, type: 'skill', suit: 'meetings', rank: 2,
+      target: 'self', effects: [{ type: 'block', value: 6 }, { type: 'applyStatus', status: 'jargon', value: 1 }],
+      flavor: 'Responsible, Accountable, Consulted, Ignored.' },
     { id: 'double_booked', name: 'Double Booked', cost: 1, type: 'skill', suit: 'meetings', rank: 4,
       target: 'self', effects: [{ type: 'draw', value: 2 }],
       flavor: "Sorry, I have a conflict. Also sorry, I have a conflict." },
@@ -123,7 +123,7 @@
       flavor: 'Found a 15-minute gap. Guard it with your life.' },
     { id: 'offsite_retreat', name: 'Offsite Retreat', cost: 2, type: 'power', suit: 'meetings', rank: 8,
       target: 'self', effects: [{ type: 'applyStatus', status: 'caffeinated', value: 4 }],
-      flavor: 'Trust falls, breakout sessions, and surprisingly good catering.' },
+      flavor: 'Trust falls and surprisingly good catering.' },
     // Org Chart
     { id: 'temp_worker', name: 'Temp Worker', cost: 0, type: 'attack', suit: 'orgchart', rank: 1,
       target: 'enemy', effects: [{ type: 'damage', value: 3 }],
@@ -187,7 +187,7 @@
     { id: 'the_consultant', name: 'The Consultant', hp: 72, dept: 'All',
       tagline: 'Twice the pay. Half the work.', icon: '💼', randomIntents: true,
       intentPattern: [{ type: 'attack', value: 18 },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'heal', value: 14 },{ type: 'attack', value: 14 },{ type: 'defend', value: 16 }] },
-    { id: 'the_intern', name: 'The Intern', hp: 64, dept: 'All',
+    { id: 'the_intern', name: 'The Intern', hp: 72, dept: 'All',
       tagline: "I'm just happy to be here.", icon: '📎', randomIntents: true,
       intentPattern: [{ type: 'multiAttack', value: 4, times: 4 },{ type: 'attack', value: 10 },{ type: 'multiAttack', value: 3, times: 5 },{ type: 'buff', value: 3, status: 'caffeinated' }] },
   ];
@@ -207,7 +207,7 @@
       intentPattern: [{ type: 'multiAttack', value: 4, times: 3 },{ type: 'defend', value: 14 },{ type: 'multiAttack', value: 5, times: 3 },{ type: 'buff', value: 2, status: 'seniority' },{ type: 'multiAttack', value: 6, times: 4 }] },
     { id: 'boss_todd', name: 'Todd', hp: 96, dept: 'Power',
       tagline: 'Stare Intensifies....', icon: '⚡',
-      intentPattern: [{ type: 'attack', value: 14 },{ type: 'debuff', value: 3, status: 'micromanaged' },{ type: 'multiAttack', value: 6, times: 3 },{ type: 'debuff', value: 3, status: 'burnout' },{ type: 'attack', value: 22 },{ type: 'debuff', value: 2, status: 'unpatched' }] },
+      intentPattern: [{ type: 'debuff', value: 3, status: 'micromanaged' },{ type: 'multiAttack', value: 7, times: 3 },{ type: 'debuff', value: 3, status: 'burnout' },{ type: 'attack', value: 22 },{ type: 'heal', value: 10 },{ type: 'multiAttack', value: 8, times: 3 }] },
   ];
 
   // ─── STATUS DEFINITIONS ──────────────────────────────
@@ -217,7 +217,7 @@
     seniority:    { name: 'Seniority',    type: 'buff',   dec: false, desc: '+{N} attack damage' },
     unpatched:    { name: 'Unpatched',    type: 'debuff', dec: true,  desc: 'Takes 50% more dmg' },
     micromanaged: { name: 'Micromanaged', type: 'debuff', dec: true,  desc: 'Deals 25% less dmg' },
-    documented:   { name: 'Documented',   type: 'buff',   dec: false, desc: '+{N} block/turn' },
+    jargon:       { name: 'Jargon',       type: 'buff',   dec: false, desc: '+{N} block/turn' },
   };
 
   // ─── MANAGEMENT STYLES ───────────────────────────────
@@ -482,7 +482,7 @@
     c.taggedCards = [];
 
     // Documented block
-    const doc = getStacks(c.playerStatuses, 'documented');
+    const doc = getStacks(c.playerStatuses, 'jargon');
     if (doc > 0) c.playerBlock += doc;
 
     // Tick burnout on enemies

@@ -171,7 +171,7 @@ export const ELITE_ENEMIES: EnemyDef[] = [
       { type: 'defend', value: 16 },
     ] },
 
-  { id: 'the_intern', name: 'The Intern', hp: 64,
+  { id: 'the_intern', name: 'The Intern', hp: 72,
     department: 'All',
     tagline: "I'm just happy to be here.",
     randomIntents: true,
@@ -240,12 +240,12 @@ export const BOSS_ENEMIES: EnemyDef[] = [
     department: 'Power',
     tagline: 'Stare Intensifies....',
     intentPattern: [
-      { type: 'attack', value: 14 },
       { type: 'debuff', value: 3, status: 'micromanaged' },
-      { type: 'multiAttack', value: 6, times: 3 },
+      { type: 'multiAttack', value: 7, times: 3 },
       { type: 'debuff', value: 3, status: 'burnout' },
       { type: 'attack', value: 22 },
-      { type: 'debuff', value: 2, status: 'unpatched' },
+      { type: 'heal', value: 10 },
+      { type: 'multiAttack', value: 8, times: 3 },
     ] },
 ];
 
