@@ -224,6 +224,15 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
   app.get('/api/badge/:id', (c) => {
     const badge = getBadge(c.req.param('id'));
+
+    // CORS for Hostile Takeover game (game.helpdesk.band)
+    const origin = c.req.header('origin');
+    if (origin === 'https://game.helpdesk.band') {
+      c.header('Access-Control-Allow-Origin', 'https://game.helpdesk.band');
+      c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      c.header('Access-Control-Allow-Headers', 'Content-Type');
+    }
+
     if (!badge || !badge.is_visible) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
@@ -242,6 +251,18 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       caption: badge.caption || 'SCAN TO FILE COMPLAINT',
       createdAt: badge.created_at,
     });
+  });
+
+  // CORS preflight for badge endpoint (Hostile Takeover game)
+  app.options('/api/badge/:id', (c) => {
+    const origin = c.req.header('origin');
+    if (origin === 'https://game.helpdesk.band') {
+      c.header('Access-Control-Allow-Origin', 'https://game.helpdesk.band');
+      c.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      c.header('Access-Control-Allow-Headers', 'Content-Type');
+      c.header('Access-Control-Max-Age', '86400');
+    }
+    return c.body(null, 204);
   });
 
   // ─── Badge Edit ──────────────────────────────────────────
