@@ -772,7 +772,7 @@
     // QTE timing: presentation mode skips QTEs entirely
     const isPresentation = window.location.pathname.startsWith('/presentation');
     // Offset applied to Act 2 remainder, QTE 2-3, and Act 3 timings
-    // QTE 1: 1.5s window, QTE 2: 1.5s window, QTE 3: 2.5s window (4-arrow stratagem)
+    // QTE 1: 1.5s window (2 arrows), QTE 2: 1.5s window (3 arrows), QTE 3: 2.5s window (4-arrow stratagem)
     const QTE_OFFSET_1 = isPresentation ? 0 : 1700;  // after QTE 1 (1500ms + 200 margin)
     const QTE_OFFSET_3 = isPresentation ? 0 : 6500;  // after QTE 3 (Act 3 must start after 2.5s stratagem resolves)
 
@@ -1142,18 +1142,18 @@
         }
       };
 
-      // QTE 1: single arrow (1.5s window) — light hit
+      // QTE 1: 2-arrow sequence (1.5s window) — light hit
       beat(4800, () => {
-        const seq = this._generateSequence(1);
+        const seq = this._generateSequence(2);
         this._fireQTE(overlay, empColor, setVSAnnouncer, seq, 1500, 1).then(success => {
           if (success) { fightState.qteSuccesses++; qteHitDamage(1); }
           fillMeterSeg(0, success);
         });
       });
 
-      // QTE 2: 2-arrow sequence (1.5s window) — medium hit
+      // QTE 2: 3-arrow sequence (1.5s window) — medium hit
       beat(11400, () => {
-        const seq = this._generateSequence(2);
+        const seq = this._generateSequence(3);
         this._fireQTE(overlay, empColor, setVSAnnouncer, seq, 1500, 2).then(success => {
           if (success) { fightState.qteSuccesses++; qteHitDamage(2); }
           fillMeterSeg(1, success);
@@ -1287,7 +1287,7 @@
       let resolved = false;
       let step = 0;
 
-      const ARROW_CHARS = { up: '▲', down: '▼', left: '◀', right: '▶' };
+      const ARROW_CHARS = { up: '↑', down: '↓', left: '←', right: '→' };
       const KEY_MAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
       // Build DOM
