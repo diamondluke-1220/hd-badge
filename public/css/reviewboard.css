@@ -243,16 +243,6 @@ body.view-reviewboard .view-dropdown {
   right: 16px;
   z-index: 20;
 }
-body.view-reviewboard .view-switcher-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  background: rgba(10, 10, 10, 0.9);
-  border-bottom: 1px solid #222;
-}
-
 /* Override orgchart container */
 body.view-reviewboard .public-orgchart {
   background: #0a0a0a;

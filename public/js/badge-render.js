@@ -3,7 +3,7 @@
 
 const DEPT_ACCESS = {
   'TICKET ESCALATION BUREAU':          { access: 'ALL ACCESS',                css: 'all-access' },
-  'AUDIO ENGINEERING DIVISION':         { access: 'ALL ACCESS',                css: 'all-access' },
+  'RIFF SHREDDING DEPARTMENT':          { access: 'ALL ACCESS',                css: 'all-access' },
   'DEPT. OF PERCUSSIVE MAINTENANCE':    { access: 'ALL ACCESS',                css: 'all-access' },
   'INFRASTRUCTURE & POWER CHORDS':      { access: 'ALL ACCESS',                css: 'all-access' },
   'LOW FREQUENCY OPERATIONS':           { access: 'ALL ACCESS',                css: 'all-access' },

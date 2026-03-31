@@ -34,7 +34,7 @@
 
   const BAND_MEMBERS = [
     { id: 'HD-00001', name: 'LUKE', title: 'Chief Escalation Officer', dept: 'TICKET ESCALATION BUREAU', instrument: 'Vocals', color: '#22C55E' },
-    { id: 'HD-00002', name: 'DREW', title: 'Senior Audio Engineer', dept: 'AUDIO ENGINEERING DIVISION', instrument: 'Lead Guitar', color: '#5B8DEF' },
+    { id: 'HD-00002', name: 'DREW', title: 'Chief String Tickler', dept: 'RIFF SHREDDING DEPARTMENT', instrument: 'Lead Guitar', color: '#5B8DEF' },
     { id: 'HD-00003', name: 'HENRY', title: 'Rhythm Infrastructure Lead', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE', instrument: 'Drums', color: '#E74C3C' },
     { id: 'HD-00004', name: 'TODD', title: 'Redundancy Dept. Manager', dept: 'INFRASTRUCTURE & POWER CHORDS', instrument: 'Rhythm Guitar', color: '#D4A843' },
     { id: 'HD-00005', name: 'ADAM', title: 'Low-End Specialist', dept: 'LOW FREQUENCY OPERATIONS', instrument: 'Bass', color: '#9B59B6' },

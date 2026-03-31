@@ -60,14 +60,6 @@ body.view-arcade .view-dropdown {
   right: 16px;
   z-index: 1100;
 }
-body.view-arcade .view-switcher-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 1100;
-}
-
 body.view-arcade .public-orgchart {
   background: #0a0a12;
   padding: 0;

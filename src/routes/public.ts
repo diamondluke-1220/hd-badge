@@ -15,7 +15,7 @@ import { log } from '../logger';
 // Band-exclusive values — fans cannot use these (enforced on create)
 const RESERVED_DEPTS = new Set([
   'TICKET ESCALATION BUREAU',
-  'AUDIO ENGINEERING DIVISION',
+  'RIFF SHREDDING DEPARTMENT',
   'DEPT. OF PERCUSSIVE MAINTENANCE',
   'INFRASTRUCTURE & POWER CHORDS',
   'LOW FREQUENCY OPERATIONS',
