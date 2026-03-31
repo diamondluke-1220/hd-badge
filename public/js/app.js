@@ -195,20 +195,21 @@ function positionPopover(popover, targetEl) {
   const viewH = window.innerHeight;
   const gap = 16;
 
-  // Use the scaled preview container bounds (getBoundingClientRect accounts for CSS transforms)
-  const previewArea = document.getElementById('badgePreviewArea');
-  const badgeRect = previewArea.getBoundingClientRect();
-  const badgeLeft = badgeRect.left;
-  const badgeRight = badgeRect.right;
-  console.log('[popover] badge L/R:', Math.round(badgeLeft), Math.round(badgeRight),
-    'viewW:', viewW, 'rightSpace:', Math.round(viewW - badgeRight - gap),
-    'leftSpace:', Math.round(badgeLeft - gap), 'popW:', maxPopWidth);
-
   // Allow popover to shrink on tighter screens
   const maxPopWidth = Math.min(380, viewW - 40);
   popover.style.width = maxPopWidth + 'px';
 
   const popHeight = popover.offsetHeight || 450;
+
+  // Use the scaled preview container bounds (getBoundingClientRect accounts for CSS transforms)
+  const previewArea = document.getElementById('badgePreviewArea');
+  const badgeRect = previewArea.getBoundingClientRect();
+  const badgeLeft = badgeRect.left;
+  const badgeRight = badgeRect.right;
+
+  // Use the preview wrapper for vertical fallback (clipped visible area)
+  const wrapper = document.querySelector('.preview-wrapper');
+  const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : badgeRect;
 
   let left, top, arrowSide;
 
@@ -228,23 +229,21 @@ function positionPopover(popover, targetEl) {
     const targetCenter = fieldRect.top + fieldRect.height / 2;
     top = Math.max(10, Math.min(targetCenter - 40, viewH - popHeight - 10));
   } else {
-    // Tight screen — position below or above the target field
+    // Tight screen — position below the badge preview, not over it
     left = Math.max(10, (viewW - maxPopWidth) / 2);
     arrowSide = 'none';
-
-    const spaceBelow = viewH - fieldRect.bottom - gap;
-    const spaceAbove = fieldRect.top - gap;
-
-    if (spaceBelow >= popHeight || spaceBelow >= spaceAbove) {
-      top = Math.min(fieldRect.bottom + gap, viewH - popHeight - 10);
-    } else {
-      top = Math.max(10, fieldRect.top - popHeight - gap);
-    }
+    // Scroll the popover into view below the visible badge area
+    top = Math.max(10, wrapperRect.bottom + gap);
   }
 
   popover.style.left = left + 'px';
   popover.style.top = top + 'px';
   popover.dataset.arrow = arrowSide;
+
+  // If popover is below the fold, scroll it into view
+  if (arrowSide === 'none') {
+    requestAnimationFrame(() => popover.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+  }
 }
 
 function reanchorPopover() {
