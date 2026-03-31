@@ -80,8 +80,10 @@ body {
    2. APP HEADER & NAV
    ========================================================== */
 .app-header {
-  text-align: center;
-  padding: 24px 20px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--surface-card);
 }
 .app-header h1 {
@@ -100,7 +102,7 @@ body {
   color: var(--accent-gold);
 }
 .header-logo {
-  height: 40px;
+  height: 52px;
   width: auto;
   vertical-align: middle;
 }
@@ -108,10 +110,9 @@ body {
 /* App nav links */
 .app-nav {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
   flex-wrap: wrap;
 }
 .nav-short { display: none; }
@@ -199,12 +200,17 @@ body {
 .edit-hint {
   text-align: center;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-disabled);
+  font-size: 14px;
+  color: var(--accent-blue);
   letter-spacing: 2px;
   text-transform: uppercase;
   transition: opacity 0.3s;
   margin-bottom: 8px;
+  animation: hintPulse 2.5s ease-in-out infinite;
+}
+@keyframes hintPulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; text-shadow: 0 0 12px rgba(91,141,239,0.4); }
 }
 .edit-hint.hidden {
   opacity: 0;
@@ -216,16 +222,17 @@ body {
    ========================================================== */
 @keyframes discoverPulse {
   0%   { outline-color: transparent; }
-  40%  { outline-color: rgba(91,141,239,0.5); }
+  25%  { outline-color: rgba(91,141,239,0.5); }
+  50%  { outline-color: transparent; }
   100% { outline-color: transparent; }
 }
-#badgePreviewArea.discover-pulse .name           { animation: discoverPulse 1.2s ease-out 0.6s both; }
-#badgePreviewArea.discover-pulse .photo-frame    { animation: discoverPulse 1.2s ease-out 0.9s both; }
-#badgePreviewArea.discover-pulse .department     { animation: discoverPulse 1.2s ease-out 1.2s both; }
-#badgePreviewArea.discover-pulse .title          { animation: discoverPulse 1.2s ease-out 1.5s both; }
-#badgePreviewArea.discover-pulse .access-badge   { animation: discoverPulse 1.2s ease-out 1.8s both; }
-#badgePreviewArea.discover-pulse .waveform-sticker { animation: discoverPulse 1.2s ease-out 2.1s both; }
-#badgePreviewArea.discover-pulse .badge-caption { animation: discoverPulse 1.2s ease-out 2.4s both; }
+#badgePreviewArea.discover-pulse .name           { animation: discoverPulse 1.2s ease-out 0.6s 3 both; }
+#badgePreviewArea.discover-pulse .photo-frame    { animation: discoverPulse 1.2s ease-out 0.9s 3 both; }
+#badgePreviewArea.discover-pulse .department     { animation: discoverPulse 1.2s ease-out 1.2s 3 both; }
+#badgePreviewArea.discover-pulse .title          { animation: discoverPulse 1.2s ease-out 1.5s 3 both; }
+#badgePreviewArea.discover-pulse .access-badge   { animation: discoverPulse 1.2s ease-out 1.8s 3 both; }
+#badgePreviewArea.discover-pulse .waveform-sticker { animation: discoverPulse 1.2s ease-out 2.1s 3 both; }
+#badgePreviewArea.discover-pulse .badge-caption { animation: discoverPulse 1.2s ease-out 2.4s 3 both; }
 
 /* ==========================================================
    5b. BADGE PREVIEW HOVER STATES
@@ -1421,7 +1428,10 @@ body {
 /* Mobile — max 640px */
 @media (max-width: 640px) {
   .app-header {
+    flex-direction: column;
+    text-align: center;
     padding: 16px 16px 12px;
+    gap: 8px;
   }
   .header-logo {
     height: 32px;
@@ -1430,6 +1440,7 @@ body {
   .nav-full { display: none; }
   .nav-short { display: inline; }
   .app-nav {
+    justify-content: center;
     flex-wrap: nowrap;
   }
   .app-nav-link {
@@ -1484,8 +1495,8 @@ body {
     font-size: 0;
   }
   .edit-hint::after {
-    content: 'TAP ANY ELEMENT ON THE BADGE TO CUSTOMIZE';
-    font-size: 12px;
+    content: 'TAP ELEMENTS ON THE BADGE TO CUSTOMIZE';
+    font-size: 14px;
   }
 
   .badge-grid {
@@ -2289,100 +2300,137 @@ body {
 /* ==========================================================
    30. VIEW SWITCHER
    ========================================================== */
-.view-switcher-bar {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: var(--card-bg, #1a1a2e);
-  border-bottom: 1px solid rgba(46, 125, 255, 0.15);
+/* View dropdown (replaces view-switcher-bar) */
+.view-dropdown {
+  position: relative;
 }
-
-.view-switch-btn {
+.view-dropdown-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  border: 1px solid rgba(147, 180, 245, 0.2);
-  border-radius: var(--radius-sm);
+  gap: 8px;
+  padding: 8px 16px;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: clamp(12px, 2.5vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-disabled);
   background: transparent;
-  color: #9CA3AF;
-  font-size: clamp(11px, 2.5vw, 13px);
-  font-family: inherit;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s;
+}
+.view-dropdown-trigger:hover {
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+.view-dropdown.open .view-dropdown-trigger {
+  color: var(--accent-blue-hover);
+  border-color: var(--accent-blue);
+}
+.view-dropdown-icon {
+  font-size: 14px;
+}
+.view-dropdown-caret {
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform 0.15s;
+}
+.view-dropdown.open .view-dropdown-caret {
+  transform: rotate(180deg);
 }
 
-.view-switch-btn:hover {
-  color: #e5e7eb;
-  border-color: rgba(147, 180, 245, 0.4);
-  background: rgba(46, 125, 255, 0.08);
+/* Dropdown menu */
+.view-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 600;
+  padding: 6px;
+  animation: dropdownIn 0.12s ease-out;
+}
+.view-dropdown.open .view-dropdown-menu {
+  display: block;
+}
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.view-switch-btn.active {
-  color: #e5e7eb;
-  border-color: #2E7DFF;
-  background: rgba(46, 125, 255, 0.15);
+.view-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-align: left;
 }
-
-.view-switch-btn:focus-visible {
-  outline: 2px solid #2E7DFF;
-  outline-offset: 2px;
+.view-dropdown-item:hover {
+  background: rgba(91,141,239,0.1);
+  color: white;
 }
-
-.view-switch-btn kbd {
-  display: inline-block;
+.view-dropdown-item.active {
+  background: rgba(91,141,239,0.15);
+  color: white;
+}
+.view-dropdown-item-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.view-dropdown-item-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.view-dropdown-item-label {
+  font-weight: 600;
+  font-size: 13px;
+}
+.view-dropdown-item-desc {
+  font-size: 11px;
+  color: var(--text-disabled);
+  margin-top: 1px;
+}
+.view-dropdown-item:hover .view-dropdown-item-desc {
+  color: var(--text-muted);
+}
+.view-dropdown-item kbd {
   padding: 1px 5px;
   font-size: 10px;
   font-family: inherit;
   color: #6B7280;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 3px;
   line-height: 1.4;
+  flex-shrink: 0;
 }
-
-.view-switch-icon {
-  font-size: 14px;
+.view-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 8px;
 }
-
-.view-switch-divider {
-  width: 1px;
-  height: 20px;
-  background: rgba(147, 180, 245, 0.2);
-  align-self: center;
-  margin: 0 4px;
-}
-
-.view-switch-btn.anim-on {
+.view-dropdown-fx.fx-on .view-dropdown-item-label {
   color: #4ADE80;
-  border-color: rgba(74, 222, 128, 0.5);
-  background: rgba(74, 222, 128, 0.1);
 }
-
-@media (max-width: 600px) {
-  .view-switcher-bar {
-    gap: 4px;
-    padding: 6px 8px;
-  }
-  .view-switch-btn {
-    padding: 8px 12px;
-    font-size: 14px;
-  }
-  /* Hide text labels — icon only on mobile */
-  .view-switch-btn .view-switch-label {
-    display: none;
-  }
-  .view-switch-btn kbd {
-    display: none;
-  }
-  .view-switch-icon {
-    font-size: 16px;
-  }
-  .view-switch-divider {
-    height: 16px;
-    margin: 0 2px;
-  }
+.view-dropdown-fx.fx-on .view-dropdown-item-icon {
+  color: #4ADE80;
 }
 
 /* ==========================================================

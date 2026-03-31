@@ -17,6 +17,12 @@ body.view-dendro .app-header {
   background: #0a0a0a;
 }
 
+body.view-dendro .view-dropdown {
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: 20;
+}
 body.view-dendro .view-switcher-bar {
   position: fixed;
   top: 0;

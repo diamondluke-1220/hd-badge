@@ -207,7 +207,10 @@ function setAnimationsEnabled(enabled) {
   const btn = document.getElementById('animToggleBtn');
   if (btn) {
     btn.classList.toggle('anim-on', enabled);
+    btn.classList.toggle('fx-on', enabled);
     btn.title = enabled ? 'Animations On (A)' : 'Animations Off (A)';
+    const desc = btn.querySelector('.view-dropdown-item-desc');
+    if (desc) desc.textContent = enabled ? 'Animations on' : 'Animations off';
   }
 
   // When disabling, kill all in-flight animations immediately

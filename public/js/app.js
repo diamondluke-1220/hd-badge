@@ -99,8 +99,8 @@ function attachBadgeClickHandlers() {
   if (!_discoveryDone) {
     _discoveryDone = true;
     previewArea.classList.add('discover-pulse');
-    // Remove after animations complete (~2.4s delay + 1.2s anim)
-    setTimeout(() => previewArea.classList.remove('discover-pulse'), 4000);
+    // Remove after animations complete (~2.4s delay + 3×1.2s anim = ~6s)
+    setTimeout(() => previewArea.classList.remove('discover-pulse'), 6500);
   }
 
   CLICK_MAP.forEach(({ selector, field }) => {
@@ -1319,7 +1319,8 @@ async function switchView(mode) {
   // Save preference
   localStorage.setItem('hd-view-mode', mode);
 
-  // Update switcher button states
+  // Update dropdown and legacy button states
+  updateViewDropdown(mode);
   document.querySelectorAll('.view-switch-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
   });
@@ -1381,52 +1382,106 @@ async function initOrgChart() {
   await currentRenderer.init(orgChartContainer, orgChartStats);
 }
 
+const VIEW_MODES = [
+  { mode: 'grid',        icon: '&#9638;',  label: 'Grid',      desc: 'Employee directory',     key: '1' },
+  { mode: 'reviewboard', icon: '&#9733;',  label: 'AI Review', desc: 'Performance reviews',    key: '2' },
+  { mode: 'dendro',      icon: '&#127795;', label: 'Tree',      desc: 'Org tree',               key: '3' },
+  { mode: 'arcade',      icon: '&#127918;', label: 'Arcade',   desc: 'Office combat simulator', key: '4' },
+];
+
 function buildViewSwitcher() {
   const nav = document.querySelector('.app-nav');
   if (!nav) return;
 
-  const switcher = document.createElement('div');
-  switcher.className = 'view-switcher-bar';
-  switcher.innerHTML = `
-    <button class="view-switch-btn active" data-mode="grid" title="Grid View (1)">
-      <span class="view-switch-icon">&#9638;</span><span class="view-switch-label"> Grid</span> <kbd>1</kbd>
+  const savedMode = localStorage.getItem('hd-view-mode') || 'grid';
+  const current = VIEW_MODES.find(v => v.mode === savedMode) || VIEW_MODES[0];
+
+  // Create dropdown container
+  const dropdown = document.createElement('div');
+  dropdown.className = 'view-dropdown';
+  dropdown.innerHTML = `
+    <button class="view-dropdown-trigger" id="viewDropdownBtn" aria-expanded="false" aria-haspopup="true">
+      <span class="view-dropdown-icon">${current.icon}</span>
+      <span class="view-dropdown-label">${current.label}</span>
+      <span class="view-dropdown-caret">&#9662;</span>
     </button>
-    <button class="view-switch-btn" data-mode="reviewboard" title="AI Review (2)">
-      <span class="view-switch-icon">&#9733;</span><span class="view-switch-label"> AI Review</span> <kbd>2</kbd>
-    </button>
-    <button class="view-switch-btn" data-mode="dendro" title="Tree View (3)">
-      <span class="view-switch-icon">&#9776;</span><span class="view-switch-label"> Tree</span> <kbd>3</kbd>
-    </button>
-    <button class="view-switch-btn" data-mode="arcade" title="Arcade View (4)">
-      <span class="view-switch-icon">&#127918;</span><span class="view-switch-label"> Arcade</span> <kbd>4</kbd>
-    </button>
-    <span class="view-switch-divider"></span>
-    <button class="view-switch-btn ${animationsEnabled() ? 'anim-on' : ''}" id="animToggleBtn" title="${animationsEnabled() ? 'Animations On (A)' : 'Animations Off (A)'}">
-      <span class="view-switch-icon">&#10024;</span><span class="view-switch-label"> FX</span> <kbd>A</kbd>
-    </button>
+    <div class="view-dropdown-menu" id="viewDropdownMenu" role="menu">
+      ${VIEW_MODES.map(v => `
+        <button class="view-dropdown-item${v.mode === savedMode ? ' active' : ''}" data-mode="${v.mode}" role="menuitem">
+          <span class="view-dropdown-item-icon">${v.icon}</span>
+          <span class="view-dropdown-item-text">
+            <span class="view-dropdown-item-label">${v.label}</span>
+            <span class="view-dropdown-item-desc">${v.desc}</span>
+          </span>
+          <kbd>${v.key}</kbd>
+        </button>
+      `).join('')}
+      <div class="view-dropdown-divider"></div>
+      <button class="view-dropdown-item view-dropdown-fx ${animationsEnabled() ? 'fx-on' : ''}" id="animToggleBtn" role="menuitem">
+        <span class="view-dropdown-item-icon">&#10024;</span>
+        <span class="view-dropdown-item-text">
+          <span class="view-dropdown-item-label">FX</span>
+          <span class="view-dropdown-item-desc">${animationsEnabled() ? 'Animations on' : 'Animations off'}</span>
+        </span>
+        <kbd>A</kbd>
+      </button>
+    </div>
   `;
 
-  // Insert after nav
-  nav.after(switcher);
+  // Insert into header (not nav, since non-grid views hide .app-nav)
+  const header = document.querySelector('.app-header');
+  header.appendChild(dropdown);
 
-  // Animation toggle handler — set initial fx-off class
+  // Toggle dropdown
+  const trigger = document.getElementById('viewDropdownBtn');
+  const menu = document.getElementById('viewDropdownMenu');
+
+  trigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = dropdown.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', open);
+  });
+
+  // Close on outside click
+  document.addEventListener('click', () => {
+    dropdown.classList.remove('open');
+    trigger.setAttribute('aria-expanded', 'false');
+  });
+  menu.addEventListener('click', (e) => e.stopPropagation());
+
+  // View switch click handlers
+  menu.querySelectorAll('.view-dropdown-item[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchView(btn.dataset.mode);
+      dropdown.classList.remove('open');
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  // Animation toggle handler
   if (!animationsEnabled()) document.body.classList.add('fx-off');
   document.getElementById('animToggleBtn').addEventListener('click', toggleAnimations);
 
-  // View switch click handlers
-  switcher.querySelectorAll('.view-switch-btn[data-mode]').forEach(btn => {
-    btn.addEventListener('click', () => switchView(btn.dataset.mode));
-  });
-
   // Keyboard shortcuts (only on orgchart page)
   document.addEventListener('keydown', (e) => {
-    // Don't trigger in inputs/textareas
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === '1') switchView('grid');
     else if (e.key === '2') switchView('reviewboard');
     else if (e.key === '3') switchView('dendro');
     else if (e.key === '4') switchView('arcade');
     else if (e.key === 'a' || e.key === 'A') toggleAnimations();
+  });
+}
+
+function updateViewDropdown(mode) {
+  const current = VIEW_MODES.find(v => v.mode === mode) || VIEW_MODES[0];
+  const trigger = document.getElementById('viewDropdownBtn');
+  if (trigger) {
+    trigger.querySelector('.view-dropdown-icon').innerHTML = current.icon;
+    trigger.querySelector('.view-dropdown-label').textContent = current.label;
+  }
+  document.querySelectorAll('.view-dropdown-item[data-mode]').forEach(item => {
+    item.classList.toggle('active', item.dataset.mode === mode);
   });
 }
 

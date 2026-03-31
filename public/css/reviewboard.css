@@ -236,7 +236,13 @@ body.view-reviewboard .app-header {
   background: #0a0a0a;
 }
 
-/* Keep view switcher on top of the fixed board */
+/* Keep view dropdown on top of the fixed board */
+body.view-reviewboard .view-dropdown {
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: 20;
+}
 body.view-reviewboard .view-switcher-bar {
   position: fixed;
   top: 0;
