@@ -1065,7 +1065,7 @@ body {
 .privacy-label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  color: var(--text-disabled);
+  color: var(--text-muted);
   letter-spacing: 2px;
   text-transform: uppercase;
   display: block;
@@ -1274,6 +1274,9 @@ body {
   background: rgba(91,141,239,0.25);
   color: var(--accent-blue-hover);
 }
+/* Mobile-only elements — hidden on desktop */
+.dept-filter-select { display: none; }
+.stats-toggle-btn { display: none; }
 
 /* Active department heading */
 .active-dept-heading {
@@ -1489,6 +1492,17 @@ body {
     max-height: 60vh;
     transform: translateY(100%);
   }
+  /* Sticky Done button at bottom of scrollable popover body */
+  .popover .popover-done {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--accent-blue);
+    margin: 12px -18px -18px;
+    padding: 14px 18px;
+    width: calc(100% + 36px);
+  }
   .popover.visible {
     transform: translateY(0);
   }
@@ -1505,13 +1519,13 @@ body {
     transform: translateY(-2px);
   }
 
-  /* "Click" → "Tap" on touch devices */
+  /* "Click" → "Tap" on touch devices — shortened to fit 1 line */
   .edit-hint {
     font-size: 0;
   }
   .edit-hint::after {
-    content: 'TAP ELEMENTS ON THE BADGE TO CUSTOMIZE';
-    font-size: 14px;
+    content: 'TAP BADGE TO CUSTOMIZE';
+    font-size: 13px;
   }
 
   .badge-grid {
@@ -1539,21 +1553,104 @@ body {
   }
 
   .org-header-top {
-    flex-direction: column;
-    text-align: center;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    text-align: left;
+    gap: 8px;
   }
-  .dept-filter-bar {
-    justify-content: center;
-    gap: 4px;
+  .org-header-text {
+    text-align: left;
+    flex: 1;
+    min-width: 0;
+  }
+  .org-header-title {
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+  .org-header-sub {
+    font-size: 11px;
   }
 
-  /* Scale down stats panel on mobile */
+  /* View dropdown — bigger caret and touch target on mobile (!important to override later global rule) */
+  .view-dropdown-trigger {
+    padding: 12px 16px;
+    min-height: 44px;
+  }
+  .view-dropdown-caret {
+    font-size: 18px !important;
+    opacity: 0.8;
+  }
+
+  /* Dept filter pills → hidden on mobile (replaced by select dropdown) */
+  .dept-filter-bar {
+    display: none;
+  }
+  /* Mobile department dropdown (rendered by JS) */
+  .dept-filter-select {
+    display: block;
+    width: 100%;
+    padding: 10px 14px;
+    margin: 8px 0 4px;
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--surface-card);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    appearance: auto;
+    cursor: pointer;
+  }
+  .dept-filter-select:focus {
+    border-color: var(--accent-blue);
+    outline: none;
+  }
+
+  /* Stats panel — collapsed by default on mobile (!important to override later global rule) */
   .stats-panel {
+    display: none !important;
     flex-direction: column;
     justify-content: center;
     gap: 12px;
     margin: 8px auto 4px;
   }
+  .stats-panel.mobile-expanded {
+    display: flex !important;
+  }
+  /* Stats toggle button */
+  .stats-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .stats-toggle-btn:hover {
+    border-color: var(--accent-blue);
+    color: var(--text-secondary);
+  }
+  .stats-toggle-caret {
+    font-size: 10px;
+    transition: transform 0.15s;
+  }
+  .stats-toggle-btn.expanded .stats-toggle-caret {
+    transform: rotate(180deg);
+  }
+
+  /* Scale down stats elements when expanded on mobile */
   .orgchart-donut {
     width: 56px;
     height: 56px;
@@ -1580,10 +1677,10 @@ body {
     font-size: 13px;
   }
   .newest-hire-dept {
-    font-size: 10px;
+    font-size: 11px;
   }
   .stats-card-label {
-    font-size: 9px;
+    font-size: 10px;
     margin-bottom: 4px;
   }
 
@@ -1591,12 +1688,18 @@ body {
     font-size: 14px;
   }
 
+  /* Override exec centering on mobile — use natural 3-col flow */
+  .division-section:has(.div-exec) .badge-grid {
+    grid-template-columns: repeat(3, 1fr);
+    justify-content: initial;
+  }
+
   .ticker-bar {
     height: 28px;
     font-size: 11px;
   }
   .ticker-track {
-    animation-duration: 20s;
+    animation-duration: 10s !important;
   }
 
   .public-orgchart {

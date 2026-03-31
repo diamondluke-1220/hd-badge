@@ -3,11 +3,13 @@
 ## Project Overview
 
 **Stack:** Bun + Hono + SQLite (WAL mode) + Playwright (server-side badge rendering) + Sharp (image processing)
+**Production:** `badge.helpdesk.band` (also `hdbadge.nav.computer`)
+**Domain:** `helpdesk.band` — badge app at `badge.`, game at `game.`, root reserved for band site
 
 **Entry Points:**
 - `src/server.ts` — Main server (Hono app, SSE, Playwright pool, middleware)
 - `src/db.ts` — SQLite persistence layer (schema, migrations, CRUD)
-- `src/routes/public.ts` — Badge creation, retrieval, org chart API
+- `src/routes/public.ts` — Badge creation, retrieval, org chart API + CORS for game.helpdesk.band
 - `src/routes/admin.ts` — HR dashboard, analytics, demo/presentation modes
 - `src/routes/portal.ts` — Captive portal detection endpoints
 
@@ -15,6 +17,8 @@
 - Development: `3000` (default)
 - Production (Docker): `3030`
 - Tests: `3333` (E2E only)
+
+**Cross-origin:** `/api/badge/:id` has CORS for `https://game.helpdesk.band` (Hostile Takeover card game). `/game` redirects 301 to `https://game.helpdesk.band`.
 
 **Data Layout:**
 - `data/badges.db` — SQLite database (WAL mode)

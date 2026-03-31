@@ -68,6 +68,64 @@ window.GridRenderer = {
       filterBar.appendChild(btn);
     });
 
+    // Mobile: move view dropdown into org header for single-row layout
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
+    const orgHeaderTop = container.querySelector('.org-header-top');
+    if (isMobile && orgHeaderTop) {
+      const dropdown = document.querySelector('.view-dropdown');
+      if (dropdown) {
+        dropdown.dataset.originalParent = 'app-nav';
+        orgHeaderTop.appendChild(dropdown);
+      }
+    }
+
+    // Mobile: department filter dropdown (replaces pill buttons)
+    const orgHeader = container.querySelector('.org-header');
+    if (orgHeader) {
+      const select = document.createElement('select');
+      select.className = 'dept-filter-select';
+      select.id = 'deptFilterSelect';
+      const allOpt = document.createElement('option');
+      allOpt.value = '';
+      allOpt.textContent = 'All Departments';
+      select.appendChild(allOpt);
+      Object.keys(stats.byDepartment).forEach(dept => {
+        if (BAND_DEPTS.has(dept)) return;
+        const count = stats.byDepartment[dept];
+        const isCustom = !KNOWN_DEPT_THEMES[dept];
+        if (isCustom && count < 2) return;
+        const opt = document.createElement('option');
+        opt.value = dept;
+        opt.textContent = `${dept} (${count})`;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', () => {
+        const dept = select.value;
+        window.HD.state.publicOrgDept = dept;
+        window.HD.state.publicOrgPage = 1;
+        // Sync pill buttons if visible
+        filterBar.querySelectorAll('.dept-filter-btn').forEach(b => b.classList.remove('active'));
+        const match = filterBar.querySelector(`.dept-filter-btn${dept ? '' : ':first-child'}`);
+        if (!dept && match) match.classList.add('active');
+        this._updateDeptHeading(dept, stats);
+        this._loadBadges(true);
+      });
+      orgHeader.appendChild(select);
+
+      // Mobile: stats toggle button
+      const statsToggle = document.createElement('button');
+      statsToggle.className = 'stats-toggle-btn';
+      statsToggle.innerHTML = 'Stats <span class="stats-toggle-caret">&#9662;</span>';
+      statsToggle.addEventListener('click', () => {
+        const panel = document.querySelector('.stats-panel');
+        if (panel) {
+          panel.classList.toggle('mobile-expanded');
+          statsToggle.classList.toggle('expanded');
+        }
+      });
+      orgHeader.appendChild(statsToggle);
+    }
+
     // Load first page
     window.HD.state.publicOrgPage = 1;
     this._updateDeptHeading('', stats);
@@ -158,6 +216,12 @@ window.GridRenderer = {
   },
 
   destroy() {
+    // Return view dropdown to nav if we moved it on mobile
+    const dropdown = this._container?.querySelector('.view-dropdown[data-original-parent="app-nav"]');
+    if (dropdown) {
+      const nav = document.querySelector('.app-nav');
+      if (nav) nav.appendChild(dropdown);
+    }
     // Remove content rendered by init — container itself stays
     if (this._container) {
       this._container.innerHTML = '';

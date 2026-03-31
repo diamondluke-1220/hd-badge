@@ -390,11 +390,21 @@ for (const { name, width, height } of mobileViewports) {
       await expect(page.locator('#loading.active')).not.toBeVisible({ timeout: 15000 });
     });
 
-    test(`[${name}] orgchart loads and displays stats`, async ({ page }) => {
+    test(`[${name}] orgchart loads with stats toggle and dept filter`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await page.goto('/orgchart');
       await expect(page.locator('.org-header')).toBeVisible({ timeout: 5000 });
+
+      // Stats panel hidden by default on mobile — toggle button visible
+      await expect(page.locator('.stats-toggle-btn')).toBeVisible();
+      await expect(page.locator('.orgchart-donut')).not.toBeVisible();
+
+      // Click stats toggle → panel expands
+      await page.locator('.stats-toggle-btn').click();
       await expect(page.locator('.orgchart-donut')).toBeVisible();
+
+      // Dept filter select dropdown visible on mobile
+      await expect(page.locator('.dept-filter-select')).toBeVisible();
     });
 
     test(`[${name}] badge grid renders on mobile`, async ({ page }) => {
