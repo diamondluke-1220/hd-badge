@@ -175,6 +175,7 @@ function createDemoBadge(): string | null {
     : `EMPLOYEE #${state.created + 1}`;
 
   try {
+    const waveStyle = Math.random() < 0.5 ? 'barcode' : 'sticker';
     const result = createBadge({
       name,
       department: dept.name,
@@ -183,6 +184,7 @@ function createDemoBadge(): string | null {
       accessLevel: access.label,
       accessCss: access.css,
       caption,
+      waveStyle,
       hasPhoto: true,
       photoPublic: true,
       source: 'demo',
