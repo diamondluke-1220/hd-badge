@@ -39,7 +39,7 @@ DEPARTMENTS.forEach(d => { KNOWN_DEPT_THEMES[d.name] = d.theme; });
 // Band member exclusive departments (not selectable by fans)
 const BAND_DEPTS = new Set([
   'TICKET ESCALATION BUREAU',
-  'AUDIO ENGINEERING DIVISION',
+  'RIFF SHREDDING DEPARTMENT',
   'DEPT. OF PERCUSSIVE MAINTENANCE',
   'INFRASTRUCTURE & POWER CHORDS',
   'LOW FREQUENCY OPERATIONS',

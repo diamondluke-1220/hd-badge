@@ -47,6 +47,9 @@ window.GridRenderer = {
     Object.keys(stats.byDepartment).forEach(dept => {
       if (BAND_DEPTS.has(dept)) return;
       const count = stats.byDepartment[dept];
+      // Hide solo custom departments from filter tabs
+      const isCustom = !KNOWN_DEPT_THEMES[dept];
+      if (isCustom && count < 2) return;
       const btn = document.createElement('button');
       btn.className = 'dept-filter-btn';
       btn.innerHTML = `${esc(dept)} <span class="dept-count">${count}</span>`;
@@ -276,8 +279,70 @@ window.GridRenderer = {
       PUBLIC_DIVISIONS.forEach(div => {
         const badges = byDivision[div.theme];
         if (!badges || badges.length === 0) return;
-        const section = this._createDivisionSection(div, badges);
-        content.appendChild(section);
+
+        // Custom division: sub-group by department, show headers for 2+ member depts
+        if (div.theme === '_custom') {
+          const byDept = {};
+          badges.forEach(b => {
+            if (!byDept[b.department]) byDept[b.department] = [];
+            byDept[b.department].push(b);
+          });
+
+          // Separate 2+ member groups from solo badges
+          const grouped = [];   // depts with 2+ members (get sub-headers)
+          const ungrouped = []; // solo dept badges (flow into grid without header)
+          Object.entries(byDept).forEach(([dept, members]) => {
+            if (members.length >= 2) {
+              grouped.push({ dept, members });
+            } else {
+              ungrouped.push(...members);
+            }
+          });
+
+          // Only render the section if there are any badges
+          if (grouped.length === 0 && ungrouped.length === 0) return;
+
+          const section = document.createElement('div');
+          section.className = 'division-section';
+
+          const header = document.createElement('div');
+          header.className = `division-header ${div.css}`;
+          header.innerHTML = `
+            <div class="division-header-name">${esc(div.name)}</div>
+            <div class="division-header-count">${badges.length} member${badges.length !== 1 ? 's' : ''}</div>
+          `;
+          section.appendChild(header);
+
+          const connector = document.createElement('div');
+          connector.className = 'division-connector';
+          section.appendChild(connector);
+
+          // Render 2+ member departments with sub-headers
+          grouped.forEach(({ dept, members }) => {
+            const subHeader = document.createElement('div');
+            subHeader.className = 'custom-dept-subheader';
+            subHeader.innerHTML = `${esc(dept)} <span class="custom-dept-count">${members.length}</span>`;
+            section.appendChild(subHeader);
+
+            const grid = document.createElement('div');
+            grid.className = 'badge-grid';
+            members.forEach(b => grid.appendChild(this._createBadgeCard(b)));
+            section.appendChild(grid);
+          });
+
+          // Render solo badges in a flat grid (no sub-header)
+          if (ungrouped.length > 0) {
+            const grid = document.createElement('div');
+            grid.className = 'badge-grid';
+            ungrouped.forEach(b => grid.appendChild(this._createBadgeCard(b)));
+            section.appendChild(grid);
+          }
+
+          content.appendChild(section);
+        } else {
+          const section = this._createDivisionSection(div, badges);
+          content.appendChild(section);
+        }
       });
     } else {
       // Single department — flat grid

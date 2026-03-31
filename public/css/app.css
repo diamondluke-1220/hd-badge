@@ -492,6 +492,10 @@ body {
   font-weight: 600;
   letter-spacing: 1px;
 }
+/* Title field is mixed-case (Title Case), not uppercase like dept/caption */
+#popTitleCustom {
+  text-transform: none;
+}
 .char-count {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
@@ -843,7 +847,25 @@ body {
 .division-header.div-office { background: linear-gradient(135deg, #2D4A3E 0%, #1F3630 100%); }
 .division-header.div-corp   { background: linear-gradient(135deg, #3D2D5C 0%, #2D1F46 100%); }
 .division-header.div-punk   { background: linear-gradient(135deg, #5C2D2D 0%, #461F1F 100%); }
-.division-header.div-custom { background: linear-gradient(135deg, #3A3A44 0%, #2A2A32 100%); }
+.division-header.div-custom { background: linear-gradient(135deg, #5C4B1F 0%, #463A16 100%); }
+
+/* Custom department sub-headers within Independent Contractors */
+.custom-dept-subheader {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 12px 0 4px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.custom-dept-count {
+  font-weight: 500;
+  color: var(--text-disabled);
+  margin-left: 6px;
+}
 
 /* Connector line from division header to content */
 .division-connector {

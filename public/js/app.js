@@ -190,34 +190,57 @@ function positionPopover(popover, targetEl) {
     return;
   }
 
-  // Use the preview wrapper for horizontal anchor (fixed width, doesn't shift with text)
-  const wrapper = document.querySelector('.preview-wrapper');
-  const wrapperRect = wrapper ? wrapper.getBoundingClientRect() : targetEl.getBoundingClientRect();
   const fieldRect = targetEl.getBoundingClientRect();
-
-  const popWidth = 380;
   const viewW = window.innerWidth;
-  const rightSpace = viewW - wrapperRect.right;
-  const leftSpace = wrapperRect.left;
+  const viewH = window.innerHeight;
+  const gap = 16;
 
-  const gap = 20;
-  let left, arrowSide;
-  if (rightSpace >= popWidth + 20) {
-    left = wrapperRect.right + gap;
-    arrowSide = 'left';
-  } else if (leftSpace >= popWidth + 20) {
-    left = wrapperRect.left - popWidth - gap;
-    arrowSide = 'right';
-  } else {
-    left = Math.max(10, (viewW - popWidth) / 2);
-    arrowSide = 'none';
-  }
+  // Use the scaled preview container bounds (getBoundingClientRect accounts for CSS transforms)
+  const previewArea = document.getElementById('badgePreviewArea');
+  const badgeRect = previewArea.getBoundingClientRect();
+  const badgeLeft = badgeRect.left;
+  const badgeRight = badgeRect.right;
+  console.log('[popover] badge L/R:', Math.round(badgeLeft), Math.round(badgeRight),
+    'viewW:', viewW, 'rightSpace:', Math.round(viewW - badgeRight - gap),
+    'leftSpace:', Math.round(badgeLeft - gap), 'popW:', maxPopWidth);
 
-  // Vertically center on the target field element, clamped to viewport
-  const targetCenter = fieldRect.top + fieldRect.height / 2;
+  // Allow popover to shrink on tighter screens
+  const maxPopWidth = Math.min(380, viewW - 40);
+  popover.style.width = maxPopWidth + 'px';
+
   const popHeight = popover.offsetHeight || 450;
-  const maxTop = window.innerHeight - popHeight - 10;
-  const top = Math.max(10, Math.min(targetCenter - 40, maxTop));
+
+  let left, top, arrowSide;
+
+  const rightSpace = viewW - badgeRight - gap;
+  const leftSpace = badgeLeft - gap;
+
+  if (rightSpace >= maxPopWidth + 10) {
+    // Right of badge — preferred
+    left = badgeRight + gap;
+    arrowSide = 'left';
+    const targetCenter = fieldRect.top + fieldRect.height / 2;
+    top = Math.max(10, Math.min(targetCenter - 40, viewH - popHeight - 10));
+  } else if (leftSpace >= maxPopWidth + 10) {
+    // Left of badge
+    left = badgeLeft - maxPopWidth - gap;
+    arrowSide = 'right';
+    const targetCenter = fieldRect.top + fieldRect.height / 2;
+    top = Math.max(10, Math.min(targetCenter - 40, viewH - popHeight - 10));
+  } else {
+    // Tight screen — position below or above the target field
+    left = Math.max(10, (viewW - maxPopWidth) / 2);
+    arrowSide = 'none';
+
+    const spaceBelow = viewH - fieldRect.bottom - gap;
+    const spaceAbove = fieldRect.top - gap;
+
+    if (spaceBelow >= popHeight || spaceBelow >= spaceAbove) {
+      top = Math.min(fieldRect.bottom + gap, viewH - popHeight - 10);
+    } else {
+      top = Math.max(10, fieldRect.top - popHeight - gap);
+    }
+  }
 
   popover.style.left = left + 'px';
   popover.style.top = top + 'px';
@@ -288,6 +311,7 @@ function buildPhotoPopover() {
         <button class="btn-sm" id="popCamera">Selfie</button>
       </div>
       <span class="photo-status">${status}</span>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -366,6 +390,7 @@ function buildAccessPopover() {
           value="${esc(customVal)}">
         <span class="char-count" id="popAccessCount">${customVal.length}/28</span>
       </div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -390,6 +415,7 @@ function buildSongPopover() {
       <div class="popover-divider"></div>
       <div class="popover-label">Track</div>
       <div class="card-grid">${songCards}</div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -497,10 +523,14 @@ function attachPopoverEvents(fieldName, popover) {
       const counter = popover.querySelector('#popTitleCount');
       input.addEventListener('input', () => {
         const val = input.value.slice(0, 30);
-        input.value = val;
-        counter.textContent = `${val.length}/30`;
-        counter.className = 'char-count' + (val.length >= 30 ? ' full' : val.length >= 26 ? ' warn' : '');
-        state.title = val.trim() ? val.trim().toUpperCase() : TITLES[0];
+        // Auto-Title Case: capitalize first letter of each word
+        const cursor = input.selectionStart;
+        const titled = val.replace(/\b\w/g, c => c.toUpperCase());
+        input.value = titled;
+        input.setSelectionRange(cursor, cursor);
+        counter.textContent = `${titled.length}/30`;
+        counter.className = 'char-count' + (titled.length >= 30 ? ' full' : titled.length >= 26 ? ' warn' : '');
+        state.title = titled.trim() || TITLES[0];
         popover.querySelectorAll('.card-grid .card').forEach(c => c.classList.remove('selected'));
         refreshPreview();
       });
@@ -597,9 +627,11 @@ function rebuildPopoverContent(fieldName) {
   const newBody = popover.querySelector('.popover-body');
   if (newBody) newBody.scrollTop = scrollTop;
 
-  // Re-attach close button
+  // Re-attach close + done buttons
   const closeBtn = popover.querySelector('.popover-close');
   if (closeBtn) closeBtn.addEventListener('click', hidePopover);
+  const doneBtn = popover.querySelector('.popover-done');
+  if (doneBtn) doneBtn.addEventListener('click', hidePopover);
 }
 
 // ─── Photo Crop ───────────────────────────────────────────
@@ -1229,8 +1261,8 @@ document.getElementById('submitBadgeBtn').addEventListener('click', () => {
     return;
   }
   if (state._editingBadgeId) {
-    // Returning user — submit directly (already has privacy setting)
-    submitBadge(true);
+    // Returning user — preserve their existing photo privacy setting
+    submitBadge(state._photoPublic !== false);
   } else {
     // New user — show privacy modal first
     showPrivacyModal();
@@ -1484,6 +1516,7 @@ if (window.location.pathname === '/orgchart') {
           state.accessLevel = data.accessLevel;
           state.caption = data.caption || 'SCAN TO FILE COMPLAINT';
           state.waveStyle = data.waveStyle || 'barcode';
+          state._photoPublic = data.photoPublic !== false;
           state._editingBadgeId = existingId;
 
           // Load existing headshot into preview if badge has a photo
