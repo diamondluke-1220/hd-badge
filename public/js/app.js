@@ -161,6 +161,10 @@ function showPopover(targetEl, fieldName) {
   const closeBtn = popover.querySelector('.popover-close');
   if (closeBtn) closeBtn.addEventListener('click', hidePopover);
 
+  // Done button (same behavior as close — changes auto-save)
+  const doneBtn = popover.querySelector('.popover-done');
+  if (doneBtn) doneBtn.addEventListener('click', hidePopover);
+
   // Auto-focus text input
   const input = popover.querySelector('.popover-input');
   if (input) setTimeout(() => input.focus(), 80);
@@ -267,6 +271,7 @@ function buildNamePopover() {
           value="${esc(val)}">
         <span class="char-count" id="popNameCount">${val.length}/18</span>
       </div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -308,6 +313,7 @@ function buildDeptPopover() {
           value="${esc(customVal)}">
         <span class="char-count" id="popDeptCount">${customVal.length}/31</span>
       </div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -333,6 +339,7 @@ function buildTitlePopover() {
           value="${esc(customVal)}">
         <span class="char-count" id="popTitleCount">${customVal.length}/30</span>
       </div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -408,6 +415,7 @@ function buildCaptionPopover() {
           value="${esc(customVal)}">
         <span class="char-count" id="popCaptionCount">${customVal.length}/30</span>
       </div>
+      <button class="popover-done">Done</button>
     </div>`;
 }
 
@@ -492,7 +500,7 @@ function attachPopoverEvents(fieldName, popover) {
         input.value = val;
         counter.textContent = `${val.length}/30`;
         counter.className = 'char-count' + (val.length >= 30 ? ' full' : val.length >= 26 ? ' warn' : '');
-        state.title = val.trim() || TITLES[0];
+        state.title = val.trim() ? val.trim().toUpperCase() : TITLES[0];
         popover.querySelectorAll('.card-grid .card').forEach(c => c.classList.remove('selected'));
         refreshPreview();
       });

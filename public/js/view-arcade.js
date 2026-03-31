@@ -86,7 +86,7 @@ window.ArcadeRenderer = {
       "Priority: you losing.",
       "Help desk, please hold.",
     ],
-    'HD-00002': [ // Drew — Chief Audio Architect
+    'HD-00002': [ // Drew — Chief String Tickler
       "You're about to get feedback.",
       "I don't like your tone.",
       "This mix needs more pain.",
@@ -531,7 +531,7 @@ window.ArcadeRenderer = {
     'THE INTERN': { type: 'intern', desc: "Has a badge but no authority, a desk but no seniority, a fresh degree but no idea what's happening. Brings great energy though. 10/10 would hire again.", move: 'UNPAID OVERTIME' },
     // Bosses
     'Luke': { type: 'boss', desc: 'Chief Escalation Officer. Will escalate your ticket to himself, then close it. Band frontman. Please hold.', move: 'TICKET ESCALATION' },
-    'Drew': { type: 'boss', desc: "Chief Audio Architect. His feedback isn't constructive — it's a 100-watt wall of sound. Wields a Flying V.", move: 'FEEDBACK LOOP' },
+    'Drew': { type: 'boss', desc: "Chief String Tickler. His feedback isn't constructive — it's a 100-watt wall of sound. Wields a Flying V.", move: 'FEEDBACK LOOP' },
     'Henry': { type: 'boss', desc: 'Chief Impact Officer. Hits things professionally. His click track has ended careers and started mosh pits.', move: 'CLICK TRACK OF DOOM' },
     'Todd': { type: 'boss', desc: 'VP of Power Distribution. Controls the infrastructure. His stare has rebooted servers and crushed spirits.', move: '1000 YARD STARE' },
     'Adam': { type: 'boss', desc: 'VP of Bottom Line Operations. The low end is non-negotiable. Cuts budgets and bass lines with equal precision.', move: 'LOW END THEORY' },

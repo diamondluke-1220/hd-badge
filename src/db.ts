@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_badges_flagged ON badges(is_flagged);
 // Band member seed data — HD-00001 through HD-00005
 const BAND_MEMBERS = [
   { id: 'HD-00001', name: 'LUKE',  dept: 'TICKET ESCALATION BUREAU',          title: 'Chief Escalation Officer',      song: 'PLEASE HOLD',       access: 'ALL ACCESS', css: 'all-access', caption: 'SCAN TO FILE COMPLAINT' },
-  { id: 'HD-00002', name: 'DREW',  dept: 'AUDIO ENGINEERING DIVISION',        title: 'Chief Audio Architect',         song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access', caption: 'NOT RESPONSIBLE FOR LOST EARDRUMS' },
+  { id: 'HD-00002', name: 'DREW',  dept: 'RIFF SHREDDING DEPARTMENT',         title: 'Chief String Tickler',          song: 'RED ALERT',         access: 'ALL ACCESS', css: 'all-access', caption: 'SCAN FOR BACKDOOR ENTRANCE', waveStyle: 'sticker' },
   { id: 'HD-00003', name: 'HENRY', dept: 'DEPT. OF PERCUSSIVE MAINTENANCE',   title: 'Chief Impact Officer',          song: 'THE MEMO',          access: 'ALL ACCESS', css: 'all-access', caption: 'STAGE DIVE TO SCAN' },
   { id: 'HD-00004', name: 'TODD',  dept: 'INFRASTRUCTURE & POWER CHORDS',     title: 'VP of Power Distribution',      song: 'TAKING LIBERTIES',  access: 'ALL ACCESS', css: 'all-access', caption: 'WARRANTY VOID IF REMOVED' },
   { id: 'HD-00005', name: 'ADAM',  dept: 'LOW FREQUENCY OPERATIONS',          title: 'VP of Bottom Line Operations',  song: 'BOSS LEVEL',        access: 'ALL ACCESS', css: 'all-access', caption: 'UNAUTHORIZED MOSHING VOIDS WARRANTY' },
@@ -51,7 +51,7 @@ const BAND_MEMBERS = [
 // Division → department mapping (mirrors PUBLIC_DIVISIONS + DEPARTMENTS in app.js)
 const DIVISION_DEPTS: Record<string, string[]> = {
   'EXECUTIVE TEAM': [
-    'TICKET ESCALATION BUREAU', 'AUDIO ENGINEERING DIVISION',
+    'TICKET ESCALATION BUREAU', 'RIFF SHREDDING DEPARTMENT',
     'DEPT. OF PERCUSSIVE MAINTENANCE', 'INFRASTRUCTURE & POWER CHORDS',
     'LOW FREQUENCY OPERATIONS',
   ],
@@ -214,6 +214,24 @@ export function initDb(dbPath: string) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_game_scores_employee ON game_scores(employee_id)');
   });
 
+  // v8: Sync band member seed data (dept, title, caption, wave_style)
+  runMigration(8, 'Sync band member badges with seed data', () => {
+    const update = db.prepare(`
+      UPDATE badges SET department = $dept, title = $title, caption = $caption,
+        wave_style = $wave_style
+      WHERE employee_id = $id AND is_band_member = 1
+    `);
+    for (const m of BAND_MEMBERS) {
+      update.run({
+        $id: m.id,
+        $dept: m.dept,
+        $title: m.title,
+        $caption: m.caption,
+        $wave_style: 'waveStyle' in m ? m.waveStyle : 'barcode',
+      });
+    }
+  });
+
   // Prepare all statements
   stmts = {
     insertBadge: db.prepare(`
@@ -304,6 +322,7 @@ function seedBandMembers() {
       $is_flagged: 0,
       $is_demo: 0,
       $caption: m.caption,
+      $wave_style: 'waveStyle' in m ? m.waveStyle : 'barcode',
     });
   }
 }

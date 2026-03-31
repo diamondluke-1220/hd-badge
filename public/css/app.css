@@ -503,6 +503,29 @@ body {
 .char-count.warn { color: #CA8A04; }
 .char-count.full { color: #DC2626; }
 
+/* Popover done button */
+.popover-done {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 0;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: white;
+  background: var(--accent-blue);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.popover-done:hover {
+  background: var(--accent-blue-hover, #4B7FE8);
+  box-shadow: 0 2px 8px rgba(91,141,239,0.3);
+}
+
 /* Popover divider & label */
 .popover-divider {
   height: 1px;
