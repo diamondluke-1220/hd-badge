@@ -47,6 +47,36 @@ interface PublicDeps {
   HEADSHOT_WIDTH: number;
 }
 
+// ─── Discord Webhook (badge-feed) ─────────────────────────
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL || '';
+
+async function notifyDiscord(employeeId: string, name: string, dept: string, title: string) {
+  if (!DISCORD_WEBHOOK_URL) return;
+  try {
+    const stats = getStats();
+    const total = stats.visible;
+
+    // Milestone check (every 25)
+    const isMilestone = total > 0 && total % 25 === 0;
+
+    let content = `🆕 **${name}** just joined as **${dept}** — ${title}  ·  \`${employeeId}\``;
+    if (isMilestone) {
+      content += `\n🎉 **Badge #${total}!**`;
+    }
+
+    await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'Badge Bot',
+        content,
+      }),
+    });
+  } catch (err) {
+    log('warn', 'discord', `Webhook failed: ${(err as Error).message}`);
+  }
+}
+
 export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   const {
     getClientIp, broadcastNewBadge, broadcastSSE,
@@ -207,6 +237,9 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       });
 
       log('info', 'badge', `Created ${result.employeeId}: ${cleanName} → ${cleanDept}`);
+
+      // Discord webhook — notify badge-feed channel (fire-and-forget)
+      notifyDiscord(result.employeeId, cleanName, cleanDept, cleanTitle).catch(() => {});
 
       return c.json({
         success: true,
