@@ -10,6 +10,10 @@ data/
 *.cjs
 *.mjs
 
+# Test artifacts
+test-results/
+badge-test.js
+
 # Internal docs (not app documentation)
 docs/security-audit-*.md
 docs/docker-deploy-plan.md
