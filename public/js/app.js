@@ -1537,6 +1537,11 @@ if (window.location.pathname === '/orgchart') {
     }
   });
 } else {
+  // Add invisible placeholder to match dropdown width so nav doesn't shift
+  const placeholder = document.createElement('div');
+  placeholder.className = 'view-dropdown-placeholder';
+  document.querySelector('.app-header').appendChild(placeholder);
+
   const storedBadge = localStorage.getItem('hd-badge');
   let existingId = null;
   if (storedBadge) {

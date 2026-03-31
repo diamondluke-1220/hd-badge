@@ -600,6 +600,7 @@ export function getStats(): {
   bandMembers: number;
   flaggedCount: number;
   byDepartment: Record<string, number>;
+  bySong: { song: string; count: number }[];
   newest: string | null;
   newestHire: { name: string; department: string; createdAt: string } | null;
   sparkline: { date: string; count: number }[];
@@ -627,6 +628,11 @@ export function getStats(): {
       byDepartment[row.department] = row.count;
     }
 
+    const bySongRows = db.prepare(
+      `SELECT song, COUNT(*) as count FROM badges WHERE is_visible = 1
+       GROUP BY song ORDER BY count DESC`
+    ).all() as { song: string; count: number }[];
+
     return {
       totalBadges: total,
       visible,
@@ -634,6 +640,7 @@ export function getStats(): {
       bandMembers,
       flaggedCount,
       byDepartment,
+      bySong: bySongRows,
       newest: newest?.employee_id || null,
       newestHire: newestRow ? { name: newestRow.name, department: newestRow.department, createdAt: newestRow.created_at } : null,
       sparkline: sparklineRows,

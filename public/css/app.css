@@ -80,9 +80,10 @@ body {
    2. APP HEADER & NAV
    ========================================================== */
 .app-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--surface-card);
 }
@@ -95,7 +96,7 @@ body {
   text-transform: uppercase;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 12px;
 }
 .app-header h1 .header-accent {
@@ -769,13 +770,21 @@ body {
    11. ORG CHART HEADER & DIVISIONS
    ========================================================== */
 .org-header {
+  margin-bottom: 16px;
+}
+.org-header-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.org-header-text {
   text-align: center;
-  margin-bottom: 32px;
 }
 .org-header-title {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 16px;
+  font-size: 24px;
   color: var(--text-muted);
   letter-spacing: 3px;
   text-transform: uppercase;
@@ -783,8 +792,8 @@ body {
 }
 .org-header-sub {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--text-disabled);
+  font-size: 13px;
+  color: var(--text-muted);
   letter-spacing: 2px;
   text-transform: uppercase;
 }
@@ -828,23 +837,23 @@ body {
   margin-bottom: 32px;
 }
 .division-header {
-  padding: 12px 20px;
+  padding: 14px 24px;
   border-radius: var(--radius-md);
   text-align: center;
-  color: var(--text-secondary);
+  color: #F1F5F9;
 }
 .division-header-name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 15px;
-  letter-spacing: 2px;
+  font-size: 18px;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
 }
 .division-header-count {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-disabled);
+  color: rgba(255,255,255,0.9);
   letter-spacing: 1px;
   margin-top: 2px;
 }
@@ -1197,9 +1206,9 @@ body {
    18. PUBLIC ORG CHART / EMPLOYEE DIRECTORY
    ========================================================== */
 .public-orgchart {
-  max-width: 1100px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px 60px;
+  padding: 0 32px 60px;
   background: radial-gradient(ellipse at 50% 0%, rgba(212, 168, 67, 0.04) 0%, transparent 60%);
 }
 .public-orgchart-header {
@@ -1228,7 +1237,7 @@ body {
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
-  margin-bottom: 24px;
+  align-items: center;
 }
 .dept-filter-btn {
   padding: 6px 14px;
@@ -1290,8 +1299,13 @@ body {
 /* Badge grid — compact photo-circle cards */
 .badge-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
+}
+/* Executive team: center the fixed 5 cards */
+.division-section:has(.div-exec) .badge-grid {
+  justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 180px));
 }
 .badge-grid-card {
   background: var(--surface-card);
@@ -1428,7 +1442,8 @@ body {
 /* Mobile — max 640px */
 @media (max-width: 640px) {
   .app-header {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    justify-items: center;
     text-align: center;
     padding: 16px 16px 12px;
     gap: 8px;
@@ -1523,23 +1538,29 @@ body {
     font-size: 10px;
   }
 
+  .org-header-top {
+    flex-direction: column;
+    text-align: center;
+  }
   .dept-filter-bar {
+    justify-content: center;
     gap: 4px;
-    margin-bottom: 4px;
   }
 
   /* Scale down stats panel on mobile */
   .stats-panel {
+    flex-direction: column;
+    justify-content: center;
     gap: 12px;
     margin: 8px auto 4px;
   }
   .orgchart-donut {
-    width: 72px;
-    height: 72px;
+    width: 56px;
+    height: 56px;
   }
   .orgchart-donut::after {
-    font-size: 16px;
-    margin: 14px;
+    font-size: 14px;
+    margin: 10px;
   }
   .donut-legend-name {
     font-size: 10px;
@@ -1551,14 +1572,15 @@ body {
     gap: 3px;
   }
   .stats-card {
-    padding: 10px 14px;
-    min-width: 120px;
+    padding: 8px 12px;
+    min-width: 0;
+    width: 100%;
   }
   .newest-hire-name {
-    font-size: 14px;
+    font-size: 13px;
   }
   .newest-hire-dept {
-    font-size: 11px;
+    font-size: 10px;
   }
   .stats-card-label {
     font-size: 9px;
@@ -2156,9 +2178,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  margin: 16px auto 8px;
-  max-width: 800px;
+  gap: 58px;
+  margin: 0 auto 16px;
   flex-wrap: wrap;
 }
 
@@ -2235,12 +2256,12 @@ body {
   border: 1px solid var(--surface-card);
   border-radius: var(--radius-md);
   padding: 14px 18px;
-  min-width: 160px;
+  min-width: 180px;
 }
 .stats-card-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #93C5FD;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -2263,14 +2284,14 @@ body {
 .newest-hire-name {
   font-family: 'Barlow', sans-serif;
   font-weight: 800;
-  font-size: 17px;
+  font-size: 20px;
   color: #F1F5F9;
   letter-spacing: 0.5px;
   margin-bottom: 2px;
 }
 .newest-hire-dept {
   font-family: 'Inter', sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -2281,6 +2302,52 @@ body {
   font-size: 12px;
   color: #4ADE80;
   font-weight: 600;
+}
+
+/* --- Most Requested card --- */
+.most-requested-card {
+  border-color: rgba(212,168,67,0.2);
+}
+.most-requested-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.most-requested-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.most-requested-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.most-requested-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  width: 18px;
+  flex-shrink: 0;
+}
+.most-requested-song {
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  color: #F1F5F9;
+  letter-spacing: 0.5px;
+  flex: 1;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+.most-requested-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--accent-gold);
 }
 .newest-hire-empty .newest-hire-name {
   color: var(--text-disabled);
@@ -2301,6 +2368,10 @@ body {
    30. VIEW SWITCHER
    ========================================================== */
 /* View dropdown (replaces view-switcher-bar) */
+.view-dropdown-placeholder {
+  width: 100px;
+  visibility: hidden;
+}
 .view-dropdown {
   position: relative;
 }
@@ -2308,12 +2379,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 10px 20px;
   font-family: 'Inter', -apple-system, sans-serif;
-  font-size: clamp(12px, 2.5vw, 14px);
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.5px;
-  color: var(--text-disabled);
+  color: var(--text-secondary);
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);

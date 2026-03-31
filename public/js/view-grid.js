@@ -13,10 +13,14 @@ window.GridRenderer = {
     // Org chart header
     container.innerHTML = `
       <div class="org-header">
-        <div class="org-header-title">Help Desk <span class="org-header-accent">LLC.</span></div>
-        <div class="org-header-sub">Employee Directory &bull; <span class="odometer" id="payrollOdometer">${this._buildOdometerDigits(stats.visible)}</span> on payroll</div>
+        <div class="org-header-top">
+          <div class="org-header-text">
+            <div class="org-header-title">Help Desk <span class="org-header-accent">LLC.</span></div>
+            <div class="org-header-sub">Employee Directory &bull; <span class="odometer" id="payrollOdometer">${this._buildOdometerDigits(stats.visible)}</span> on payroll</div>
+          </div>
+          <div class="dept-filter-bar" id="deptFilterBar"></div>
+        </div>
       </div>
-      <div class="dept-filter-bar" id="deptFilterBar"></div>
       <div class="active-dept-heading" id="activeDeptHeading"></div>
       <div id="publicBadgeContent" aria-live="polite" aria-relevant="additions"></div>
       <div id="loadMoreArea"></div>

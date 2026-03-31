@@ -833,6 +833,7 @@ let donutCounts = {}; // { divisionTheme: count }
 let donutTotal = 0;
 let _donutAnimated = false;
 let _currentNewestHire = null;
+let _statsBySong = [];
 function initStatsPanel(stats) {
   // Build initial donut counts
   donutTotal = stats.visible || 0;
@@ -851,6 +852,7 @@ function initStatsPanel(stats) {
   }
 
   _currentNewestHire = stats.newestHire || null;
+  _statsBySong = stats.bySong || [];
 
   _donutAnimated = false;
 
@@ -929,6 +931,19 @@ function renderStatsPanel() {
     `;
   }
 
+  // --- Most Requested songs ---
+  const songData = _statsBySong || [];
+  const topSongs = songData.slice(0, 3);
+  const mostRequestedHtml = topSongs.length > 0 ? `
+    <div class="stats-card most-requested-card">
+      <div class="stats-card-label">MOST REQUESTED</div>
+      <div class="most-requested-sub">by badge waveform</div>
+      <div class="most-requested-list">
+        ${topSongs.map((s, i) => `<div class="most-requested-row"><span class="most-requested-rank">${i + 1}.</span><span class="most-requested-song">${esc(s.song)}</span><span class="most-requested-count">${s.count}</span></div>`).join('')}
+      </div>
+    </div>
+  ` : '';
+
   panel.innerHTML = `
     <div class="stats-donut-section${animClass}">
       <div class="orgchart-donut" style="background: ${gradient}" data-total="${donutTotal}"></div>
@@ -937,6 +952,7 @@ function renderStatsPanel() {
       </div>
     </div>
     ${newestHtml}
+    ${mostRequestedHtml}
   `;
 
   header.after(panel);
