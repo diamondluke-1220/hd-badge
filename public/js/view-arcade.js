@@ -3,8 +3,8 @@
 // Fighting-game character select screen for the employee directory.
 // VS animation is the main presentation focus — Punch-Out inspired choreography.
 
-const ROSTER_SIZE = 24;
-const ROSTER_COOLDOWN = 3; // fights to wait before swapping out a fought badge
+const ROSTER_SIZE = 28;
+const ROSTER_COOLDOWN = 6; // fights to wait before swapping out a fought badge
 
 window.ArcadeRenderer = {
   _container: null,
@@ -325,35 +325,35 @@ window.ArcadeRenderer = {
     const roster = this._container.querySelector('.arcade-roster');
     if (!grid || !roster) return;
 
-    const badgeCount = this._allBadges.length;
+    const badgeCount = this._rosterSlots.length;
     if (badgeCount === 0) return;
 
-    // Available space
+    // Available space — use viewport height minus roster's top position for true available height
     const rosterWidth = roster.clientWidth - 32; // padding
-    const rosterHeight = roster.clientHeight - 24;
+    const rosterTop = roster.getBoundingClientRect().top;
+    const rosterHeight = window.innerHeight - rosterTop - 16; // 16px bottom margin
     const gap = 4;
 
-    // Start large and shrink based on badge count
-    // Few badges = big portraits filling the grid, many = compact
-    const minW = 44, minH = 54;
-    const maxW = 120, maxH = 146;
+    // Find largest slot size that fills available space (both width and height)
+    const minW = 44;
+    const maxW = 140;
+    const aspect = 146 / 120;
 
-    let bestW = maxW, bestH = maxH;
+    let bestW = maxW;
 
-    for (let w = maxW; w >= minW; w -= 4) {
-      const h = Math.round(w * (146 / 120)); // maintain aspect ratio
+    for (let w = maxW; w >= minW; w -= 2) {
+      const h = Math.round(w * aspect);
       const cols = Math.floor((rosterWidth + gap) / (w + gap));
       if (cols <= 0) continue;
       const rows = Math.ceil(badgeCount / cols);
       const totalHeight = rows * (h + gap) - gap;
 
-      // Accept this size if it fits within available height (with some overflow allowed)
-      if (totalHeight <= rosterHeight * 1.3) {
+      if (totalHeight <= rosterHeight) {
         bestW = w;
-        bestH = h;
-        break; // Take the largest size that fits
+        break;
       }
     }
+    let bestH = Math.round(bestW * aspect);
 
     grid.style.setProperty('--slot-w', bestW + 'px');
     grid.style.setProperty('--slot-h', bestH + 'px');

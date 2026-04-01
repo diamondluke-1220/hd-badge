@@ -355,18 +355,21 @@ body.view-arcade .public-orgchart {
    ============================================================ */
 
 .arcade-roster {
-  padding: 12px 16px 44px;
+  padding: 8px 16px 8px;
   z-index: 1;
   position: relative;
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+  display: flex;
+  align-items: center;
 }
 
 .arcade-roster-full {
   display: flex;
   align-items: flex-start;
   justify-content: center;
+  width: 100%;
 }
 
 .arcade-grid {
@@ -1834,8 +1837,8 @@ body.view-arcade .public-orgchart {
 .arcade-qte-arrow {
   font-family: 'Press Start 2P', monospace;
   font-size: clamp(22px, 3.5vw, 42px);
-  width: clamp(36px, 5vw, 56px);
-  height: clamp(36px, 5vw, 56px);
+  width: clamp(44px, 6vw, 64px);
+  height: clamp(44px, 6vw, 64px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1846,6 +1849,10 @@ body.view-arcade .public-orgchart {
   text-shadow: none;
   transition: color 0.1s, text-shadow 0.1s, transform 0.1s, filter 0.1s;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+  /* Force uniform box for all arrow glyphs (←→ wider than ↑↓) */
+  line-height: 1;
+  text-indent: 0;
+  overflow: hidden;
 }
 
 /* Active arrow — current input target */
