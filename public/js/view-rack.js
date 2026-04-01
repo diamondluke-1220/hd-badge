@@ -99,6 +99,20 @@ window.RackRenderer = {
       countEl.textContent = `${ports.length}`;
     }
 
+    // Light up corresponding switch port above the patch panel
+    const divThemeEsc = CSS.escape(divTheme);
+    const sw = this._container.querySelector(`.rack-device-switch[data-theme="${divThemeEsc}"]`);
+    if (sw) {
+      const filledPorts = panel.querySelectorAll('.rack-port:not(.rack-port-empty)').length;
+      // Port 0 is uplink, so employee N maps to switch port N
+      const switchPort = sw.querySelector(`[data-switch-port="${filledPorts}"]`);
+      if (switchPort && !switchPort.classList.contains('rack-conn-port-active')) {
+        switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
+        switchPort.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
+        switchPort.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+      }
+    }
+
     // Update WLC AP count (3 APs per employee)
     const wlcCount = this._container.querySelector('[data-wlc-aps]');
     if (wlcCount) {
@@ -176,13 +190,13 @@ window.RackRenderer = {
       const allEmployees = [];
       Object.values(depts).forEach(emps => allEmployees.push(...emps));
 
-      // Division switch (1U)
+      // Division switch (1U) — active ports match employee count in patch panel below
       rack.push({
         type: 'switch',
         name: divInfo.name,
         theme: theme,
         color: color,
-        portCount: Object.keys(depts).length,
+        portCount: Math.min(allEmployees.length, 12),
       });
 
       // Division patch panel (1U, 12 ports, pool rotation handles overflow)
@@ -218,13 +232,14 @@ window.RackRenderer = {
       const customEmployees = [];
       Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
 
-      // Contractor switch (1U)
+      // Contractor switch (1U, 24-port to match 2U patch panel)
       rackB.push({
         type: 'switch',
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
         color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
-        portCount: Object.keys(customDepts).length,
+        portCount: Math.min(customEmployees.length, 24),
+        totalPorts: 24,
       });
 
       // Contractor patch panel (2U — extra space for contractor headcount)
@@ -243,9 +258,9 @@ window.RackRenderer = {
     rackA.push({ type: 'wlc' });
 
     // Match rack heights — add blanks so both racks are the same total U
-    const coreU = 2;  // core switch
+    const coreU = 1;  // core switch
     const fwU = 1;    // firewall (rendered separately but counts for height)
-    const bottomU = 3; // cable (1U) + UPS (2U)
+    const bottomU = 2; // cable (1U) + UPS (1U)
     const devicesA = this._usedU(rackA);
     const devicesB = this._usedU(rackB);
     const totalA = fwU + coreU + devicesA + bottomU;
@@ -278,7 +293,7 @@ window.RackRenderer = {
       if (d.type === 'wlc') return sum + 1;
       if (d.type === 'cable') return sum + 1;
       if (d.type === 'blank') return sum + 1;
-      if (d.type === 'ups') return sum + 2;
+      if (d.type === 'ups') return sum + 1;
       return sum;
     }, 0);
   },
@@ -526,8 +541,10 @@ window.RackRenderer = {
 
     el.innerHTML = `
       <div class="rack-device-accent rack-fw-accent"></div>
-      <div class="rack-fw-fan rack-fw-fan-1"></div>
-      <div class="rack-fw-fan rack-fw-fan-2"></div>
+      <div class="rack-fw-fans">
+        <div class="rack-fw-fan rack-fw-fan-1"></div>
+        <div class="rack-fw-fan rack-fw-fan-2"></div>
+      </div>
       <div class="rack-device-header">
         <span class="rack-device-name rack-fw-name">${label}</span>
         <span class="rack-device-model">CatchFire ASA-5525</span>
@@ -589,60 +606,61 @@ window.RackRenderer = {
 
   _renderCoreSwitch(execBadges, side) {
     const el = document.createElement('div');
-    el.className = 'rack-device rack-device-core rack-device-2u';
+    el.className = 'rack-device rack-device-core rack-device-1u';
     el.setAttribute('data-device-type', 'core');
     el.setAttribute('data-core-side', side);
 
     const coreLabel = side === 'A' ? 'CORE A' : 'CORE B';
-    const model = side === 'A' ? 'Crisco 9500-24Y4C' : 'Crisco 9500-24Y4C';
 
-    let portsHtml = '';
+    // Band member portraits (right side, horizontal)
+    let membersHtml = '';
     if (execBadges && execBadges.length > 0) {
-      // Split band members across cores: first half on A, second half on B
       const half = Math.ceil(execBadges.length / 2);
       const myMembers = side === 'A' ? execBadges.slice(0, half) : execBadges.slice(half);
 
-      portsHtml = '<div class="rack-core-ports">';
-      myMembers.forEach((b, i) => {
-        if (i > 0) portsHtml += '<div class="rack-core-separator"></div>';
-        portsHtml += `
-          <div class="rack-core-member">
-            <div class="rack-core-port" data-employee-id="${esc(b.employeeId)}">
-              <img src="/api/badge/${esc(b.employeeId)}/headshot" alt="${esc(b.name)}" loading="lazy"
-                onerror="this.style.display='none'">
-            </div>
-            <span class="rack-core-port-label">${esc(b.name.split(' ')[0])}</span>
+      membersHtml = '<div class="rack-core-ports">';
+      myMembers.forEach(b => {
+        membersHtml += `
+          <div class="rack-core-port" data-employee-id="${esc(b.employeeId)}" title="${esc(b.name)}">
+            <img src="/api/badge/${esc(b.employeeId)}/headshot" alt="${esc(b.name)}" loading="lazy"
+              onerror="this.style.display='none'">
           </div>
         `;
       });
-      portsHtml += `
+      membersHtml += `
         <div class="rack-core-separator"></div>
         <div class="rack-switch-leds">
-          <div class="rack-switch-led"></div>
-          <div class="rack-switch-led"></div>
-          <div class="rack-switch-led"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="SYST"></div>
+          <div class="rack-switch-led rack-led-blink-gold" title="ACT"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="STCK"></div>
         </div>
       `;
-      portsHtml += '</div>';
+      membersHtml += '</div>';
     }
 
-    // Trunk SFP ports + a few generic ports (cosmetic)
+    // Trunk SFP ports + generic ports (left side)
     let connHtml = '<div class="rack-switch-ports">';
     connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
     connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
+    connHtml += '<div class="rack-switch-port-divider"></div>';
     for (let i = 0; i < 8; i++) {
+      if (i === 4) connHtml += '<div class="rack-switch-port-divider"></div>';
       connHtml += `<div class="rack-conn-port ${i < 4 ? 'rack-conn-port-active' : ''}"></div>`;
     }
     connHtml += '</div>';
 
     el.innerHTML = `
       <div class="rack-device-accent"></div>
-      <div class="rack-device-header">
-        <span class="rack-device-name">${coreLabel}</span>
-        <span class="rack-device-model">${model}</span>
+      <div class="rack-core-layout">
+        <div class="rack-core-left">
+          <div class="rack-device-header">
+            <span class="rack-device-name">${coreLabel}</span>
+            <span class="rack-device-model">Crisco 9500-24Y4C</span>
+          </div>
+          ${connHtml}
+        </div>
+        ${membersHtml}
       </div>
-      ${portsHtml}
-      ${connHtml}
     `;
 
     return el;
@@ -650,21 +668,22 @@ window.RackRenderer = {
 
   _renderSwitch(device) {
     const el = document.createElement('div');
-    el.className = 'rack-device rack-device-switch rack-device-1u';
+    const isHighDensity = (device.totalPorts || 12) > 12;
+    el.className = `rack-device rack-device-switch rack-device-1u${isHighDensity ? ' rack-switch-hd' : ''}`;
     el.setAttribute('data-device-type', 'switch');
     el.setAttribute('data-theme', device.theme);
 
-    // Row of switch ports with divider every 6, long-cycle LED animation with random phase offset
-    const totalPorts = 12;
-    const activePorts = Math.min(device.portCount + 1, totalPorts);
+    // Row of switch ports — port 0 is uplink (always active), remaining match patch panel employees
+    const totalPorts = device.totalPorts || 12;
+    // Port 0 = uplink to core (always lit), ports 1+ = one per employee in patch panel below
+    const employeePorts = device.portCount; // already capped at 12
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
-      if (i === 6) portsHtml += '<div class="rack-switch-port-divider"></div>';
-      const isActive = i < activePorts;
-      // Random delay (0-24s) puts each port at different point in the 24s cycle
-      // Random speed variation (16-22s) prevents sync even with same delay
+      if (i > 0 && i % 4 === 0) portsHtml += '<div class="rack-switch-port-divider"></div>';
+      // Port 0 = uplink, ports 1 through employeePorts = connected employees
+      const isActive = i === 0 || i <= employeePorts;
       const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
-      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" ${style}></div>`;
+      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" data-switch-port="${i}" ${style}></div>`;
     }
     portsHtml += '</div>';
 
@@ -674,9 +693,9 @@ window.RackRenderer = {
         <span class="rack-device-name" style="color:${device.color}">${esc(device.name)}</span>
         <span class="rack-device-model">Crisco 2960X</span>
         <div class="rack-switch-leds">
-          <div class="rack-switch-led" style="background:${device.color}"></div>
-          <div class="rack-switch-led" style="background:${device.color}"></div>
-          <div class="rack-switch-led" style="background:${device.color}"></div>
+          <div class="rack-switch-led rack-led-solid" style="background:${device.color}" title="SYST"></div>
+          <div class="rack-switch-led rack-led-slow-blink" style="background:${device.color}" title="STAT"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="SPD"></div>
         </div>
       </div>
       ${portsHtml}
@@ -711,9 +730,9 @@ window.RackRenderer = {
           <span class="rack-wlc-ap-count" data-wlc-aps>${apCount} APs</span>
         </div>
         <div class="rack-switch-leds">
-          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
-          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
-          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="RADIO"></div>
+          <div class="rack-switch-led rack-led-off" title="ALM"></div>
         </div>
       </div>
       ${portsHtml}
@@ -791,9 +810,9 @@ window.RackRenderer = {
         <span class="rack-device-name rack-storage-name">NEWBTANIX</span>
         <span class="rack-device-model">NX-3060-G7</span>
         <div class="rack-switch-leds">
-          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
-          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
-          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="HEALTH"></div>
+          <div class="rack-switch-led rack-led-blink-blue" title="LOC"></div>
         </div>
       </div>
       <div class="rack-storage-body">
@@ -834,9 +853,9 @@ window.RackRenderer = {
           <span class="rack-vpn-tunnel-label">TUNNEL UP</span>
         </div>
         <div class="rack-switch-leds">
-          <div class="rack-switch-led" style="background:#2563EB"></div>
-          <div class="rack-switch-led" style="background:#2563EB"></div>
-          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
+          <div class="rack-switch-led rack-led-solid" style="background:#2563EB" title="VPN"></div>
+          <div class="rack-switch-led rack-led-slow-blink" style="background:var(--accent-green)" title="ETH"></div>
         </div>
       </div>
       ${portsHtml}
@@ -878,38 +897,40 @@ window.RackRenderer = {
 
   _renderUPS(device) {
     const el = document.createElement('div');
-    el.className = 'rack-device rack-device-ups rack-device-2u';
+    el.className = 'rack-device rack-device-ups rack-device-1u';
     el.setAttribute('data-device-type', 'ups');
 
     const load = 15 + Math.floor(Math.random() * 25);
     const voltage = 120 + Math.floor(Math.random() * 3);
+    const freq = (59.9 + Math.random() * 0.2).toFixed(1);
+    const temp = (22 + Math.floor(Math.random() * 6));
+
+    const ipOctet = 100 + (device.pct % 50);
+    const ip = `10.0.1.${ipOctet}`;
+    const macSuffix = device.pct.toString(16).padStart(2, '0').toUpperCase();
+    const mac = `00:1B:44:11:3A:${macSuffix}`;
+
+    const lcdOffset = (Math.random() * 12).toFixed(1);
+
 
     el.innerHTML = `
       <div class="rack-device-header">
         <span class="rack-device-name">EATEN 5PX</span>
-        <span class="rack-ups-status">&#9679; ONLINE</span>
+        <span class="rack-device-model">Eaten 5PX-UPS</span>
       </div>
       <div class="rack-ups-body">
         <div class="rack-ups-lcd">
-          <div class="rack-ups-lcd-line">${voltage}V ${load}% LOAD</div>
-          <div class="rack-ups-lcd-line rack-ups-lcd-line-dim">BAT: ${device.pct}% ${device.runtime}min</div>
+          <div class="rack-ups-lcd-screen" style="--lcd-offset:-${lcdOffset}s">
+            <div class="rack-ups-lcd-page rack-ups-lcd-page-1">${voltage}V &nbsp; ${load}% LOAD</div>
+            <div class="rack-ups-lcd-page rack-ups-lcd-page-2">BAT: ${device.pct}% &nbsp; ${device.runtime}min</div>
+            <div class="rack-ups-lcd-page rack-ups-lcd-page-3">${freq}Hz &nbsp; ${temp}&deg;C</div>
+            <div class="rack-ups-lcd-page rack-ups-lcd-page-4">${ip} &nbsp; ${mac}</div>
+          </div>
         </div>
-        <div class="rack-ups-info">
-          <div class="rack-ups-bar">
-            <div class="rack-ups-track">
-              <div class="rack-ups-fill" style="width:${device.pct}%"></div>
-            </div>
-            <span class="rack-ups-pct">${device.pct}%</span>
-          </div>
-          <div class="rack-ups-meta">
-            <span>Runtime: ${device.runtime}min</span>
-            <span>Load: ${load}%</span>
-          </div>
-          <div class="rack-ups-leds">
-            <div class="rack-ups-led rack-ups-led-on" title="Online"></div>
-            <div class="rack-ups-led rack-ups-led-bat" title="Battery"></div>
-            <div class="rack-ups-led rack-ups-led-fault" title="Fault"></div>
-          </div>
+        <div class="rack-ups-leds">
+          <div class="rack-ups-led rack-ups-led-on" title="Online"></div>
+          <div class="rack-ups-led rack-ups-led-bat" title="Battery"></div>
+          <div class="rack-ups-led rack-ups-led-fault" title="Fault"></div>
         </div>
       </div>
     `;

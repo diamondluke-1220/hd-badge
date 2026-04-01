@@ -154,7 +154,7 @@ body.view-rack .public-orgchart {
   --device-cable: #141416;
 
   /* Decorative tokens */
-  --silkscreen-opacity: 0.04;
+  --silkscreen-opacity: 0.16;
   --vent-color: rgba(0, 0, 0, 0.35);
 }
 
@@ -392,10 +392,20 @@ body.view-rack .public-orgchart {
 }
 
 /* Spinning fans behind vent grille */
-.rack-fw-fan {
+/* Fan housing — centered between ports and silkscreen */
+.rack-fw-fans {
   position: absolute;
-  width: 24px;
-  height: 24px;
+  top: 50%;
+  left: 58%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 10px;
+  z-index: 0;
+}
+
+.rack-fw-fan {
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: conic-gradient(
     rgba(255,255,255,0.08) 0deg, rgba(255,255,255,0.08) 80deg,
@@ -407,20 +417,16 @@ body.view-rack .public-orgchart {
     rgba(255,255,255,0.08) 270deg, rgba(255,255,255,0.08) 350deg,
     transparent 350deg, transparent 360deg
   );
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  z-index: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
 }
 
 .rack-fw-fan-1 {
-  right: 80px;
   animation: rack-fan-spin 3s linear infinite;
 }
 
 .rack-fw-fan-2 {
-  right: 44px;
-  animation: rack-fan-spin 3.4s linear infinite reverse;
+  animation: rack-fan-spin 3.4s linear infinite;
 }
 
 /* Fan center hub */
@@ -430,11 +436,11 @@ body.view-rack .public-orgchart {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .rack-fw-accent {
@@ -796,9 +802,9 @@ body.view-rack .public-orgchart {
 .rack-device-core::after {
   content: 'CRISCO';
   position: absolute;
-  left: 50%;
-  bottom: 8px;
-  transform: translateX(-50%);
+  left: 140px;
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 14px;
   font-weight: 900;
   letter-spacing: 6px;
@@ -809,16 +815,33 @@ body.view-rack .public-orgchart {
 
 .rack-device-core .rack-device-name {
   color: var(--accent-gold);
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 1.2px;
   text-shadow: 0 0 8px rgba(212, 168, 67, 0.3);
+}
+
+/* 1U horizontal layout: ports left, portraits right */
+.rack-core-layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+}
+
+.rack-core-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
 }
 
 .rack-core-ports {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .rack-core-port {
@@ -829,6 +852,13 @@ body.view-rack .public-orgchart {
   border: 2px solid rgba(212, 168, 67, 0.5);
   background: var(--surface-base);
   flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.rack-core-port:hover {
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 8px rgba(212, 168, 67, 0.4);
 }
 
 .rack-core-port img {
@@ -837,29 +867,11 @@ body.view-rack .public-orgchart {
   object-fit: cover;
 }
 
-.rack-core-port-label {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-align: center;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 36px;
-}
-
-.rack-core-member {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-}
-
 .rack-core-separator {
   width: 1px;
-  height: 24px;
+  height: 20px;
   background: rgba(212, 168, 67, 0.2);
-  margin: 0 4px;
+  margin: 0 2px;
 }
 
 /* ─── Division Switch ─────────────────────────────────────── */
@@ -877,13 +889,18 @@ body.view-rack .public-orgchart {
   border-radius: 2px;
 }
 
-/* Port group divider every 6 ports */
+/* Port group divider */
 .rack-switch-port-divider {
   width: 1px;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  margin: 0 2px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 4px;
   align-self: center;
+}
+
+/* High-density 24-port switch — same port size, just more of them */
+.rack-switch-hd .rack-switch-ports {
+  flex-wrap: nowrap;
 }
 
 .rack-switch-ports {
@@ -903,16 +920,40 @@ body.view-rack .public-orgchart {
   height: 5px;
   border-radius: 50%;
   background: var(--accent-green);
-  animation: rack-led-blink 1.5s ease-in-out infinite;
+  animation: none;
 }
 
-.rack-switch-led:nth-child(2) {
-  animation-delay: 0.5s;
+/* LED behavior classes */
+.rack-led-solid {
+  animation: none;
+  box-shadow: 0 0 3px currentColor;
 }
 
-.rack-switch-led:nth-child(3) {
-  animation-delay: 1.0s;
+.rack-led-solid-green {
+  background: var(--accent-green);
+  animation: none;
+  box-shadow: 0 0 3px rgba(34, 197, 94, 0.5);
+}
+
+.rack-led-blink-gold {
   background: var(--accent-gold);
+  animation: rack-led-blink 2s steps(1, end) infinite;
+}
+
+.rack-led-blink-blue {
+  background: var(--accent-blue);
+  animation: rack-led-blink 1.8s steps(1, end) infinite;
+}
+
+.rack-led-slow-blink {
+  animation: rack-led-blink 3s steps(1, end) infinite;
+}
+
+.rack-led-off {
+  background: var(--text-disabled);
+  opacity: 0.3;
+  animation: none;
+  box-shadow: none;
 }
 
 /* ─── Connection Ports (RJ45 / SFP style on switches) ─────── */
@@ -925,8 +966,8 @@ body.view-rack .public-orgchart {
 }
 
 .rack-conn-port {
-  width: 14px;
-  height: 12px;
+  width: 18px;
+  height: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 1px;
   background: rgba(0, 0, 0, 0.3);
@@ -1232,113 +1273,28 @@ body.view-rack .public-orgchart {
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* ─── UPS (Eaton-inspired with LCD) ───────────────────────── */
+/* ─── UPS (split: head unit 1U + battery module 1U) ──────── */
 
 .rack-device-ups {
-  /* 2U — two-tone horizontal split like real Eaton */
-  background:
-    linear-gradient(
-      180deg,
-      #161618 0%, #161618 48%,
-      rgba(255, 255, 255, 0.02) 48%, rgba(255, 255, 255, 0.02) 52%,
-      var(--device-ups) 52%, var(--device-ups) 100%
-    );
+  background: var(--device-ups);
   border-bottom: 1px solid var(--border);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  padding: 8px 10px;
+  padding: 6px 10px;
 }
 
 /* Silkscreen */
 .rack-device-ups::after {
   content: 'EATEN';
   position: absolute;
-  left: 14px;
-  bottom: 8px;
-  font-size: 16px;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
   font-weight: 900;
   letter-spacing: 4px;
   color: rgba(255, 255, 255, var(--silkscreen-opacity));
   pointer-events: none;
   z-index: 0;
-}
-
-.rack-ups-body {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.rack-ups-lcd {
-  width: 100px;
-  min-height: 36px;
-  background: #38BDF8;
-  border: 1px solid rgba(56, 189, 248, 0.6);
-  border-radius: 3px;
-  padding: 4px 6px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  box-shadow:
-    0 0 8px rgba(56, 189, 248, 0.3),
-    0 0 16px rgba(56, 189, 248, 0.15),
-    inset 0 0 6px rgba(255, 255, 255, 0.1);
-}
-
-.rack-ups-lcd-line {
-  font-size: 9px;
-  font-family: 'JetBrains Mono', monospace;
-  color: #0A1520;
-  font-weight: 700;
-  line-height: 1.3;
-  letter-spacing: 0.5px;
-}
-
-.rack-ups-lcd-line-dim {
-  color: rgba(10, 21, 32, 0.5);
-}
-
-.rack-ups-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.rack-ups-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.rack-ups-track {
-  flex: 1;
-  height: 6px;
-  background: var(--surface-base);
-  border-radius: 3px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-
-.rack-ups-fill {
-  height: 100%;
-  background: var(--accent-green);
-  border-radius: 3px;
-  transition: width 1s ease;
-}
-
-.rack-ups-pct {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent-green);
-  min-width: 32px;
-}
-
-.rack-ups-meta {
-  font-size: 8px;
-  color: var(--text-muted);
-  display: flex;
-  gap: 12px;
 }
 
 .rack-ups-status {
@@ -1347,11 +1303,86 @@ body.view-rack .public-orgchart {
   color: var(--accent-green);
 }
 
+.rack-ups-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+/* LCD with cycling pages + glow pulse */
+.rack-ups-lcd {
+  width: 100px;
+  height: 28px;
+  background: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  border-radius: 3px;
+  padding: 3px 5px;
+  overflow: hidden;
+  position: relative;
+  animation: rack-ups-lcd-glow 5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes rack-ups-lcd-glow {
+  0%, 100% { box-shadow: 0 0 6px rgba(56, 189, 248, 0.25), 0 0 12px rgba(56, 189, 248, 0.1); }
+  50% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.4), 0 0 20px rgba(56, 189, 248, 0.2); }
+}
+
+/* LCD scanline overlay */
+.rack-ups-lcd::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.06) 0px, rgba(0, 0, 0, 0.06) 1px,
+    transparent 1px, transparent 2px
+  );
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+/* Cycling LCD pages */
+.rack-ups-lcd-screen {
+  position: relative;
+  height: 100%;
+}
+
+.rack-ups-lcd-page {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #0A1520;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  opacity: 0;
+  animation: rack-ups-lcd-cycle 16s steps(1, end) infinite;
+  animation-delay: calc(var(--page-delay, 0s) + var(--lcd-offset, 0s));
+}
+
+.rack-ups-lcd-page-1 { --page-delay: 0s; }
+.rack-ups-lcd-page-2 { --page-delay: 4s; }
+.rack-ups-lcd-page-3 { --page-delay: 8s; }
+.rack-ups-lcd-page-4 { --page-delay: 12s; }
+
+.rack-ups-lcd-screen {
+  --lcd-offset: 0s;
+}
+
+@keyframes rack-ups-lcd-cycle {
+  0%, 24% { opacity: 1; }
+  25%, 100% { opacity: 0; }
+}
+
 .rack-ups-leds {
   display: flex;
   gap: 4px;
   align-items: center;
-  margin-top: 2px;
+  margin-left: auto;
 }
 
 .rack-ups-led {
@@ -1360,9 +1391,11 @@ body.view-rack .public-orgchart {
   border-radius: 50%;
 }
 
-.rack-ups-led-on { background: var(--accent-green); }
-.rack-ups-led-bat { background: var(--accent-gold); animation: rack-led-blink 3s ease-in-out infinite; }
-.rack-ups-led-fault { background: var(--text-disabled); }
+.rack-ups-led-on { background: var(--accent-green); box-shadow: 0 0 3px rgba(34, 197, 94, 0.5); }
+.rack-ups-led-bat { background: var(--accent-gold); animation: rack-led-blink 3s steps(1, end) infinite; }
+.rack-ups-led-fault { background: var(--text-disabled); opacity: 0.3; }
+
+/* (EBM removed — UPS is now 1U only) */
 
 /* ─── PDU (Eaton-inspired with breakers) ──────────────────── */
 
@@ -1736,21 +1769,14 @@ body.view-rack .public-orgchart {
   100% { opacity: 0; }
 }
 
-/* Link LED pattern — long-cycle steady heartbeat with occasional dropout */
+/* Link LED — solid green with rare brief flicker (link renegotiation) */
 @keyframes rack-led-link-cycle {
-  0%, 4%   { opacity: 1; }
-  5%, 25%  { opacity: 0.15; }
-  26%, 30% { opacity: 1; }
-  31%, 48% { opacity: 0.15; }
-  49%, 53% { opacity: 1; }
-  54%, 58% { opacity: 0.15; }
-  59%, 60% { opacity: 1; }
-  /* brief dropout — link flap */
-  61%, 65% { opacity: 0; }
-  66%, 70% { opacity: 1; }
-  71%, 90% { opacity: 0.15; }
-  91%, 95% { opacity: 1; }
-  96%, 100%{ opacity: 0.15; }
+  0%, 92%  { opacity: 1; }
+  /* brief dropout — link renegotiation */
+  93%      { opacity: 0; }
+  94%      { opacity: 1; }
+  95%      { opacity: 0; }
+  96%, 100%{ opacity: 1; }
 }
 
 /* Port activity LED (orange, left) */
@@ -1999,6 +2025,9 @@ body.view-rack .public-orgchart {
   .rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act { animation: none; }
   .rack-fw-fan { animation: none; }
   .rack-storage-led-activity.active { animation: none; }
+  .rack-ups-lcd { animation: none; }
+  .rack-ups-lcd-page { animation: none; opacity: 1; }
+  .rack-ups-lcd-page-2, .rack-ups-lcd-page-3 { display: none; }
 }
 
 /* ─── FX Off ──────────────────────────────────────────────── */
