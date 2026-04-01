@@ -11,6 +11,7 @@ window.RackRenderer = {
   _cssLink: null,
   _resizeObserver: null,
   _dualMode: false,     // true when ≥3 active divisions
+  _introPlayed: false,  // door open animation plays once per session
 
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
@@ -347,6 +348,45 @@ window.RackRenderer = {
 
     wrapper.appendChild(racksRow);
     container.appendChild(wrapper);
+
+    // Door open intro animation (once per session, skip in presentation mode)
+    const isPresentation = document.body.classList.contains('presentation-mode');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!this._introPlayed && !isPresentation) {
+      this._introPlayed = true;
+      wrapper.classList.add('rack-behind-doors');
+
+      const overlay = document.createElement('div');
+      overlay.className = 'rack-door-overlay';
+      overlay.innerHTML = `
+        <div class="rack-door rack-door-left">
+          <div class="rack-door-handle"></div>
+        </div>
+        <div class="rack-door-text">ACCESSING IDF-101...</div>
+        <div class="rack-door rack-door-right">
+          <div class="rack-door-handle"></div>
+        </div>
+      `;
+      container.appendChild(overlay);
+
+      if (reducedMotion) {
+        // Instant reveal
+        overlay.remove();
+        wrapper.classList.remove('rack-behind-doors');
+      } else {
+        // Text shows for 800ms, then doors swing open
+        setTimeout(() => {
+          overlay.classList.add('rack-doors-opening');
+          wrapper.classList.add('rack-reveal');
+        }, 800);
+
+        // Clean up after animation completes
+        setTimeout(() => {
+          overlay.remove();
+          wrapper.classList.remove('rack-behind-doors', 'rack-reveal');
+        }, 2200);
+      }
+    }
 
     // Resize observer
     this._resizeObserver = new ResizeObserver(() => {

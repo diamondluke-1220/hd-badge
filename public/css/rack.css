@@ -1579,6 +1579,127 @@ body.view-rack .public-orgchart {
   100% { transform: rotate(360deg); }
 }
 
+/* ─── Rack Door Intro Animation ──────────────────────────── */
+
+.rack-door-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1200px;
+  background: #060608;
+}
+
+.rack-door {
+  width: 50%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  background:
+    /* Vent pattern on door surface */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 8px,
+      rgba(255, 255, 255, 0.02) 8px, rgba(255, 255, 255, 0.02) 9px
+    ),
+    linear-gradient(180deg, #1C1C22 0%, #161618 50%, #1C1C22 100%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transform-origin: left center;
+}
+
+.rack-door-left {
+  left: 0;
+  transform-origin: left center;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rack-door-right {
+  right: 0;
+  left: auto;
+  transform-origin: right center;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Door handle */
+.rack-door-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 48px;
+  background: linear-gradient(180deg, #444 0%, #333 50%, #444 100%);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rack-door-left .rack-door-handle { right: 16px; }
+.rack-door-right .rack-door-handle { left: 16px; }
+
+/* CLI access text */
+.rack-door-text {
+  position: relative;
+  z-index: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--accent-green);
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.4);
+  animation: rack-door-text-blink 0.6s ease-in-out infinite;
+}
+
+@keyframes rack-door-text-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Door swing open */
+.rack-doors-opening .rack-door-left {
+  animation: rack-door-open-left 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.rack-doors-opening .rack-door-right {
+  animation: rack-door-open-right 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.rack-doors-opening .rack-door-text {
+  animation: rack-door-text-fade 0.3s ease-out forwards;
+}
+
+@keyframes rack-door-open-left {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(-95deg); }
+}
+
+@keyframes rack-door-open-right {
+  0% { transform: rotateY(0deg); }
+  100% { transform: rotateY(95deg); }
+}
+
+@keyframes rack-door-text-fade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Rack content hidden behind doors, then revealed */
+.rack-behind-doors {
+  opacity: 0;
+}
+
+.rack-reveal {
+  animation: rack-content-reveal 0.8s ease-out 0.4s forwards;
+}
+
+@keyframes rack-content-reveal {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
 /* ─── Fallback ────────────────────────────────────────────── */
 
 .rack-fallback {
