@@ -352,8 +352,11 @@ window.RackRenderer = {
     // Door open intro animation (once per session, skip in presentation mode)
     const isPresentation = document.body.classList.contains('presentation-mode');
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!this._introPlayed && !isPresentation) {
+    const introKey = 'rack-intro-played';
+    const sessionPlayed = sessionStorage.getItem(introKey);
+    if (!sessionPlayed && !this._introPlayed && !isPresentation) {
       this._introPlayed = true;
+      sessionStorage.setItem(introKey, '1');
       wrapper.classList.add('rack-behind-doors');
 
       const overlay = document.createElement('div');
