@@ -16,7 +16,7 @@ window.GridRenderer = {
         <div class="org-header-top">
           <div class="org-header-text">
             <div class="org-header-title">Help Desk <span class="org-header-accent">LLC.</span></div>
-            <div class="org-header-sub">Employee Directory &bull; <span class="odometer" id="payrollOdometer">${this._buildOdometerDigits(stats.visible)}</span> on payroll</div>
+            <div class="org-header-sub"><span class="odometer" id="payrollOdometer">${this._buildOdometerDigits(stats.visible)}</span> on payroll</div>
           </div>
           <div class="dept-filter-bar" id="deptFilterBar"></div>
         </div>

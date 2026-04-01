@@ -1522,6 +1522,11 @@ body {
   /* "Click" → "Tap" on touch devices — shortened to fit 1 line */
   .edit-hint {
     font-size: 0;
+    display: block;
+    width: 100%;
+    text-align: center;
+    padding: 0;
+    margin: 0 auto 8px;
   }
   .edit-hint::after {
     content: 'TAP BADGE TO CUSTOMIZE';
@@ -1612,8 +1617,8 @@ body {
     display: none !important;
     flex-direction: column;
     justify-content: center;
-    gap: 12px;
-    margin: 8px auto 4px;
+    gap: 4px;
+    margin: 4px auto 4px;
   }
   .stats-panel.mobile-expanded {
     display: flex !important;
@@ -2482,9 +2487,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 8px 20px;
   font-family: 'Inter', -apple-system, sans-serif;
-  font-size: 15px;
+  font-size: clamp(12px, 2.5vw, 14px);
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
@@ -2506,7 +2511,7 @@ body {
   font-size: 14px;
 }
 .view-dropdown-caret {
-  font-size: 10px;
+  font-size: 20px;
   opacity: 0.6;
   transition: transform 0.15s;
 }

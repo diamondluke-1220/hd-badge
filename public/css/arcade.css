@@ -40,12 +40,15 @@
    ============================================================ */
 
 body.view-arcade .app-header > h1,
-body.view-arcade .app-header > .app-nav,
+body.view-arcade .app-nav .app-nav-link,
 body.view-arcade #sfTicker,
 body.view-arcade .sf-ticker,
 body.view-arcade .stats-panel,
 body.view-arcade .ticker-bar {
   display: none !important;
+}
+body.view-arcade .app-nav {
+  position: static;
 }
 
 body.view-arcade .app-header {
@@ -2909,7 +2912,7 @@ body.view-arcade .public-orgchart {
 
 @media (max-width: 767px) {
   .arcade-slot {
-    width: calc((100vw - 32px - 16px) / 5);  /* 5 per row, 8px pad + 4×4px gaps */
+    width: calc((100vw - 32px - 20px) / 6);  /* 6 per row, 8px pad + 5×4px gaps */
     height: auto;
     aspect-ratio: 0.82;  /* match desktop 120/146 ratio */
   }
