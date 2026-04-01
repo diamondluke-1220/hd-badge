@@ -133,6 +133,21 @@ body.view-rack .public-orgchart {
 
 :root {
   --rack-u: 72px;
+
+  /* Device-specific surface tints (lighter to show detail) */
+  --device-fw: #28201E;
+  --device-core: #26241C;
+  --device-storage: #1E2028;
+  --device-switch: #22242A;
+  --device-vpn: #1C2030;
+  --device-wlc: #1C2620;
+  --device-ups: #202024;
+  --device-patch: #1A1A1E;
+  --device-cable: #141416;
+
+  /* Decorative tokens */
+  --silkscreen-opacity: 0.04;
+  --vent-color: rgba(0, 0, 0, 0.35);
 }
 
 /* ─── Devices (generic) ───────────────────────────────────── */
@@ -238,8 +253,96 @@ body.view-rack .public-orgchart {
 /* ─── Firewall (in-rack 1U device) ──────────────────────── */
 
 .rack-device-firewall {
-  background: linear-gradient(135deg, rgba(220, 38, 38, 0.06) 0%, var(--surface-card) 60%);
-  border-bottom: 1px solid rgba(220, 38, 38, 0.25);
+  background:
+    /* Horizontal vent grille — visible through the faceplate */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 3px,
+      var(--vent-color) 3px, var(--vent-color) 5px
+    ),
+    linear-gradient(180deg, var(--device-fw) 0%, #1A1216 100%);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Vent grille mask — covers left 55% only */
+.rack-device-firewall .rack-fw-vents {
+  position: absolute;
+  left: 3px;
+  top: 4px;
+  bottom: 4px;
+  width: 55%;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0px, transparent 3px,
+    rgba(0, 0, 0, 0.25) 3px, rgba(0, 0, 0, 0.25) 5px
+  );
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Silkscreen watermark */
+.rack-device-firewall::after {
+  content: 'CATCHFIRE';
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: rgba(239, 68, 68, var(--silkscreen-opacity));
+  pointer-events: none;
+  z-index: 0;
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Spinning fans behind vent grille */
+.rack-fw-fan {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: conic-gradient(
+    rgba(255,255,255,0.08) 0deg, rgba(255,255,255,0.08) 80deg,
+    transparent 80deg, transparent 90deg,
+    rgba(255,255,255,0.08) 90deg, rgba(255,255,255,0.08) 170deg,
+    transparent 170deg, transparent 180deg,
+    rgba(255,255,255,0.08) 180deg, rgba(255,255,255,0.08) 260deg,
+    transparent 260deg, transparent 270deg,
+    rgba(255,255,255,0.08) 270deg, rgba(255,255,255,0.08) 350deg,
+    transparent 350deg, transparent 360deg
+  );
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  z-index: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.rack-fw-fan-1 {
+  left: 20px;
+  animation: rack-fan-spin 3s linear infinite;
+}
+
+.rack-fw-fan-2 {
+  left: 52px;
+  animation: rack-fan-spin 3.4s linear infinite reverse;
+}
+
+/* Fan center hub */
+.rack-fw-fan::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rack-fw-accent {
@@ -248,6 +351,24 @@ body.view-rack .public-orgchart {
 
 .rack-fw-name {
   color: #ef4444 !important;
+}
+
+/* Port groups with dividers */
+.rack-fw-port-group {
+  display: flex;
+  gap: 2px;
+  padding: 3px 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.rack-fw-port-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0 3px;
+  align-self: center;
 }
 
 .rack-fw-led-pwr { background: var(--accent-green) !important; }
@@ -502,15 +623,57 @@ body.view-rack .public-orgchart {
 /* ─── Core Switch ─────────────────────────────────────────── */
 
 .rack-device-core {
-  background: linear-gradient(135deg, rgba(212, 168, 67, 0.08) 0%, var(--surface-card) 50%);
-  border-bottom: 1px solid rgba(212, 168, 67, 0.3);
-  /* 2U — height set by .rack-device-2u */
+  background:
+    /* Brushed metal — very fine horizontal lines */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 1px,
+      rgba(255, 255, 255, 0.012) 1px, rgba(255, 255, 255, 0.012) 2px
+    ),
+    linear-gradient(135deg, rgba(212, 168, 67, 0.1) 0%, var(--device-core) 40%, var(--device-core) 100%);
+  border-bottom: 1px solid rgba(212, 168, 67, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(212, 168, 67, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+}
+
+/* Top gold stripe (instead of left accent bar) */
+.rack-device-core .rack-device-accent {
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: auto;
+  width: auto;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(212, 168, 67, 0.1) 0%,
+    var(--accent-gold) 15%,
+    var(--accent-gold) 85%,
+    rgba(212, 168, 67, 0.1) 100%
+  );
+}
+
+/* Silkscreen */
+.rack-device-core::after {
+  content: 'CRISCO';
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: rgba(212, 168, 67, var(--silkscreen-opacity));
+  pointer-events: none;
+  z-index: 0;
 }
 
 .rack-device-core .rack-device-name {
   color: var(--accent-gold);
   font-size: 14px;
   letter-spacing: 1.2px;
+  text-shadow: 0 0 8px rgba(212, 168, 67, 0.3);
 }
 
 .rack-core-ports {
@@ -1019,80 +1182,243 @@ body.view-rack .public-orgchart {
   white-space: nowrap;
 }
 
-/* ─── NAS (Disk Bays) ─────────────────────────────────────── */
+/* ─── Storage Array (Newbtanix NX-3060-G7, 2U) ──────────── */
 
-.rack-device-nas {
-  background: linear-gradient(180deg, #1a1a22 0%, var(--surface-card) 100%);
+.rack-device-storage {
+  background:
+    /* Crosshatch texture — unique to storage */
+    repeating-linear-gradient(
+      45deg,
+      transparent 0px, transparent 4px,
+      rgba(255, 255, 255, 0.015) 4px, rgba(255, 255, 255, 0.015) 5px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0px, transparent 4px,
+      rgba(255, 255, 255, 0.015) 4px, rgba(255, 255, 255, 0.015) 5px
+    ),
+    linear-gradient(180deg, #1E2028 0%, #1A1C24 100%);
+  border-bottom: 1px solid rgba(91, 141, 239, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+  padding: 6px 10px;
 }
 
-.rack-nas-bays {
+.rack-storage-accent {
+  background: var(--accent-blue);
+}
+
+.rack-storage-name {
+  color: var(--accent-blue) !important;
+}
+
+/* Silkscreen */
+.rack-device-storage::after {
+  content: 'NEWBTANIX';
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: rgba(91, 141, 239, var(--silkscreen-opacity));
+  pointer-events: none;
+  z-index: 0;
+}
+
+.rack-storage-body {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   margin-top: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
-.rack-nas-bay {
-  width: 40px;
-  height: 32px;
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border);
+/* LCD status strip */
+.rack-storage-lcd {
+  width: 80px;
+  background: #060C14;
+  border: 1px solid rgba(91, 141, 239, 0.2);
   border-radius: 2px;
+  padding: 4px 5px;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
   gap: 2px;
+  box-shadow:
+    inset 0 0 10px rgba(0, 0, 0, 0.6),
+    0 0 3px rgba(91, 141, 239, 0.08);
+  flex-shrink: 0;
 }
 
-.rack-nas-bay-active {
-  border-color: rgba(91, 141, 239, 0.3);
+.rack-storage-lcd-line {
+  font-size: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(91, 141, 239, 0.8);
+  line-height: 1.2;
+  letter-spacing: 0.3px;
 }
 
-.rack-nas-disk {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--border);
-  border-radius: 50%;
+.rack-storage-lcd-line-dim {
+  color: rgba(91, 141, 239, 0.4);
+}
+
+/* 24-bay drive grid */
+.rack-storage-bay-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 3px 6px;
+  padding: 4px 8px 4px 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  flex: 1;
+}
+
+/* Individual drive bay — dark caddy with vent lines */
+.rack-storage-bay {
   position: relative;
+  background:
+    /* Horizontal vent lines on caddy face */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px, transparent 3px,
+      rgba(255, 255, 255, 0.04) 3px, rgba(255, 255, 255, 0.04) 4px
+    ),
+    linear-gradient(180deg, #2A2C34 0%, #22242C 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.rack-nas-disk::after {
+/* Orange pull-tab handle — the signature Nutanix feature */
+.rack-storage-bay::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: -1px;
+  width: 7px;
+  height: calc(100% - 4px);
+  background: linear-gradient(
+    180deg,
+    #E8972A 0%,
+    #D4870E 40%,
+    #C07A0A 100%
+  );
+  border-radius: 1px 2px 2px 1px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 3px rgba(232, 151, 42, 0.3);
+  z-index: 2;
+}
+
+/* Small latch dot on handle */
+.rack-storage-bay::after {
   content: '';
   position: absolute;
   top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 4px;
-  height: 4px;
+  right: 1px;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  z-index: 3;
+}
+
+/* Bay states */
+.rack-storage-bay-empty {
+  background: linear-gradient(180deg, #18191E 0%, #121316 100%);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.rack-storage-bay-empty::before {
+  background: linear-gradient(180deg, #6B5A30 0%, #4A3F20 100%);
+  box-shadow: none;
+  opacity: 0.4;
+}
+
+.rack-storage-bay-empty::after {
+  opacity: 0.3;
+}
+
+.rack-storage-bay-occupied {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.rack-storage-bay-occupied:hover {
+  border-color: rgba(91, 141, 239, 0.4);
+  box-shadow: 0 0 6px rgba(91, 141, 239, 0.2);
+}
+
+.rack-storage-bay-occupied:hover::before {
+  background: linear-gradient(180deg, #F0A030 0%, #E89020 100%);
+  box-shadow: 0 0 6px rgba(232, 151, 42, 0.5);
+}
+
+/* Bay LEDs */
+.rack-storage-bay-leds {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  display: flex;
+  gap: 2px;
+}
+
+.rack-storage-led-activity {
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: var(--text-disabled);
 }
 
-.rack-nas-disk-spin {
-  border-color: var(--accent-blue);
-  animation: rack-disk-spin 2s linear infinite;
-}
-
-.rack-nas-disk-spin::after {
+.rack-storage-led-activity.active {
   background: var(--accent-blue);
+  box-shadow: 0 0 4px rgba(91, 141, 239, 0.5);
+  animation: rack-led-blink 0.4s ease-in-out infinite;
 }
 
-.rack-nas-bay-label {
-  font-size: 6px;
-  color: var(--text-disabled);
-  letter-spacing: 0.3px;
+.rack-storage-led-fault {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: transparent;
 }
 
-@keyframes rack-disk-spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.rack-storage-led-fault.faulted {
+  background: #d97706;
+  box-shadow: 0 0 4px rgba(217, 119, 6, 0.5);
+}
+
+/* Phase 3 animation prep */
+@keyframes rack-bay-eject {
+  0% { transform: translateY(0); box-shadow: none; }
+  40% { transform: translateY(3px); box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.4); }
+  100% { transform: translateY(6px); box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.6); opacity: 0.5; }
+}
+
+@keyframes rack-bay-insert {
+  0% { transform: translateY(6px); opacity: 0.5; }
+  60% { transform: translateY(1px); opacity: 1; }
+  100% { transform: translateY(0); box-shadow: inset 0 0 4px rgba(91, 141, 239, 0.2); }
 }
 
 /* ─── LED Blink Animation ─────────────────────────────────── */
 
 @keyframes rack-led-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+  50% { opacity: 0.3; box-shadow: 0 0 2px currentColor; }
+}
+
+@keyframes rack-fan-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* ─── Fallback ────────────────────────────────────────────── */
@@ -1184,12 +1510,16 @@ body.view-rack .public-orgchart {
 
 @media (prefers-reduced-motion: reduce) {
   .rack-switch-led { animation: none; }
-  .rack-nas-disk-spin { animation: none; }
+  /* NAS removed — replaced by storage array */
   .rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act { animation: none; }
+  .rack-fw-fan { animation: none; }
+  .rack-storage-led-activity.active { animation: none; }
 }
 
 /* ─── FX Off ──────────────────────────────────────────────── */
 
 .fx-off .rack-switch-led { animation: none; }
-.fx-off .rack-nas-disk-spin { animation: none; }
+/* NAS removed — replaced by storage array */
 .fx-off .rack-wifi-led-wlan, .fx-off .rack-wifi-led-eth, .fx-off .rack-wifi-led-act { animation: none; }
+.fx-off .rack-fw-fan { animation: none; }
+.fx-off .rack-storage-led-activity.active { animation: none; }

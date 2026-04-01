@@ -200,8 +200,8 @@ window.RackRenderer = {
     this._RACK_A_THEMES.forEach(t => addDivision(t, rackA));
     this._RACK_B_THEMES.forEach(t => addDivision(t, rackB));
 
-    // NAS device (1U) — under core switch in Rack A
-    rackA.unshift({ type: 'nas' });
+    // Storage array (2U) — under core switch in Rack A
+    rackA.unshift({ type: 'storage' });
 
     // VPN Concentrator (1U) — top of Rack B, before divisions
     rackB.unshift({ type: 'vpn' });
@@ -264,7 +264,7 @@ window.RackRenderer = {
     return rack.reduce((sum, d) => {
       if (d.type === 'switch') return sum + 1;
       if (d.type === 'patch') return sum + (d.uSize || 1);
-      if (d.type === 'nas') return sum + 1;
+      if (d.type === 'storage') return sum + 2;
       if (d.type === 'vpn') return sum + 1;
       if (d.type === 'wlc') return sum + 1;
       if (d.type === 'blank') return sum + 1;
@@ -381,8 +381,8 @@ window.RackRenderer = {
         case 'patch':
           frame.appendChild(this._renderPatchPanel(device));
           break;
-        case 'nas':
-          frame.appendChild(this._renderNAS());
+        case 'storage':
+          frame.appendChild(this._renderStorageArray());
           break;
         case 'vpn':
           frame.appendChild(this._renderVPN());
@@ -427,19 +427,29 @@ window.RackRenderer = {
 
     const label = side === 'A' ? 'FW-A' : 'FW-B';
 
-    // Connection ports: WAN uplink + 2 core cross-connects + HA link + empties
+    // Port groups: WAN | Core cross-connects + HA | empties
     let portsHtml = '<div class="rack-switch-ports">';
+    portsHtml += '<div class="rack-fw-port-group">';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-wan" title="WAN"></div>';
+    portsHtml += '</div>';
+    portsHtml += '<div class="rack-fw-port-divider"></div>';
+    portsHtml += '<div class="rack-fw-port-group">';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core A"></div>';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core B"></div>';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-ha" title="HA Link"></div>';
+    portsHtml += '</div>';
+    portsHtml += '<div class="rack-fw-port-divider"></div>';
+    portsHtml += '<div class="rack-fw-port-group">';
     for (let i = 0; i < 4; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
     }
     portsHtml += '</div>';
+    portsHtml += '</div>';
 
     el.innerHTML = `
       <div class="rack-device-accent rack-fw-accent"></div>
+      <div class="rack-fw-fan rack-fw-fan-1"></div>
+      <div class="rack-fw-fan rack-fw-fan-2"></div>
       <div class="rack-device-header">
         <span class="rack-device-name rack-fw-name">${label}</span>
         <span class="rack-device-model">CatchFire ASA-5525</span>
@@ -548,6 +558,7 @@ window.RackRenderer = {
     connHtml += '</div>';
 
     el.innerHTML = `
+      <div class="rack-device-accent"></div>
       <div class="rack-device-header">
         <span class="rack-device-name">${coreLabel}</span>
         <span class="rack-device-model">${model}</span>
@@ -663,35 +674,52 @@ window.RackRenderer = {
   },
 
 
-  _renderNAS() {
+  _renderStorageArray() {
     const el = document.createElement('div');
-    el.className = 'rack-device rack-device-nas rack-device-1u';
-    el.setAttribute('data-device-type', 'nas');
+    el.className = 'rack-device rack-device-storage rack-device-2u';
+    el.setAttribute('data-device-type', 'storage');
 
-    // 4 drive bays with spinning disk slots
-    let baysHtml = '<div class="rack-nas-bays">';
-    const labels = ['BAY 1', 'BAY 2', 'BAY 3', 'BAY 4'];
-    const statuses = ['active', 'active', 'active', 'standby'];
-    for (let i = 0; i < 4; i++) {
+    // 24 drive bays (2 rows of 12)
+    let baysHtml = '<div class="rack-storage-bay-grid">';
+    for (let i = 0; i < 24; i++) {
+      const active = i < 18; // first 18 bays occupied, rest empty
+      const bayClass = active ? 'rack-storage-bay-occupied' : 'rack-storage-bay-empty';
+      const actLed = active ? 'active' : '';
       baysHtml += `
-        <div class="rack-nas-bay rack-nas-bay-${statuses[i]}">
-          <div class="rack-nas-disk ${statuses[i] === 'active' ? 'rack-nas-disk-spin' : ''}"></div>
-          <span class="rack-nas-bay-label">${labels[i]}</span>
+        <div class="rack-storage-bay ${bayClass}" data-bay="${i}">
+          <div class="rack-storage-bay-leds">
+            <div class="rack-storage-led-activity ${actLed}"></div>
+            <div class="rack-storage-led-fault"></div>
+          </div>
         </div>
       `;
     }
     baysHtml += '</div>';
 
+    // Dynamic stats
+    const iops = 12400 + Math.floor(Math.random() * 8000);
+    const usedTB = (14.2 + Math.random() * 6).toFixed(1);
+    const totalTB = '38.4';
+
     el.innerHTML = `
+      <div class="rack-device-accent rack-storage-accent"></div>
       <div class="rack-device-header">
-        <span class="rack-device-name">SPINOLOGY DiskStation</span>
-        <span class="rack-device-model">DS-1621+</span>
+        <span class="rack-device-name rack-storage-name">NEWBTANIX</span>
+        <span class="rack-device-model">NX-3060-G7</span>
         <div class="rack-switch-leds">
+          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
           <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
           <div class="rack-switch-led" style="background:var(--accent-green)"></div>
         </div>
       </div>
-      ${baysHtml}
+      <div class="rack-storage-body">
+        <div class="rack-storage-lcd">
+          <div class="rack-storage-lcd-line">${iops.toLocaleString()} IOPS</div>
+          <div class="rack-storage-lcd-line">${usedTB}/${totalTB} TB</div>
+          <div class="rack-storage-lcd-line rack-storage-lcd-line-dim">CLUSTER: HEALTHY</div>
+        </div>
+        ${baysHtml}
+      </div>
     `;
 
     return el;
