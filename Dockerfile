@@ -29,6 +29,15 @@ ARG GIT_SHA
 COPY src/ ./src/
 COPY public/ ./public/
 
+# Append cache-busting version to CSS/JS links in HTML files
+RUN SHORT_SHA=$(echo "$GIT_SHA" | cut -c1-8) && \
+    find /app/public -name '*.html' -exec sed -i \
+      -e "s/\.css\"/\.css?v=${SHORT_SHA}\"/g" \
+      -e "s/\.css'/\.css?v=${SHORT_SHA}'/g" \
+      -e "s/\.js\"/\.js?v=${SHORT_SHA}\"/g" \
+      -e "s/\.js'/\.js?v=${SHORT_SHA}'/g" \
+    {} +
+
 # Create data directory (mounted as volume in production)
 RUN mkdir -p /app/data/photos /app/data/badges /app/data/thumbs /app/data/headshots
 
