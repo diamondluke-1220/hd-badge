@@ -398,6 +398,22 @@ window.RackRenderer = {
     this._resizeObserver.observe(wrapper);
   },
 
+  _addRackEars(el) {
+    const is2U = el.classList.contains('rack-device-2u');
+    ['left', 'right'].forEach(side => {
+      const ear = document.createElement('div');
+      ear.className = `rack-ear rack-ear-${side}${is2U ? ' rack-ear-2u' : ''}`;
+      if (is2U) {
+        // U-shaped bracket: screw → slot → screw
+        ear.innerHTML = '<div class="rack-ear-screw"></div><div class="rack-ear-slot"></div><div class="rack-ear-screw"></div>';
+      } else {
+        // Simple L-ear: single screw
+        ear.innerHTML = '<div class="rack-ear-screw"></div>';
+      }
+      el.appendChild(ear);
+    });
+  },
+
   _renderRack(devices, locationId, label, execBadges, coreSide) {
     const frame = document.createElement('div');
     frame.className = 'rack-frame';
@@ -451,6 +467,13 @@ window.RackRenderer = {
         case 'ups':
           frame.appendChild(this._renderUPS(device));
           break;
+      }
+    });
+
+    // Add rack ears to all devices (except blanks and cable mgmt)
+    frame.querySelectorAll('.rack-device').forEach(d => {
+      if (!d.classList.contains('rack-device-blank') && !d.classList.contains('rack-device-cable-mgmt')) {
+        this._addRackEars(d);
       }
     });
 
@@ -631,13 +654,17 @@ window.RackRenderer = {
     el.setAttribute('data-device-type', 'switch');
     el.setAttribute('data-theme', device.theme);
 
-    // Row of switch ports with divider every 6 — some active, some empty
+    // Row of switch ports with divider every 6, long-cycle LED animation with random phase offset
     const totalPorts = 12;
     const activePorts = Math.min(device.portCount + 1, totalPorts);
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
       if (i === 6) portsHtml += '<div class="rack-switch-port-divider"></div>';
-      portsHtml += `<div class="rack-conn-port ${i < activePorts ? 'rack-conn-port-active' : ''}"></div>`;
+      const isActive = i < activePorts;
+      // Random delay (0-24s) puts each port at different point in the 24s cycle
+      // Random speed variation (16-22s) prevents sync even with same delay
+      const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
+      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" ${style}></div>`;
     }
     portsHtml += '</div>';
 
@@ -735,16 +762,17 @@ window.RackRenderer = {
     el.className = 'rack-device rack-device-storage rack-device-2u';
     el.setAttribute('data-device-type', 'storage');
 
-    // 24 drive bays (2 rows of 12)
+    // 24 drive bays (2 rows of 12) with long-cycle LED animation at random phase
     let baysHtml = '<div class="rack-storage-bay-grid">';
     for (let i = 0; i < 24; i++) {
-      const active = i < 18; // first 18 bays occupied, rest empty
+      const active = i < 18;
       const bayClass = active ? 'rack-storage-bay-occupied' : 'rack-storage-bay-empty';
       const actLed = active ? 'active' : '';
+      const delay = active ? `style="animation-delay:-${(Math.random() * 24).toFixed(1)}s;animation-duration:${(14 + Math.random() * 8).toFixed(1)}s"` : '';
       baysHtml += `
         <div class="rack-storage-bay ${bayClass}" data-bay="${i}">
           <div class="rack-storage-bay-leds">
-            <div class="rack-storage-led-activity ${actLed}"></div>
+            <div class="rack-storage-led-activity ${actLed}" ${delay}></div>
             <div class="rack-storage-led-fault"></div>
           </div>
         </div>
