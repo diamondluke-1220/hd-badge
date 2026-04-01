@@ -91,11 +91,17 @@ window.RackRenderer = {
     const portEl = this._createPort(badge);
     grid.appendChild(portEl);
 
-    // Update count
+    // Update port count
     const countEl = panel.querySelector('.rack-port-count');
     if (countEl) {
       const ports = grid.querySelectorAll('.rack-port:not(.rack-port-empty)');
       countEl.textContent = `${ports.length}`;
+    }
+
+    // Update WLC AP count (3 APs per employee)
+    const wlcCount = this._container.querySelector('[data-wlc-aps]');
+    if (wlcCount) {
+      wlcCount.textContent = `${this._allBadges.length * 3} APs`;
     }
 
     return portEl;
@@ -194,16 +200,20 @@ window.RackRenderer = {
     this._RACK_A_THEMES.forEach(t => addDivision(t, rackA));
     this._RACK_B_THEMES.forEach(t => addDivision(t, rackB));
 
-    // Contractors — switch + patch panel
+    // NAS device (1U) — under core switch in Rack A
+    rackA.unshift({ type: 'nas' });
+
+    // VPN Concentrator (1U) — top of Rack B, before divisions
+    rackB.unshift({ type: 'vpn' });
+
+    // Contractors — always Rack B (routed through VPN concentrator)
     const customDepts = byDiv['_custom'];
     if (customDepts) {
       const customEmployees = [];
       Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
 
-      const target = this._usedU(rackA) <= this._usedU(rackB) ? rackA : rackB;
-
       // Contractor switch (1U)
-      target.push({
+      rackB.push({
         type: 'switch',
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
@@ -212,7 +222,7 @@ window.RackRenderer = {
       });
 
       // Contractor patch panel (1U)
-      target.push({
+      rackB.push({
         type: 'patch',
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
@@ -223,16 +233,14 @@ window.RackRenderer = {
       });
     }
 
-    // NAS device (1U) — cosmetic, employee photos spin like disks
-    rackA.push({ type: 'nas' });
-
     // Match rack heights — add blanks so both racks are the same total U
-    const coreU = 2;
-    const upsU = 3; // UPS (2U) + PDU (1U) added after
+    const coreU = 2;  // core switch
+    const fwU = 1;    // firewall (rendered separately but counts for height)
+    const bottomU = 3; // UPS (2U) + WLC/blank (1U)
     const devicesA = this._usedU(rackA);
     const devicesB = this._usedU(rackB);
-    const totalA = coreU + devicesA + upsU;
-    const totalB = coreU + devicesB + upsU;
+    const totalA = fwU + coreU + devicesA + bottomU;
+    const totalB = fwU + coreU + devicesB + bottomU;
     const maxU = Math.max(totalA, totalB);
 
     // Fill shorter rack with blanks to match taller rack
@@ -241,11 +249,11 @@ window.RackRenderer = {
     for (let i = 0; i < blanksA; i++) rackA.push({ type: 'blank' });
     for (let i = 0; i < blanksB; i++) rackB.push({ type: 'blank' });
 
-    // UPS + PDU always at bottom
+    // Bottom devices: WLC on Rack A (wireless path), blank on B, then UPS on both
+    rackA.push({ type: 'wlc' });
+    rackB.push({ type: 'blank' });
     rackA.push({ type: 'ups', pct: 80 + Math.floor(Math.random() * 15), runtime: 42 + Math.floor(Math.random() * 20) });
-    rackA.push({ type: 'pdu', outlets: this._countDevices(rackA) });
     rackB.push({ type: 'ups', pct: 65 + Math.floor(Math.random() * 25), runtime: 28 + Math.floor(Math.random() * 30) });
-    rackB.push({ type: 'pdu', outlets: this._countDevices(rackB) });
 
     return { rackA, rackB, execBadges };
   },
@@ -257,9 +265,10 @@ window.RackRenderer = {
       if (d.type === 'switch') return sum + 1;
       if (d.type === 'patch') return sum + (d.uSize || 1);
       if (d.type === 'nas') return sum + 1;
+      if (d.type === 'vpn') return sum + 1;
+      if (d.type === 'wlc') return sum + 1;
       if (d.type === 'blank') return sum + 1;
       if (d.type === 'ups') return sum + 2;
-      if (d.type === 'pdu') return sum + 1;
       return sum;
     }, 0);
   },
@@ -289,19 +298,45 @@ window.RackRenderer = {
     const wrapper = document.createElement('div');
     wrapper.className = 'rack-container';
 
+    // Clouds row — separate from rack columns so they align independently
+    const cloudsRow = document.createElement('div');
+    cloudsRow.className = 'rack-clouds-row';
+    cloudsRow.appendChild(this._renderInternetCloud('A'));
     if (this._dualMode) {
-      // Dual rack layout
+      cloudsRow.appendChild(this._renderInternetCloud('B'));
+    }
+    wrapper.appendChild(cloudsRow);
+
+    // Rack columns with above-rack devices
+    const racksRow = document.createElement('div');
+    racksRow.className = 'rack-frames-row';
+
+    if (this._dualMode) {
+      // Rack A column: WiFi AP (perched) → rack frame
+      const colA = document.createElement('div');
+      colA.className = 'rack-column';
+      colA.appendChild(this._renderWiFiAP());
       const frameA = this._renderRack(this._rackData.rackA, 'IDF-101-PROD', 'RACK A', this._rackData.execBadges, 'A');
+      colA.appendChild(frameA);
+      racksRow.appendChild(colA);
+
+      // Rack B column: rack frame only
+      const colB = document.createElement('div');
+      colB.className = 'rack-column';
       const frameB = this._renderRack(this._rackData.rackB, 'IDF-102-OFFICE', 'RACK B', this._rackData.execBadges, 'B');
-      wrapper.appendChild(frameA);
-      wrapper.appendChild(frameB);
+      colB.appendChild(frameB);
+      racksRow.appendChild(colB);
     } else {
-      // Single rack mode — merge everything
+      const colA = document.createElement('div');
+      colA.className = 'rack-column';
+      colA.appendChild(this._renderWiFiAP());
       const merged = [...this._rackData.rackA, ...this._rackData.rackB];
       const frame = this._renderRack(merged, 'IDF-101', 'RACK A', this._rackData.execBadges, 'A');
-      wrapper.appendChild(frame);
+      colA.appendChild(frame);
+      racksRow.appendChild(colA);
     }
 
+    wrapper.appendChild(racksRow);
     container.appendChild(wrapper);
 
     // Resize observer
@@ -331,7 +366,10 @@ window.RackRenderer = {
     `;
     frame.appendChild(labelEl);
 
-    // Core switch (always first device)
+    // Firewall (above core switch)
+    frame.appendChild(this._renderFirewall(coreSide));
+
+    // Core switch
     frame.appendChild(this._renderCoreSwitch(execBadges, coreSide));
 
     // Devices
@@ -346,20 +384,120 @@ window.RackRenderer = {
         case 'nas':
           frame.appendChild(this._renderNAS());
           break;
+        case 'vpn':
+          frame.appendChild(this._renderVPN());
+          break;
         case 'blank':
           frame.appendChild(this._renderBlank());
           break;
+        case 'wlc':
+          frame.appendChild(this._renderWLC());
+          break;
         case 'ups':
           frame.appendChild(this._renderUPS(device));
-          break;
-        case 'pdu':
-          frame.appendChild(this._renderPDU(device));
           break;
       }
     });
 
     return frame;
   },
+
+  // ─── Above-Rack Devices ─────────────────────────────────
+
+  _renderInternetCloud(side) {
+    const el = document.createElement('div');
+    el.className = 'rack-internet-cloud';
+    el.setAttribute('data-device-type', 'cloud');
+    el.setAttribute('data-cloud-side', side);
+    // SVG cloud shape — proper bumpy silhouette
+    el.innerHTML = `
+      <svg class="rack-cloud-svg" viewBox="0 0 120 60" xmlns="http://www.w3.org/2000/svg">
+        <path class="rack-cloud-fill" d="M30,50 Q10,50 10,38 Q10,28 20,25 Q18,15 28,12 Q38,5 50,10 Q55,3 68,6 Q78,2 88,10 Q100,8 105,20 Q115,22 112,35 Q115,48 100,50 Z"/>
+        <text x="60" y="36" text-anchor="middle" class="rack-cloud-text">INTERNET</text>
+      </svg>
+    `;
+    return el;
+  },
+
+  _renderFirewall(side) {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-firewall rack-device-1u';
+    el.setAttribute('data-device-type', 'firewall');
+    el.setAttribute('data-fw-side', side);
+
+    const label = side === 'A' ? 'FW-A' : 'FW-B';
+
+    // Connection ports: WAN uplink + 2 core cross-connects + HA link + empties
+    let portsHtml = '<div class="rack-switch-ports">';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-wan" title="WAN"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core A"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core B"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-ha" title="HA Link"></div>';
+    for (let i = 0; i < 4; i++) {
+      portsHtml += '<div class="rack-conn-port"></div>';
+    }
+    portsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-accent rack-fw-accent"></div>
+      <div class="rack-device-header">
+        <span class="rack-device-name rack-fw-name">${label}</span>
+        <span class="rack-device-model">CatchFire ASA-5525</span>
+        <div class="rack-fw-threat">
+          <span class="rack-fw-threat-icon">&#9888;</span>
+          <span class="rack-fw-threat-count" data-fw-threats="${side}">0</span>
+        </div>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led rack-fw-led-pwr"></div>
+          <div class="rack-switch-led rack-fw-led-act"></div>
+          <div class="rack-switch-led rack-fw-led-ha"></div>
+        </div>
+      </div>
+      ${portsHtml}
+    `;
+
+    return el;
+  },
+
+  _renderWiFiAP() {
+    const el = document.createElement('div');
+    el.className = 'rack-device-wifi';
+    el.setAttribute('data-device-type', 'wifi');
+
+    // WiFi icon + SSID above, Linksys body sits on rack
+    el.innerHTML = `
+      <div class="rack-wifi-label">
+        <svg class="rack-wifi-icon" viewBox="0 0 24 24" width="14" height="14">
+          <path fill="currentColor" d="M12 18c-.89 0-1.74.35-2.37.98a3.3 3.3 0 0 0 4.74 0A3.35 3.35 0 0 0 12 18zm0-4c-1.98 0-3.82.78-5.21 2.17l1.42 1.42A5.46 5.46 0 0 1 12 16c1.47 0 2.84.57 3.79 1.59l1.42-1.42A7.46 7.46 0 0 0 12 14zm0-4c-3.07 0-5.9 1.18-8.07 3.35l1.42 1.42A9.44 9.44 0 0 1 12 12c2.53 0 4.92.98 6.65 2.77l1.42-1.42A11.44 11.44 0 0 0 12 10zm0-4C7.31 6 3.07 7.9 0 11l1.42 1.42C4.05 9.78 7.75 8 12 8s7.95 1.78 10.58 4.42L24 11c-3.07-3.1-7.31-5-12-5z"/>
+        </svg>
+        <span class="rack-wifi-ssid">HELPDESK-GUEST-5G</span>
+      </div>
+      <div class="rack-wifi-router">
+        <div class="rack-wifi-antennas">
+          <div class="rack-wifi-antenna rack-wifi-ant-l"></div>
+          <div class="rack-wifi-antenna rack-wifi-ant-c"></div>
+          <div class="rack-wifi-antenna rack-wifi-ant-r"></div>
+        </div>
+        <div class="rack-wifi-body-box">
+          <div class="rack-wifi-top-half">
+            <div class="rack-wifi-led-row">
+              <div class="rack-wifi-led rack-wifi-led-pwr"></div>
+              <div class="rack-wifi-led rack-wifi-led-wlan"></div>
+              <div class="rack-wifi-led rack-wifi-led-eth"></div>
+              <div class="rack-wifi-led rack-wifi-led-act"></div>
+            </div>
+          </div>
+          <div class="rack-wifi-bottom-half">
+            <span class="rack-wifi-brand">LINKSYS</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return el;
+  },
+
+  // ─── Rack Device Renderers ─────────────────────────────
 
   _renderCoreSwitch(execBadges, side) {
     const el = document.createElement('div');
@@ -453,6 +591,43 @@ window.RackRenderer = {
     return el;
   },
 
+  _renderWLC() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-wlc rack-device-1u';
+    el.setAttribute('data-device-type', 'wlc');
+
+    // Dynamic AP count: 3 APs per employee
+    const apCount = Math.max(1, this._allBadges.length * 3);
+
+    let portsHtml = '<div class="rack-switch-ports">';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-wlc-port-ap" title="AP Mgmt"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-wlc-port-ap" title="AP Mgmt"></div>';
+    for (let i = 0; i < 5; i++) {
+      portsHtml += '<div class="rack-conn-port"></div>';
+    }
+    portsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-accent rack-wlc-accent"></div>
+      <div class="rack-device-header">
+        <span class="rack-device-name rack-wlc-name">WIRELESS CONTROLLER</span>
+        <span class="rack-device-model">Crisco AIR-CT5520</span>
+        <div class="rack-wlc-status">
+          <span class="rack-wlc-ap-count" data-wlc-aps>${apCount} APs</span>
+        </div>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
+        </div>
+      </div>
+      ${portsHtml}
+    `;
+
+    return el;
+  },
+
   _renderPatchPanel(device) {
     // 1U = 12 ports. Show first 12 employees, rest handled by pool rotation (Phase 3).
     const totalPorts = 12;
@@ -517,6 +692,42 @@ window.RackRenderer = {
         </div>
       </div>
       ${baysHtml}
+    `;
+
+    return el;
+  },
+
+  _renderVPN() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-vpn rack-device-1u';
+    el.setAttribute('data-device-type', 'vpn');
+
+    let portsHtml = '<div class="rack-switch-ports">';
+    // 2 uplink ports (to core) + 1 tunnel port + 1 downlink (to contractor switch) + empties
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-vpn-port-tunnel" title="IPsec Tunnel"></div>';
+    portsHtml += '<div class="rack-conn-port rack-conn-port-active" title="SW-CTR"></div>';
+    for (let i = 0; i < 5; i++) {
+      portsHtml += '<div class="rack-conn-port"></div>';
+    }
+    portsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-accent" style="background:#2563EB"></div>
+      <div class="rack-device-header">
+        <span class="rack-device-name" style="color:#2563EB">VPN CONCENTRATOR</span>
+        <span class="rack-device-model">CatchFire VPN-3030</span>
+        <div class="rack-vpn-status">
+          <span class="rack-vpn-tunnel-icon">&#128274;</span>
+          <span class="rack-vpn-tunnel-label">TUNNEL UP</span>
+        </div>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led" style="background:#2563EB"></div>
+          <div class="rack-switch-led" style="background:#2563EB"></div>
+          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+        </div>
+      </div>
+      ${portsHtml}
     `;
 
     return el;

@@ -15,13 +15,18 @@ body.view-rack .app-header {
   padding: 0;
   border: none;
   background: #0a0a0a;
+  overflow: visible;
 }
 
 body.view-rack .view-dropdown {
   position: fixed;
-  top: 8px;
+  top: 4px;
   right: 16px;
-  z-index: 20;
+  z-index: 100;
+}
+
+body.view-rack .view-dropdown-trigger {
+  padding: 4px 12px;
 }
 
 body.view-rack .public-orgchart {
@@ -40,13 +45,26 @@ body.view-rack .public-orgchart {
   right: 0;
   bottom: 0;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 60px;
-  padding: 0 32px;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 32px;
   background: radial-gradient(ellipse at 50% 30%, #141420 0%, #0a0a0f 50%, #060608 100%);
   overflow: auto;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.rack-frames-row {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 60px;
+}
+
+.rack-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
 }
 
 /* ─── Rack Frame ──────────────────────────────────────────── */
@@ -175,6 +193,311 @@ body.view-rack .public-orgchart {
   bottom: 0;
   width: 3px;
 }
+
+/* (rack-column styles defined above in .rack-frames-row section) */
+
+/* ─── Internet Cloud ─────────────────────────────────────── */
+
+/* Clouds row — spans full width, pushes clouds to outer edges */
+.rack-clouds-row {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1280px;
+  margin-bottom: 8px;
+}
+
+.rack-clouds-row .rack-internet-cloud:only-child {
+  /* Single rack mode — keep cloud left */
+}
+
+.rack-internet-cloud {
+  display: flex;
+}
+
+.rack-cloud-svg {
+  width: 160px;
+  height: 80px;
+  filter: drop-shadow(0 0 8px rgba(91, 141, 239, 0.2));
+}
+
+.rack-cloud-fill {
+  fill: rgba(91, 141, 239, 0.15);
+  stroke: rgba(91, 141, 239, 0.3);
+  stroke-width: 1.5;
+}
+
+.rack-cloud-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  fill: var(--accent-blue);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Firewall (in-rack 1U device) ──────────────────────── */
+
+.rack-device-firewall {
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.06) 0%, var(--surface-card) 60%);
+  border-bottom: 1px solid rgba(220, 38, 38, 0.25);
+}
+
+.rack-fw-accent {
+  background: #ef4444;
+}
+
+.rack-fw-name {
+  color: #ef4444 !important;
+}
+
+.rack-fw-led-pwr { background: var(--accent-green) !important; }
+.rack-fw-led-act { background: #d97706 !important; animation-duration: 0.8s !important; }
+.rack-fw-led-ha { background: var(--accent-green) !important; }
+
+.rack-fw-port-wan {
+  border-color: rgba(91, 141, 239, 0.4) !important;
+  background: rgba(91, 141, 239, 0.08) !important;
+}
+
+.rack-fw-port-wan::after { background: var(--accent-blue) !important; }
+
+.rack-fw-port-core {
+  border-color: rgba(212, 168, 67, 0.4) !important;
+  background: rgba(212, 168, 67, 0.08) !important;
+}
+
+.rack-fw-port-core::after { background: var(--accent-gold) !important; }
+
+.rack-fw-port-ha {
+  border-color: rgba(220, 38, 38, 0.4) !important;
+  background: rgba(220, 38, 38, 0.08) !important;
+}
+
+.rack-fw-port-ha::after { background: #ef4444 !important; }
+
+.rack-fw-threat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.rack-fw-threat-icon {
+  font-size: 12px;
+  color: #d97706;
+}
+
+.rack-fw-threat-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d97706;
+  font-family: 'JetBrains Mono', monospace;
+  min-width: 16px;
+}
+
+/* ─── WiFi AP (Linksys WRT style, perched on Rack A) ───── */
+
+.rack-device-wifi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: 0;
+  z-index: 2;
+  align-self: flex-end;
+  padding-right: 14px;
+}
+
+/* WiFi icon + SSID label above the router */
+.rack-wifi-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-end;
+  padding-right: 20px;
+}
+
+.rack-wifi-icon {
+  color: var(--accent-green);
+  opacity: 0.7;
+}
+
+.rack-wifi-ssid {
+  font-size: 8px;
+  color: var(--accent-green);
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+}
+
+/* Router body + antennas container */
+.rack-wifi-router {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 3 antennas rising from behind the body */
+.rack-wifi-antennas {
+  display: flex;
+  justify-content: space-between;
+  width: 80px;
+  padding: 0 6px;
+  margin-bottom: -3px;
+  z-index: 0;
+}
+
+.rack-wifi-antenna {
+  width: 2px;
+  height: 22px;
+  background: linear-gradient(180deg, #555 0%, #333 100%);
+  border-radius: 1.5px 1.5px 0 0;
+  position: relative;
+}
+
+/* Rounded tip */
+.rack-wifi-antenna::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 4px;
+  background: #666;
+  border-radius: 2px 2px 0 0;
+}
+
+.rack-wifi-ant-l { transform: rotate(-15deg); transform-origin: bottom center; }
+.rack-wifi-ant-c { transform: rotate(0deg); }
+.rack-wifi-ant-r { transform: rotate(15deg); transform-origin: bottom center; }
+
+/* Two-tone body: dark top, blue bottom — sits on rack */
+.rack-wifi-body-box {
+  width: 100px;
+  height: 28px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+}
+
+.rack-wifi-top-half {
+  flex: 1;
+  background: linear-gradient(180deg, #2a2a32 0%, #1e1e26 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+}
+
+.rack-wifi-bottom-half {
+  flex: 1;
+  background: linear-gradient(180deg, #3b6fd4 0%, #2557b8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid rgba(59, 111, 212, 0.4);
+  border-top: none;
+}
+
+.rack-wifi-brand {
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rack-wifi-led-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.rack-wifi-led {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.rack-wifi-led-pwr { background: var(--accent-green); }
+.rack-wifi-led-wlan { background: var(--accent-green); animation: rack-led-blink 1s ease-in-out infinite; }
+.rack-wifi-led-eth { background: var(--accent-green); animation: rack-led-blink 1.5s ease-in-out infinite 0.3s; }
+.rack-wifi-led-act { background: var(--accent-gold); animation: rack-led-blink 0.6s ease-in-out infinite; }
+
+/* ─── WLC (Wireless LAN Controller) ──────────────────────── */
+
+.rack-device-wlc {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, var(--surface-card) 60%);
+  border-bottom: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.rack-wlc-accent {
+  background: var(--accent-green);
+}
+
+.rack-wlc-name {
+  color: var(--accent-green) !important;
+}
+
+.rack-wlc-status {
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.rack-wlc-ap-count {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--accent-green);
+  letter-spacing: 0.5px;
+}
+
+.rack-wlc-port-ap {
+  border-color: rgba(34, 197, 94, 0.4) !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+}
+
+.rack-wlc-port-ap::after { background: var(--accent-green) !important; }
+
+/* ─── VPN Concentrator ───────────────────────────────────── */
+
+.rack-device-vpn {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, var(--surface-card) 60%);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.rack-vpn-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.rack-vpn-tunnel-icon {
+  font-size: 10px;
+}
+
+.rack-vpn-tunnel-label {
+  font-size: 8px;
+  font-weight: 700;
+  color: #2563EB;
+  letter-spacing: 0.5px;
+}
+
+.rack-vpn-port-tunnel {
+  border-color: rgba(37, 99, 235, 0.5) !important;
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+
+.rack-vpn-port-tunnel::after { background: #2563EB !important; }
 
 /* ─── Core Switch ─────────────────────────────────────────── */
 
@@ -786,10 +1109,13 @@ body.view-rack .public-orgchart {
 
 @media (max-width: 640px) {
   .rack-container {
+    padding: 12px 8px;
+  }
+
+  .rack-frames-row {
     flex-direction: column;
     align-items: center;
     gap: 24px;
-    padding: 16px;
   }
 
   .rack-frame {
@@ -816,14 +1142,28 @@ body.view-rack .public-orgchart {
   .rack-device-name {
     font-size: 10px;
   }
+
+  .rack-device-wifi {
+    margin-bottom: 0;
+    align-self: center;
+    padding-right: 0;
+  }
+
+  .rack-wifi-body-box {
+    width: 110px;
+    height: 32px;
+  }
+
+  .rack-wifi-antennas {
+    width: 90px;
+  }
 }
 
 /* ─── Tablet ──────────────────────────────────────────────── */
 
 @media (min-width: 641px) and (max-width: 1100px) {
-  .rack-container {
+  .rack-frames-row {
     gap: 40px;
-    padding: 20px;
   }
 
   .rack-frame {
@@ -834,6 +1174,10 @@ body.view-rack .public-orgchart {
   .rack-port-grid {
     grid-template-columns: repeat(10, 1fr);
   }
+
+  .rack-wifi-body-box {
+    width: 110px;
+  }
 }
 
 /* ─── Reduced Motion ──────────────────────────────────────── */
@@ -841,9 +1185,11 @@ body.view-rack .public-orgchart {
 @media (prefers-reduced-motion: reduce) {
   .rack-switch-led { animation: none; }
   .rack-nas-disk-spin { animation: none; }
+  .rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act { animation: none; }
 }
 
 /* ─── FX Off ──────────────────────────────────────────────── */
 
 .fx-off .rack-switch-led { animation: none; }
 .fx-off .rack-nas-disk-spin { animation: none; }
+.fx-off .rack-wifi-led-wlan, .fx-off .rack-wifi-led-eth, .fx-off .rack-wifi-led-act { animation: none; }
