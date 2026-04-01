@@ -215,24 +215,24 @@ window.RackRenderer = {
     this._RACK_A_THEMES.forEach(t => addDivision(t, rackA));
     this._RACK_B_THEMES.forEach(t => addDivision(t, rackB));
 
-    // Storage array (2U) — under core switch in Rack A
+    // Rack A infra block: Storage (2U) → BRS (1U) → Cable Mgmt
+    rackA.unshift({ type: 'cable' });
+    rackA.unshift({ type: 'brs' });
     rackA.unshift({ type: 'storage' });
 
-    // Cable management between infra (storage) and access (division switches) tiers
-    // unshift puts it at position 0, then storage at 1, then divisions at 2+
-    // But we want: storage → cable → divisions, so insert cable AFTER storage
-    rackA.splice(1, 0, { type: 'cable' });
+    // Rack B: Cable Mgmt at top of division block
+    rackB.unshift({ type: 'cable' });
 
-    // VPN Concentrator (1U) — top of Rack B, before divisions
-    rackB.unshift({ type: 'vpn' });
+    // Bottom-of-rack devices (before height matching)
+    // Rack A: WLC above UPS
+    rackA.push({ type: 'wlc' });
 
-    // Contractors — always Rack B (routed through VPN concentrator)
+    // Rack B: Contractors + VPN above UPS
     const customDepts = byDiv['_custom'];
     if (customDepts) {
       const customEmployees = [];
       Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
 
-      // Contractor switch (1U, 24-port to match 2U patch panel)
       rackB.push({
         type: 'switch',
         name: 'INDEPENDENT CONTRACTORS',
@@ -242,7 +242,6 @@ window.RackRenderer = {
         totalPorts: 24,
       });
 
-      // Contractor patch panel (2U — extra space for contractor headcount)
       rackB.push({
         type: 'patch',
         name: 'INDEPENDENT CONTRACTORS',
@@ -254,28 +253,25 @@ window.RackRenderer = {
       });
     }
 
-    // WLC goes in Rack A's device list (before height matching)
-    rackA.push({ type: 'wlc' });
+    // VPN just above UPS — adjacent to contractors it serves
+    rackB.push({ type: 'vpn' });
 
     // Match rack heights — add blanks so both racks are the same total U
-    const coreU = 1;  // core switch
-    const fwU = 1;    // firewall (rendered separately but counts for height)
-    const bottomU = 2; // cable (1U) + UPS (1U)
+    const coreU = 1;
+    const fwU = 1;
+    const bottomU = 1; // UPS only (no cable mgmt before UPS now)
     const devicesA = this._usedU(rackA);
     const devicesB = this._usedU(rackB);
     const totalA = fwU + coreU + devicesA + bottomU;
     const totalB = fwU + coreU + devicesB + bottomU;
     const maxU = Math.max(totalA, totalB);
 
-    // Fill shorter rack with blanks to match taller rack
     const blanksA = maxU - totalA;
     const blanksB = maxU - totalB;
     for (let i = 0; i < blanksA; i++) rackA.push({ type: 'blank' });
     for (let i = 0; i < blanksB; i++) rackB.push({ type: 'blank' });
 
-    // Cable management before UPS
-    rackA.push({ type: 'cable' });
-    rackB.push({ type: 'cable' });
+    // UPS at the bottom
     rackA.push({ type: 'ups', pct: 80 + Math.floor(Math.random() * 15), runtime: 42 + Math.floor(Math.random() * 20) });
     rackB.push({ type: 'ups', pct: 65 + Math.floor(Math.random() * 25), runtime: 28 + Math.floor(Math.random() * 30) });
 
@@ -289,6 +285,7 @@ window.RackRenderer = {
       if (d.type === 'switch') return sum + 1;
       if (d.type === 'patch') return sum + (d.uSize || 1);
       if (d.type === 'storage') return sum + 2;
+      if (d.type === 'brs') return sum + 1;
       if (d.type === 'vpn') return sum + 1;
       if (d.type === 'wlc') return sum + 1;
       if (d.type === 'cable') return sum + 1;
@@ -467,6 +464,9 @@ window.RackRenderer = {
         case 'storage':
           frame.appendChild(this._renderStorageArray());
           break;
+        case 'brs':
+          frame.appendChild(this._renderBRS());
+          break;
         case 'vpn':
           frame.appendChild(this._renderVPN());
           break;
@@ -572,10 +572,14 @@ window.RackRenderer = {
     // WiFi icon + SSID above, Linksys body sits on rack
     el.innerHTML = `
       <div class="rack-wifi-label">
-        <svg class="rack-wifi-icon" viewBox="0 0 24 24" width="14" height="14">
-          <path fill="currentColor" d="M12 18c-.89 0-1.74.35-2.37.98a3.3 3.3 0 0 0 4.74 0A3.35 3.35 0 0 0 12 18zm0-4c-1.98 0-3.82.78-5.21 2.17l1.42 1.42A5.46 5.46 0 0 1 12 16c1.47 0 2.84.57 3.79 1.59l1.42-1.42A7.46 7.46 0 0 0 12 14zm0-4c-3.07 0-5.9 1.18-8.07 3.35l1.42 1.42A9.44 9.44 0 0 1 12 12c2.53 0 4.92.98 6.65 2.77l1.42-1.42A11.44 11.44 0 0 0 12 10zm0-4C7.31 6 3.07 7.9 0 11l1.42 1.42C4.05 9.78 7.75 8 12 8s7.95 1.78 10.58 4.42L24 11c-3.07-3.1-7.31-5-12-5z"/>
+        <svg class="rack-wifi-icon" viewBox="0 0 100 60" width="100" height="60">
+          <!-- Outer arc -->
+          <path class="rack-wifi-arc rack-wifi-arc-3" d="M10 48 A45 45 0 0 1 90 48" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+          <!-- Middle arc -->
+          <path class="rack-wifi-arc rack-wifi-arc-2" d="M24 50 A30 30 0 0 1 76 50" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+          <!-- Inner arc -->
+          <path class="rack-wifi-arc rack-wifi-arc-1" d="M37 52 A16 16 0 0 1 63 52" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
         </svg>
-        <span class="rack-wifi-ssid">HELPDESK-GUEST-5G</span>
       </div>
       <div class="rack-wifi-router">
         <div class="rack-wifi-antennas">
@@ -627,14 +631,6 @@ window.RackRenderer = {
           </div>
         `;
       });
-      membersHtml += `
-        <div class="rack-core-separator"></div>
-        <div class="rack-switch-leds">
-          <div class="rack-switch-led rack-led-solid-green" title="SYST"></div>
-          <div class="rack-switch-led rack-led-blink-gold" title="ACT"></div>
-          <div class="rack-switch-led rack-led-solid-green" title="STCK"></div>
-        </div>
-      `;
       membersHtml += '</div>';
     }
 
@@ -660,6 +656,12 @@ window.RackRenderer = {
           ${connHtml}
         </div>
         ${membersHtml}
+        <span class="rack-core-silkscreen">CRISCO</span>
+        <div class="rack-switch-leds rack-core-leds">
+          <div class="rack-switch-led rack-led-solid-green" title="SYST"></div>
+          <div class="rack-switch-led rack-led-blink-gold" title="ACT"></div>
+          <div class="rack-switch-led rack-led-solid-green" title="STCK"></div>
+        </div>
       </div>
     `;
 
@@ -783,19 +785,23 @@ window.RackRenderer = {
 
     // 24 drive bays (2 rows of 12) with long-cycle LED animation at random phase
     let baysHtml = '<div class="rack-storage-bay-grid">';
-    for (let i = 0; i < 24; i++) {
-      const active = i < 18;
-      const bayClass = active ? 'rack-storage-bay-occupied' : 'rack-storage-bay-empty';
-      const actLed = active ? 'active' : '';
-      const delay = active ? `style="animation-delay:-${(Math.random() * 24).toFixed(1)}s;animation-duration:${(14 + Math.random() * 8).toFixed(1)}s"` : '';
-      baysHtml += `
-        <div class="rack-storage-bay ${bayClass}" data-bay="${i}">
-          <div class="rack-storage-bay-leds">
-            <div class="rack-storage-led-activity ${actLed}" ${delay}></div>
-            <div class="rack-storage-led-fault"></div>
+    for (let col = 0; col < 4; col++) {
+      baysHtml += '<div class="rack-storage-bay-col">';
+      for (let row = 0; row < 3; row++) {
+        const i = col * 3 + row;
+        const actLed = 'active';
+        const delay = `style="animation-delay:-${(Math.random() * 24).toFixed(1)}s;animation-duration:${(14 + Math.random() * 8).toFixed(1)}s"`;
+        baysHtml += `
+          <div class="rack-storage-bay rack-storage-bay-occupied" data-bay="${i}">
+            <div class="rack-storage-bay-leds">
+              <div class="rack-storage-led-activity ${actLed}" ${delay}></div>
+              <div class="rack-storage-led-fault"></div>
+            </div>
+            <div class="rack-storage-bay-tab"></div>
           </div>
-        </div>
-      `;
+        `;
+      }
+      baysHtml += '</div>';
     }
     baysHtml += '</div>';
 
@@ -816,16 +822,174 @@ window.RackRenderer = {
         </div>
       </div>
       <div class="rack-storage-body">
-        <div class="rack-storage-lcd">
-          <div class="rack-storage-lcd-line">${iops.toLocaleString()} IOPS</div>
-          <div class="rack-storage-lcd-line">${usedTB}/${totalTB} TB</div>
-          <div class="rack-storage-lcd-line rack-storage-lcd-line-dim">CLUSTER: HEALTHY</div>
-        </div>
         ${baysHtml}
       </div>
     `;
 
     return el;
+  },
+
+  _renderBRS() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-brs rack-device-1u';
+    el.setAttribute('data-device-type', 'brs');
+
+    const barCount = 40;
+    let barsHtml = '<div class="rack-brs-bars">';
+    for (let i = 0; i < barCount; i++) {
+      barsHtml += '<div class="rack-brs-bar" style="height:4%"></div>';
+    }
+    barsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-accent rack-brs-accent"></div>
+      <div class="rack-brs-layout">
+        <div class="rack-brs-left">
+          <div class="rack-device-header">
+            <span class="rack-device-name rack-brs-name">BRS-01</span>
+            <span class="rack-device-model">Mediocore RX-1000</span>
+          </div>
+          <div class="rack-brs-controls">
+            <div class="rack-switch-ports">
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>
+              <div class="rack-conn-port rack-conn-port-active" title="MGMT"></div>
+            </div>
+            <div class="rack-switch-leds rack-brs-leds">
+              <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
+              <div class="rack-switch-led rack-brs-led-render" title="RENDER"></div>
+              <div class="rack-switch-led rack-brs-led-queue" title="QUEUE"></div>
+            </div>
+            <span class="rack-brs-throughput">0 j/m</span>
+          </div>
+        </div>
+        <div class="rack-brs-lcd">
+          <div class="rack-brs-lcd-header">IDLE</div>
+          ${barsHtml}
+          <div class="rack-brs-lcd-scanlines"></div>
+        </div>
+      </div>
+    `;
+
+    // Store refs for trigger API
+    this._brsEl = el;
+    this._brsBars = el.querySelectorAll('.rack-brs-bar');
+    this._brsHeader = el.querySelector('.rack-brs-lcd-header');
+    this._brsThroughput = el.querySelector('.rack-brs-throughput');
+    this._brsRenderLed = el.querySelector('.rack-brs-led-render');
+    this._brsQueueLed = el.querySelector('.rack-brs-led-queue');
+    this._brsRendering = false;
+    this._brsJobCount = 0;
+
+    // Start demo mode — fires random renders every 4-8 seconds
+    this._startBRSDemo();
+
+    return el;
+  },
+
+  /**
+   * Trigger a badge render on the BRS LCD.
+   * Called by Phase 2c packet routing, or demo mode.
+   * @param {object} badge - { employeeId, song }
+   */
+  /**
+   * Trigger a badge render on the BRS LCD.
+   * Shows full waveform instantly, sweeps a playhead cursor across.
+   * @param {object} badge - { employeeId, song }
+   * @param {number} [duration=3000] - Render duration in ms (2000-5000)
+   */
+  triggerBRSRender(badge, duration) {
+    if (!this._brsBars || this._brsRendering) return;
+    this._brsRendering = true;
+    this._brsJobCount++;
+
+    const renderMs = duration || 3000;
+    const song = badge.song || 'PLEASE HOLD';
+    const id = badge.employeeId || 'HD-00000';
+    const wf = (typeof WAVEFORMS !== 'undefined' && WAVEFORMS[song]) || null;
+    const barCount = this._brsBars.length;
+
+    // Resample 60-bar waveform data to our bar count
+    let targetHeights;
+    if (wf && wf.data) {
+      targetHeights = [];
+      for (let i = 0; i < barCount; i++) {
+        const srcIdx = (i / barCount) * wf.data.length;
+        const lo = Math.floor(srcIdx);
+        const hi = Math.min(lo + 1, wf.data.length - 1);
+        const frac = srcIdx - lo;
+        const val = wf.data[lo] * (1 - frac) + wf.data[hi] * frac;
+        targetHeights.push(Math.max(6, val * 92));
+      }
+    } else {
+      targetHeights = [];
+      for (let i = 0; i < barCount; i++) {
+        targetHeights.push(20 + Math.sin(i * 0.4) * 30 + Math.random() * 25);
+      }
+    }
+
+    // Update header + LEDs
+    this._brsHeader.textContent = `${id} ► ${song}`;
+    this._brsRenderLed.classList.add('rack-brs-led-active');
+    this._brsThroughput.textContent = `${this._brsJobCount} j/m`;
+
+    // Show full waveform instantly
+    this._brsBars.forEach((bar, i) => {
+      bar.style.height = `${targetHeights[i]}%`;
+    });
+
+    // Add playhead element
+    const lcd = this._brsEl.querySelector('.rack-brs-bars');
+    let playhead = lcd.querySelector('.rack-brs-playhead');
+    if (!playhead) {
+      playhead = document.createElement('div');
+      playhead.className = 'rack-brs-playhead';
+      lcd.appendChild(playhead);
+    }
+
+    // Animate playhead sweep
+    playhead.style.transition = 'none';
+    playhead.style.left = '0%';
+    playhead.classList.add('rack-brs-playhead-active');
+    // Force reflow to reset animation
+    playhead.offsetWidth;
+    playhead.style.transition = `left ${renderMs}ms linear`;
+    playhead.style.left = '100%';
+
+    // When sweep completes, fade to idle
+    setTimeout(() => this._brsToIdle(playhead), renderMs + 200);
+  },
+
+  _brsToIdle(playhead) {
+    if (!this._brsBars) return;
+
+    // Hide playhead
+    if (playhead) playhead.classList.remove('rack-brs-playhead-active');
+
+    // Fade bars down
+    this._brsBars.forEach((bar, i) => {
+      setTimeout(() => { bar.style.height = '4%'; }, i * 15);
+    });
+
+    setTimeout(() => {
+      this._brsHeader.textContent = 'IDLE';
+      this._brsRenderLed.classList.remove('rack-brs-led-active');
+      this._brsRendering = false;
+    }, this._brsBars.length * 15 + 200);
+  },
+
+  _startBRSDemo() {
+    const songs = typeof SONG_LIST !== 'undefined' ? SONG_LIST : ['PLEASE HOLD'];
+    const fire = () => {
+      if (!this._brsRendering) {
+        const song = songs[Math.floor(Math.random() * songs.length)];
+        const id = `HD-${String(Math.floor(10000 + Math.random() * 90000))}`;
+        this.triggerBRSRender({ employeeId: id, song });
+      }
+      // Next render in 4-8 seconds
+      setTimeout(fire, 4000 + Math.random() * 4000);
+    };
+    // First fire after 2 seconds
+    setTimeout(fire, 2000);
   },
 
   _renderVPN() {

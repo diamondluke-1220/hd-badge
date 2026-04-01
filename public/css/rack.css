@@ -72,8 +72,10 @@ body.view-rack .public-orgchart {
 /* WiFi AP floats above the rack frame without affecting column height */
 .rack-column .rack-device-wifi {
   position: absolute;
-  top: 0;
+  bottom: 100%;
   right: 14px;
+  margin-bottom: -46px;
+  z-index: 2;
 }
 
 /* ─── Rack Frame ──────────────────────────────────────────── */
@@ -285,6 +287,14 @@ body.view-rack .public-orgchart {
   font-size: 10px;
   color: var(--text-muted);
   letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Align switch model numbers at consistent center position */
+.rack-device-switch .rack-device-model {
+  position: absolute;
+  left: 65%;
+  transform: translateX(-50%);
 }
 
 .rack-device-accent {
@@ -520,8 +530,8 @@ body.view-rack .public-orgchart {
 .rack-device-wifi {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
   margin-bottom: 0;
   z-index: 2;
   align-self: flex-end;
@@ -531,15 +541,42 @@ body.view-rack .public-orgchart {
 /* WiFi icon + SSID label above the router */
 .rack-wifi-label {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  align-self: flex-end;
-  padding-right: 20px;
+  gap: 2px;
 }
 
 .rack-wifi-icon {
-  color: var(--accent-green);
-  opacity: 0.7;
+  color: rgba(34, 197, 94, 0.15);
+}
+
+/* Hollow arcs — fill with color via animation */
+.rack-wifi-arc {
+  stroke: rgba(34, 197, 94, 0.15);
+  transition: stroke 0.4s ease;
+}
+
+.rack-wifi-dot {
+  fill: var(--accent-green);
+  opacity: 0.8;
+}
+
+/* Animated fill stages — arc 1 (inner) → 2 → 3 (outer) */
+.rack-wifi-arc-1 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite;
+}
+
+.rack-wifi-arc-2 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite 0.4s;
+}
+
+.rack-wifi-arc-3 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite 0.8s;
+}
+
+@keyframes rack-wifi-pulse {
+  0%, 100% { stroke: rgba(34, 197, 94, 0.15); }
+  30%, 60% { stroke: rgba(34, 197, 94, 0.7); }
 }
 
 .rack-wifi-ssid {
@@ -670,15 +707,16 @@ body.view-rack .public-orgchart {
 .rack-device-wlc::after {
   content: 'AIR-CT5520';
   position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
+  right: 14px;
+  bottom: 4px;
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 2px;
+  letter-spacing: 5px;
   color: rgba(34, 197, 94, var(--silkscreen-opacity));
   pointer-events: none;
   z-index: 0;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
 }
 
 .rack-wlc-accent {
@@ -708,6 +746,176 @@ body.view-rack .public-orgchart {
 
 .rack-wlc-port-ap::after { background: var(--accent-green) !important; }
 
+/* ─── Badge Render Server (BRS) ──────────────────────────── */
+
+.rack-device-brs {
+  background: var(--device-switch);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.rack-brs-accent {
+  background: #a855f7 !important;
+}
+
+.rack-brs-layout {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  gap: 8px;
+}
+
+.rack-brs-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+}
+
+.rack-brs-name {
+  color: #a855f7 !important;
+  text-shadow: 0 0 8px rgba(168, 85, 247, 0.3);
+}
+
+.rack-brs-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rack-brs-leds {
+  flex-shrink: 0;
+}
+
+.rack-brs-led-render {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.3);
+}
+
+.rack-brs-led-render.rack-brs-led-active {
+  background: #a855f7;
+  box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
+  animation: rack-led-blink 0.5s steps(1, end) infinite;
+}
+
+.rack-brs-led-queue {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d97706;
+  box-shadow: 0 0 4px rgba(217, 119, 6, 0.5);
+  animation: rack-led-blink 2s ease-in-out infinite;
+}
+
+.rack-brs-throughput {
+  font-size: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* BRS LCD — waveform display (cyan backlit) */
+.rack-brs-lcd {
+  margin-left: auto;
+  width: 45%;
+  height: calc(100% - 8px);
+  background: #0ff5e8;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    inset 0 0 8px rgba(0, 0, 0, 0.15),
+    0 0 6px rgba(15, 245, 232, 0.15);
+  animation: rack-brs-lcd-glow 5s ease-in-out infinite;
+}
+
+@keyframes rack-brs-lcd-glow {
+  0%, 100% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 6px rgba(15, 245, 232, 0.15); }
+  50% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 12px rgba(15, 245, 232, 0.25); }
+}
+
+.rack-brs-lcd-header {
+  font-size: 7px;
+  font-family: 'JetBrains Mono', monospace;
+  color: rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.5px;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+/* Audio waveform bars */
+.rack-brs-bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  position: relative;
+}
+
+/* Playhead cursor — sweeps across during render */
+.rack-brs-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4), 2px 0 8px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rack-brs-playhead-active {
+  opacity: 1;
+}
+
+.rack-brs-bar {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 1px 1px 0 0;
+  min-height: 4px;
+  transition: height 0.15s ease-out;
+}
+
+.rack-brs-lcd-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(255, 255, 255, 0.08) 2px,
+    rgba(255, 255, 255, 0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Silkscreen */
+.rack-device-brs::after {
+  content: 'MEDIOCORE';
+  position: absolute;
+  right: 48%;
+  top: 68%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 5px;
+  color: rgba(168, 85, 247, var(--silkscreen-opacity));
+  pointer-events: none;
+  z-index: 0;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
 /* ─── VPN Concentrator ───────────────────────────────────── */
 
 .rack-device-vpn {
@@ -727,15 +935,16 @@ body.view-rack .public-orgchart {
 .rack-device-vpn::after {
   content: 'VPN-3030';
   position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
+  right: 14px;
+  bottom: 4px;
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 2px;
+  letter-spacing: 5px;
   color: rgba(37, 99, 235, var(--silkscreen-opacity));
   pointer-events: none;
   z-index: 0;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
 }
 
 .rack-vpn-status {
@@ -798,19 +1007,29 @@ body.view-rack .public-orgchart {
   );
 }
 
-/* Silkscreen */
-.rack-device-core::after {
-  content: 'CRISCO';
+/* Silkscreen — positioned under portraits on right side */
+.rack-core-silkscreen {
   position: absolute;
-  left: 140px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 14px;
+  right: 14px;
+  bottom: 4px;
+  font-size: 16px;
   font-weight: 900;
-  letter-spacing: 6px;
+  letter-spacing: 5px;
   color: rgba(212, 168, 67, var(--silkscreen-opacity));
   pointer-events: none;
   z-index: 0;
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+}
+
+.rack-core-leds {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.rack-device-core .rack-device-header {
+  justify-content: flex-start;
+  gap: 12px;
 }
 
 .rack-device-core .rack-device-name {
@@ -824,7 +1043,6 @@ body.view-rack .public-orgchart {
 .rack-core-layout {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   width: 100%;
   height: 100%;
 }
@@ -834,14 +1052,13 @@ body.view-rack .public-orgchart {
   flex-direction: column;
   justify-content: center;
   gap: 2px;
-  flex: 1;
 }
 
 .rack-core-ports {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
+  margin-left: 32px;
 }
 
 .rack-core-port {
@@ -968,14 +1185,13 @@ body.view-rack .public-orgchart {
 .rack-conn-port {
   width: 18px;
   height: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 1px;
   background: rgba(0, 0, 0, 0.3);
   position: relative;
 }
 
 .rack-conn-port-active {
-  border-color: rgba(255, 255, 255, 0.2);
   background: rgba(0, 0, 0, 0.15);
 }
 
@@ -1508,18 +1724,7 @@ body.view-rack .public-orgchart {
 }
 
 /* Silkscreen */
-.rack-device-storage::after {
-  content: 'NEWBTANIX';
-  position: absolute;
-  right: 8px;
-  bottom: 6px;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  color: rgba(91, 141, 239, var(--silkscreen-opacity));
-  pointer-events: none;
-  z-index: 0;
-}
+/* Silkscreen removed — drives fill full face */
 
 .rack-storage-body {
   display: flex;
@@ -1558,57 +1763,63 @@ body.view-rack .public-orgchart {
   color: rgba(91, 141, 239, 0.4);
 }
 
-/* 24-bay drive grid */
+/* 4-column × 3-row drive grid (Nutanix style) */
 .rack-storage-bay-grid {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 3px 6px;
-  padding: 4px 8px 4px 4px;
+  display: flex;
+  gap: 6px;
+  padding: 4px 8px;
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 3px;
   flex: 1;
 }
 
-/* Individual drive bay — dark caddy with vent lines */
+.rack-storage-bay-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+/* Individual drive bay — wide horizontal caddy */
 .rack-storage-bay {
   position: relative;
   background:
-    /* Horizontal vent lines on caddy face */
+    /* Horizontal grill fins on caddy face */
     repeating-linear-gradient(
       180deg,
       transparent 0px, transparent 3px,
-      rgba(255, 255, 255, 0.04) 3px, rgba(255, 255, 255, 0.04) 4px
+      rgba(0, 0, 0, 0.3) 3px, rgba(0, 0, 0, 0.3) 5px
     ),
     linear-gradient(180deg, #2A2C34 0%, #22242C 100%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 2px;
-  min-height: 24px;
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 2px 3px;
   overflow: visible;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Orange pull-tab handle — the signature Nutanix feature */
-.rack-storage-bay::before {
-  content: '';
+/* Orange pull-tab handle — right side of each bay */
+.rack-storage-bay-tab {
   position: absolute;
-  top: 2px;
   right: -1px;
-  width: 7px;
+  top: 2px;
   height: calc(100% - 4px);
+  width: 12px;
   background: linear-gradient(
-    180deg,
+    90deg,
     #E8972A 0%,
     #D4870E 40%,
     #C07A0A 100%
   );
-  border-radius: 1px 2px 2px 1px;
+  border-radius: 0 2px 2px 0;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 0 3px rgba(232, 151, 42, 0.3);
+  border-left: none;
+  box-shadow: 1px 0 3px rgba(232, 151, 42, 0.3);
   z-index: 2;
 }
 
@@ -1628,15 +1839,10 @@ body.view-rack .public-orgchart {
 
 /* Bay states */
 .rack-storage-bay-empty {
-  background: linear-gradient(180deg, #18191E 0%, #121316 100%);
-  border-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
-.rack-storage-bay-empty::before {
-  background: linear-gradient(180deg, #6B5A30 0%, #4A3F20 100%);
-  box-shadow: none;
-  opacity: 0.4;
-}
+/* Empty bays still show full orange tabs — LEDs indicate activity */
 
 .rack-storage-bay-empty::after {
   opacity: 0.3;
@@ -1651,7 +1857,7 @@ body.view-rack .public-orgchart {
   box-shadow: 0 0 6px rgba(91, 141, 239, 0.2);
 }
 
-.rack-storage-bay-occupied:hover::before {
+.rack-storage-bay-occupied:hover .rack-storage-bay-tab {
   background: linear-gradient(180deg, #F0A030 0%, #E89020 100%);
   box-shadow: 0 0 6px rgba(232, 151, 42, 0.5);
 }
@@ -1660,14 +1866,14 @@ body.view-rack .public-orgchart {
 .rack-storage-bay-leds {
   position: absolute;
   bottom: 2px;
-  left: 2px;
+  left: 3px;
   display: flex;
   gap: 2px;
 }
 
 .rack-storage-led-activity {
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: var(--text-disabled);
 }
@@ -1680,8 +1886,8 @@ body.view-rack .public-orgchart {
 }
 
 .rack-storage-led-fault {
-  width: 3px;
-  height: 3px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: transparent;
 }
@@ -2023,6 +2229,7 @@ body.view-rack .public-orgchart {
   .rack-switch-led { animation: none; }
   /* NAS removed — replaced by storage array */
   .rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act { animation: none; }
+  .rack-wifi-arc { animation: none; stroke: rgba(34, 197, 94, 0.5); }
   .rack-fw-fan { animation: none; }
   .rack-storage-led-activity.active { animation: none; }
   .rack-ups-lcd { animation: none; }
@@ -2035,5 +2242,8 @@ body.view-rack .public-orgchart {
 .fx-off .rack-switch-led { animation: none; }
 /* NAS removed — replaced by storage array */
 .fx-off .rack-wifi-led-wlan, .fx-off .rack-wifi-led-eth, .fx-off .rack-wifi-led-act { animation: none; }
+.fx-off .rack-wifi-arc { animation: none; stroke: rgba(34, 197, 94, 0.5); }
 .fx-off .rack-fw-fan { animation: none; }
+.fx-off .rack-brs-led-render, .fx-off .rack-brs-led-queue { animation: none; }
+.fx-off .rack-brs-lcd { animation: none; }
 .fx-off .rack-storage-led-activity.active { animation: none; }
