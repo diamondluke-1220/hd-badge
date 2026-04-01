@@ -203,6 +203,11 @@ window.RackRenderer = {
     // Storage array (2U) — under core switch in Rack A
     rackA.unshift({ type: 'storage' });
 
+    // Cable management between infra (storage) and access (division switches) tiers
+    // unshift puts it at position 0, then storage at 1, then divisions at 2+
+    // But we want: storage → cable → divisions, so insert cable AFTER storage
+    rackA.splice(1, 0, { type: 'cable' });
+
     // VPN Concentrator (1U) — top of Rack B, before divisions
     rackB.unshift({ type: 'vpn' });
 
@@ -221,22 +226,25 @@ window.RackRenderer = {
         portCount: Object.keys(customDepts).length,
       });
 
-      // Contractor patch panel (1U)
+      // Contractor patch panel (2U — extra space for contractor headcount)
       rackB.push({
         type: 'patch',
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
         color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
         employees: customEmployees,
-        uSize: 1,
+        uSize: 2,
         panelKey: '_custom',
       });
     }
 
+    // WLC goes in Rack A's device list (before height matching)
+    rackA.push({ type: 'wlc' });
+
     // Match rack heights — add blanks so both racks are the same total U
     const coreU = 2;  // core switch
     const fwU = 1;    // firewall (rendered separately but counts for height)
-    const bottomU = 3; // UPS (2U) + WLC/blank (1U)
+    const bottomU = 3; // cable (1U) + UPS (2U)
     const devicesA = this._usedU(rackA);
     const devicesB = this._usedU(rackB);
     const totalA = fwU + coreU + devicesA + bottomU;
@@ -249,9 +257,9 @@ window.RackRenderer = {
     for (let i = 0; i < blanksA; i++) rackA.push({ type: 'blank' });
     for (let i = 0; i < blanksB; i++) rackB.push({ type: 'blank' });
 
-    // Bottom devices: WLC on Rack A (wireless path), blank on B, then UPS on both
-    rackA.push({ type: 'wlc' });
-    rackB.push({ type: 'blank' });
+    // Cable management before UPS
+    rackA.push({ type: 'cable' });
+    rackB.push({ type: 'cable' });
     rackA.push({ type: 'ups', pct: 80 + Math.floor(Math.random() * 15), runtime: 42 + Math.floor(Math.random() * 20) });
     rackB.push({ type: 'ups', pct: 65 + Math.floor(Math.random() * 25), runtime: 28 + Math.floor(Math.random() * 30) });
 
@@ -267,6 +275,7 @@ window.RackRenderer = {
       if (d.type === 'storage') return sum + 2;
       if (d.type === 'vpn') return sum + 1;
       if (d.type === 'wlc') return sum + 1;
+      if (d.type === 'cable') return sum + 1;
       if (d.type === 'blank') return sum + 1;
       if (d.type === 'ups') return sum + 2;
       return sum;
@@ -386,6 +395,9 @@ window.RackRenderer = {
           break;
         case 'vpn':
           frame.appendChild(this._renderVPN());
+          break;
+        case 'cable':
+          frame.appendChild(this._renderCableMgmt());
           break;
         case 'blank':
           frame.appendChild(this._renderBlank());
@@ -576,11 +588,12 @@ window.RackRenderer = {
     el.setAttribute('data-device-type', 'switch');
     el.setAttribute('data-theme', device.theme);
 
-    // Row of switch ports — some active, some empty (cosmetic)
+    // Row of switch ports with divider every 6 — some active, some empty
     const totalPorts = 12;
-    const activePorts = Math.min(device.portCount + 1, totalPorts); // +1 for uplink
+    const activePorts = Math.min(device.portCount + 1, totalPorts);
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
+      if (i === 6) portsHtml += '<div class="rack-switch-port-divider"></div>';
       portsHtml += `<div class="rack-conn-port ${i < activePorts ? 'rack-conn-port-active' : ''}"></div>`;
     }
     portsHtml += '</div>';
@@ -758,6 +771,25 @@ window.RackRenderer = {
       ${portsHtml}
     `;
 
+    return el;
+  },
+
+  _renderCableMgmt() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-cable-mgmt rack-device-1u';
+    el.setAttribute('data-device-type', 'cable');
+
+    // Cable management fingers with center D-ring
+    let fingersHtml = '<div class="rack-cable-fingers">';
+    for (let i = 0; i < 20; i++) {
+      if (i === 10) {
+        fingersHtml += '<div class="rack-cable-ring"></div>';
+      }
+      fingersHtml += '<div class="rack-cable-finger"></div>';
+    }
+    fingersHtml += '</div>';
+
+    el.innerHTML = fingersHtml;
     return el;
   },
 
