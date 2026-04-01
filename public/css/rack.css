@@ -977,16 +977,18 @@ body.view-rack .public-orgchart {
 
 .rack-device-core {
   background:
-    /* Brushed metal — very fine horizontal lines */
+    /* Brushed metal — fine horizontal grain, visible contrast */
     repeating-linear-gradient(
       180deg,
       transparent 0px, transparent 1px,
-      rgba(255, 255, 255, 0.012) 1px, rgba(255, 255, 255, 0.012) 2px
+      rgba(212, 168, 67, 0.04) 1px, rgba(212, 168, 67, 0.04) 2px,
+      transparent 2px, transparent 4px,
+      rgba(255, 255, 255, 0.03) 4px, rgba(255, 255, 255, 0.03) 5px
     ),
-    linear-gradient(135deg, rgba(212, 168, 67, 0.1) 0%, var(--device-core) 40%, var(--device-core) 100%);
+    linear-gradient(135deg, rgba(212, 168, 67, 0.15) 0%, var(--device-core) 40%, var(--device-core) 100%);
   border-bottom: 1px solid rgba(212, 168, 67, 0.35);
   box-shadow:
-    inset 0 1px 0 rgba(212, 168, 67, 0.08),
+    inset 0 1px 0 rgba(212, 168, 67, 0.12),
     inset 0 -1px 0 rgba(0, 0, 0, 0.3);
 }
 
@@ -1424,6 +1426,18 @@ body.view-rack .public-orgchart {
 
 .rack-device-cable-mgmt {
   background: var(--device-cable);
+  overflow: hidden;
+}
+
+/* Photo layer — darkened via opacity */
+.rack-device-cable-mgmt::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/images/rack-cable-mgmt.jpg') center/cover no-repeat;
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
   padding: 0;
   display: flex;
   align-items: center;
@@ -1431,12 +1445,37 @@ body.view-rack .public-orgchart {
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 
+/* Wire mesh tray overlay */
+.rack-device-cable-mgmt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* Vertical wire bars */
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 18px,
+      rgba(40, 40, 48, 0.7) 18px,
+      rgba(40, 40, 48, 0.7) 20px
+    ),
+    /* Horizontal wire bars */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0px,
+      transparent 14px,
+      rgba(40, 40, 48, 0.5) 14px,
+      rgba(40, 40, 48, 0.5) 15px
+    ),
+    /* Vignette edges */
+    linear-gradient(180deg, rgba(0,0,0,0.3) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.3) 100%);
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
 .rack-cable-fingers {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  width: 90%;
-  justify-content: center;
+  display: none;
 }
 
 .rack-cable-finger {
@@ -1695,24 +1734,24 @@ body.view-rack .public-orgchart {
 /* ─── Storage Array (Newbtanix NX-3060-G7, 2U) ──────────── */
 
 .rack-device-storage {
-  background:
-    /* Crosshatch texture — unique to storage */
-    repeating-linear-gradient(
-      45deg,
-      transparent 0px, transparent 4px,
-      rgba(255, 255, 255, 0.015) 4px, rgba(255, 255, 255, 0.015) 5px
-    ),
-    repeating-linear-gradient(
-      -45deg,
-      transparent 0px, transparent 4px,
-      rgba(255, 255, 255, 0.015) 4px, rgba(255, 255, 255, 0.015) 5px
-    ),
-    linear-gradient(180deg, #1E2028 0%, #1A1C24 100%);
+  background: #1E2028;
   border-bottom: 1px solid rgba(91, 141, 239, 0.3);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     inset 0 -1px 0 rgba(0, 0, 0, 0.4);
   padding: 6px 10px;
+  overflow: visible;
+}
+
+/* Art layer — darkened to blend with rack */
+.rack-device-storage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/images/rack-storage.jpg') center/100% 100% no-repeat;
+  opacity: 0.75;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .rack-storage-accent {
@@ -1721,6 +1760,29 @@ body.view-rack .public-orgchart {
 
 .rack-storage-name {
   color: var(--accent-blue) !important;
+}
+
+/* Ensure header, LEDs, and ears render above the art layer */
+.rack-device-storage .rack-device-header {
+  position: relative;
+  z-index: 2;
+}
+
+.rack-device-storage .rack-device-name {
+  text-shadow: 0 0 8px rgba(91, 141, 239, 0.5);
+}
+
+.rack-device-storage .rack-device-model {
+  color: var(--text-secondary);
+}
+
+.rack-device-storage .rack-switch-leds {
+  position: relative;
+  z-index: 2;
+}
+
+.rack-device-storage .rack-ear {
+  z-index: 2;
 }
 
 /* Silkscreen */
@@ -1732,6 +1794,10 @@ body.view-rack .public-orgchart {
   margin-top: 4px;
   flex: 1;
   min-height: 0;
+  position: relative;
+  z-index: 1;
+  visibility: visible;
+  z-index: 2;
 }
 
 /* LCD status strip */
@@ -1768,8 +1834,8 @@ body.view-rack .public-orgchart {
   display: flex;
   gap: 6px;
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border: none;
   border-radius: 3px;
   flex: 1;
 }
@@ -1781,30 +1847,26 @@ body.view-rack .public-orgchart {
   flex: 1;
 }
 
-/* Individual drive bay — wide horizontal caddy */
+/* Individual drive bay — transparent overlay for LED positioning */
 .rack-storage-bay {
   position: relative;
-  background:
-    /* Horizontal grill fins on caddy face */
-    repeating-linear-gradient(
-      180deg,
-      transparent 0px, transparent 3px,
-      rgba(0, 0, 0, 0.3) 3px, rgba(0, 0, 0, 0.3) 5px
-    ),
-    linear-gradient(180deg, #2A2C34 0%, #22242C 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  border: none;
   border-radius: 2px;
   flex: 1;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  align-items: flex-end;
+  justify-content: flex-start;
   padding: 2px 3px;
   overflow: visible;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Orange pull-tab handle — right side of each bay */
+/* Orange pull-tab handle — hidden, art provides these */
 .rack-storage-bay-tab {
+  display: none;
+}
+
+.rack-storage-bay-tab-hidden {
   position: absolute;
   right: -1px;
   top: 2px;
@@ -1824,18 +1886,7 @@ body.view-rack .public-orgchart {
 }
 
 /* Small latch dot on handle */
-.rack-storage-bay::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  right: 1px;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  z-index: 3;
-}
+/* Bay ::after dot removed — art provides visual detail */
 
 /* Bay states */
 .rack-storage-bay-empty {
@@ -1862,34 +1913,55 @@ body.view-rack .public-orgchart {
   box-shadow: 0 0 6px rgba(232, 151, 42, 0.5);
 }
 
-/* Bay LEDs */
+/* Bay LEDs — per-column positioning from drag calibration */
 .rack-storage-bay-leds {
   position: absolute;
-  bottom: 2px;
-  left: 3px;
-  display: flex;
-  gap: 2px;
+  top: 10px;
+  width: 5px;
+  height: 5px;
+  z-index: 2;
 }
+
+/* Stack activity + fault LEDs on same spot */
+.rack-storage-bay-leds .rack-storage-led-activity,
+.rack-storage-bay-leds .rack-storage-led-fault {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.rack-storage-bay-col:nth-child(1) .rack-storage-bay-leds { left: 118px; }
+.rack-storage-bay-col:nth-child(2) .rack-storage-bay-leds { left: 126px; }
+.rack-storage-bay-col:nth-child(3) .rack-storage-bay-leds { left: 133px; }
+.rack-storage-bay-col:nth-child(4) .rack-storage-bay-leds { left: 139px; }
 
 .rack-storage-led-activity {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--text-disabled);
+  background: transparent;
+  z-index: 3;
+  position: relative;
 }
 
+
 .rack-storage-led-activity.active {
-  background: var(--accent-blue);
-  box-shadow: 0 0 4px rgba(91, 141, 239, 0.5);
+  background: #7ba8ff;
+  box-shadow: 0 0 8px rgba(123, 168, 255, 0.8), 0 0 14px rgba(91, 141, 239, 0.4);
   animation: rack-led-activity-cycle steps(1, end) infinite;
   /* duration and delay set inline per bay for stagger */
 }
 
+/* Fault LED repurposed as unlit LED housing */
 .rack-storage-led-fault {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.25);
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
 }
 
 .rack-storage-led-fault.faulted {

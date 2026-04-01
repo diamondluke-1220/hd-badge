@@ -787,8 +787,8 @@ window.RackRenderer = {
     let baysHtml = '<div class="rack-storage-bay-grid">';
     for (let col = 0; col < 4; col++) {
       baysHtml += '<div class="rack-storage-bay-col">';
-      for (let row = 0; row < 3; row++) {
-        const i = col * 3 + row;
+      for (let row = 0; row < 4; row++) {
+        const i = col * 4 + row;
         const actLed = 'active';
         const delay = `style="animation-delay:-${(Math.random() * 24).toFixed(1)}s;animation-duration:${(14 + Math.random() * 8).toFixed(1)}s"`;
         baysHtml += `
