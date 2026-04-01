@@ -23,6 +23,8 @@ RUN bun install --production --frozen-lockfile 2>/dev/null || bun install --prod
 # Install Playwright Chromium browser binary
 RUN bunx playwright install chromium
 
+# Bust cache on every commit so source files are always fresh
+ARG GIT_SHA
 # Copy application source
 COPY src/ ./src/
 COPY public/ ./public/
