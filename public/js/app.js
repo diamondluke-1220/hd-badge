@@ -1302,6 +1302,7 @@ async function switchView(mode) {
     reviewboard: window.ReviewBoardRenderer,
     dendro: window.DendroRenderer,
     arcade: window.ArcadeRenderer,
+    rack: window.RackRenderer,
   };
 
   const renderer = renderers[mode];
@@ -1313,7 +1314,7 @@ async function switchView(mode) {
   currentRenderer = renderer;
 
   // Toggle body class for view-specific CSS (e.g., hiding global ticker in lobby)
-  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade');
+  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade', 'view-rack');
   document.body.classList.add('view-' + mode);
 
   // Save preference
@@ -1361,17 +1362,18 @@ async function initOrgChart() {
     reviewboard: !!window.ReviewBoardRenderer,
     dendro: !!window.DendroRenderer,
     arcade: !!window.ArcadeRenderer,
+    rack: !!window.RackRenderer,
   };
   const mode = available[savedMode] ? savedMode : 'grid';
 
-  currentRenderer = { grid: window.GridRenderer, reviewboard: window.ReviewBoardRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer }[mode];
+  currentRenderer = { grid: window.GridRenderer, reviewboard: window.ReviewBoardRenderer, dendro: window.DendroRenderer, arcade: window.ArcadeRenderer, rack: window.RackRenderer }[mode];
   if (!currentRenderer) {
     orgChartContainer.innerHTML = '<div class="no-badges-msg">No renderer available.</div>';
     return;
   }
 
   // Set body class for view-specific CSS (e.g., hiding global ticker in lobby)
-  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade');
+  document.body.classList.remove('view-grid', 'view-reviewboard', 'view-dendro', 'view-arcade', 'view-rack');
   document.body.classList.add('view-' + mode);
 
   // Mark active button
@@ -1387,6 +1389,7 @@ const VIEW_MODES = [
   { mode: 'reviewboard', icon: '&#9733;',  label: 'AI Review', desc: 'Performance reviews',    key: '2' },
   { mode: 'dendro',      icon: '&#127795;', label: 'Tree',      desc: 'Org tree',               key: '3' },
   { mode: 'arcade',      icon: '&#127918;', label: 'Arcade',   desc: 'Office combat simulator', key: '4' },
+  { mode: 'rack',        icon: '&#128429;', label: 'Rack',     desc: 'Network infrastructure',  key: '5' },
 ];
 
 function buildViewSwitcher() {
@@ -1469,6 +1472,7 @@ function buildViewSwitcher() {
     else if (e.key === '2') switchView('reviewboard');
     else if (e.key === '3') switchView('dendro');
     else if (e.key === '4') switchView('arcade');
+    else if (e.key === '5') switchView('rack');
     else if (e.key === 'a' || e.key === 'A') toggleAnimations();
   });
 }

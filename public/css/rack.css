@@ -1,0 +1,849 @@
+/* ─── Network Rack View ─────────────────────────────────── */
+
+/* ─── Hide non-essential chrome in rack view ──────────────── */
+
+body.view-rack .app-header > h1,
+body.view-rack .app-header > .app-nav,
+body.view-rack #sfTicker,
+body.view-rack .sf-ticker,
+body.view-rack .stats-panel,
+body.view-rack .ticker-bar {
+  display: none !important;
+}
+
+body.view-rack .app-header {
+  padding: 0;
+  border: none;
+  background: #0a0a0a;
+}
+
+body.view-rack .view-dropdown {
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: 20;
+}
+
+body.view-rack .public-orgchart {
+  background: #0a0a0a;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+/* ─── Layout ─────────────────────────────────────────────── */
+
+.rack-container {
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 60px;
+  padding: 0 32px;
+  background: radial-gradient(ellipse at 50% 30%, #141420 0%, #0a0a0f 50%, #060608 100%);
+  overflow: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── Rack Frame ──────────────────────────────────────────── */
+
+.rack-frame {
+  display: flex;
+  flex-direction: column;
+  width: 580px;
+  min-width: 420px;
+  background: var(--surface-base);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  /* align-items: stretch on .rack-container makes both racks equal height */
+}
+
+.rack-frame-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.rack-frame-label-name {
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+/* ─── Rack Rail Lines ─────────────────────────────────────── */
+
+.rack-rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 70px,
+    rgba(255, 255, 255, 0.06) 70px,
+    rgba(255, 255, 255, 0.06) 72px
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rack-rail-left {
+  left: 0;
+  border-right: 1px solid var(--border);
+}
+
+.rack-rail-right {
+  right: 0;
+  border-left: 1px solid var(--border);
+}
+
+/* ─── U Height System ─────────────────────────────────────── */
+/* 1U = 56px. Every device height = uCount * 56px. No exceptions. */
+
+:root {
+  --rack-u: 72px;
+}
+
+/* ─── Devices (generic) ───────────────────────────────────── */
+
+.rack-device {
+  position: relative;
+  margin: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-card);
+  height: var(--rack-u);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 6px 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rack-device-1u { height: var(--rack-u); }
+.rack-device-2u { height: calc(var(--rack-u) * 2); }
+.rack-device-3u { height: calc(var(--rack-u) * 3); }
+.rack-device-4u { height: calc(var(--rack-u) * 4); }
+
+.rack-device:last-child {
+  border-bottom: none;
+}
+
+.rack-device-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rack-device-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rack-device-model {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.rack-device-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+/* ─── Core Switch ─────────────────────────────────────────── */
+
+.rack-device-core {
+  background: linear-gradient(135deg, rgba(212, 168, 67, 0.08) 0%, var(--surface-card) 50%);
+  border-bottom: 1px solid rgba(212, 168, 67, 0.3);
+  /* 2U — height set by .rack-device-2u */
+}
+
+.rack-device-core .rack-device-name {
+  color: var(--accent-gold);
+  font-size: 14px;
+  letter-spacing: 1.2px;
+}
+
+.rack-core-ports {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rack-core-port {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(212, 168, 67, 0.5);
+  background: var(--surface-base);
+  flex-shrink: 0;
+}
+
+.rack-core-port img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rack-core-port-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 36px;
+}
+
+.rack-core-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.rack-core-separator {
+  width: 1px;
+  height: 24px;
+  background: rgba(212, 168, 67, 0.2);
+  margin: 0 4px;
+}
+
+/* ─── Division Switch ─────────────────────────────────────── */
+
+.rack-device-switch {
+  /* 1U — height set by .rack-device-1u */
+}
+
+.rack-switch-ports {
+  display: flex;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.rack-switch-leds {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.rack-switch-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: rack-led-blink 1.5s ease-in-out infinite;
+}
+
+.rack-switch-led:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.rack-switch-led:nth-child(3) {
+  animation-delay: 1.0s;
+  background: var(--accent-gold);
+}
+
+/* ─── Connection Ports (RJ45 / SFP style on switches) ─────── */
+
+.rack-conn-ports {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.rack-conn-port {
+  width: 14px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 1px;
+  background: rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+.rack-conn-port-active {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.rack-conn-port-active::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  animation: rack-led-blink 2s ease-in-out infinite;
+}
+
+.rack-conn-port-trunk {
+  width: 18px;
+  height: 14px;
+  border-color: rgba(212, 168, 67, 0.4);
+  background: rgba(212, 168, 67, 0.08);
+}
+
+.rack-conn-port-trunk::after {
+  background: var(--accent-gold);
+}
+
+.rack-conn-label {
+  font-size: 8px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  margin-left: 4px;
+}
+
+/* ─── Patch Panel ─────────────────────────────────────────── */
+
+.rack-device-patch {
+  padding: 0 14px;
+  justify-content: space-evenly;
+  gap: 0;
+}
+
+.rack-patch-label {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  z-index: 2;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 8px);
+}
+
+.rack-port-row {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rack-port {
+  width: 40px;
+  height: 40px;
+  border-radius: 3px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--surface-base);
+  cursor: pointer;
+  transition: transform 0.2s ease, border-color 0.15s ease, box-shadow 0.2s ease, border-radius 0.2s ease;
+  position: relative;
+}
+
+.rack-port:hover {
+  transform: scale(1.5);
+  border-color: var(--accent-blue);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 0 12px rgba(91, 141, 239, 0.4);
+  z-index: 10;
+}
+
+.rack-port img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rack-port-empty {
+  border-style: dashed;
+  border-color: var(--border);
+  opacity: 0.4;
+}
+
+/* RJ45 tab notch on top of empty ports */
+.rack-port-empty::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 3px;
+  background: var(--border);
+  border-radius: 0 0 2px 2px;
+  opacity: 0.5;
+}
+
+.rack-port-led {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  z-index: 2;
+}
+
+.rack-port-empty .rack-port-led {
+  background: var(--text-disabled);
+  opacity: 0.5;
+}
+
+.rack-port-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ─── Port Tooltip ────────────────────────────────────────── */
+
+.rack-port-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 15, 0.95);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rack-port:hover .rack-port-tooltip {
+  opacity: 1;
+}
+
+.rack-port-tooltip-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rack-port-tooltip-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Contractor Shelf ────────────────────────────────────── */
+
+.rack-device-contractor {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.05) 0%, var(--surface-card) 50%);
+  border-bottom: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.rack-device-contractor .rack-device-name {
+  color: #ffd700;
+  font-size: 9px;
+}
+
+.rack-device-contractor .rack-device-accent {
+  background: #ffd700;
+}
+
+/* ─── Blank Panel ─────────────────────────────────────────── */
+
+.rack-device-blank {
+  /* 1U — height set by .rack-device-1u, no flex growth */
+  flex: 0 0 auto;
+  background: linear-gradient(
+    180deg,
+    rgba(60, 60, 70, 0.15) 0%,
+    rgba(50, 50, 60, 0.1) 50%,
+    rgba(60, 60, 70, 0.15) 100%
+  );
+  border-bottom: 1px solid rgba(58, 58, 68, 0.5);
+  padding: 0;
+}
+
+.rack-blank-screws {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 8px;
+  height: 100%;
+}
+
+.rack-blank-screw {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ─── UPS (Eaton-inspired with LCD) ───────────────────────── */
+
+.rack-device-ups {
+  /* 2U — height set by .rack-device-2u */
+  background: linear-gradient(180deg, #1a1a22 0%, var(--surface-card) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+}
+
+.rack-ups-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.rack-ups-lcd {
+  width: 100px;
+  min-height: 36px;
+  background: #0a1a0a;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 3px;
+  padding: 4px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5), 0 0 4px rgba(34, 197, 94, 0.1);
+}
+
+.rack-ups-lcd-line {
+  font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #22C55E;
+  line-height: 1.3;
+  letter-spacing: 0.5px;
+}
+
+.rack-ups-lcd-line-dim {
+  color: rgba(34, 197, 94, 0.5);
+}
+
+.rack-ups-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rack-ups-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rack-ups-track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface-base);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.rack-ups-fill {
+  height: 100%;
+  background: var(--accent-green);
+  border-radius: 3px;
+  transition: width 1s ease;
+}
+
+.rack-ups-pct {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent-green);
+  min-width: 32px;
+}
+
+.rack-ups-meta {
+  font-size: 8px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 12px;
+}
+
+.rack-ups-status {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-green);
+}
+
+.rack-ups-leds {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.rack-ups-led {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.rack-ups-led-on { background: var(--accent-green); }
+.rack-ups-led-bat { background: var(--accent-gold); animation: rack-led-blink 3s ease-in-out infinite; }
+.rack-ups-led-fault { background: var(--text-disabled); }
+
+/* ─── PDU (Eaton-inspired with breakers) ──────────────────── */
+
+.rack-device-pdu {
+  /* 1U — height set by .rack-device-1u */
+  background: linear-gradient(180deg, #1a1a22 0%, var(--surface-card) 100%);
+}
+
+.rack-pdu-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.rack-pdu-outlets {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.rack-pdu-outlet {
+  width: 14px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.3);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rack-pdu-outlet::before {
+  content: '';
+  width: 6px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+}
+
+.rack-pdu-outlet-active::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent-green);
+}
+
+.rack-pdu-breaker {
+  width: 8px;
+  height: 12px;
+  background: var(--surface-base);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1px;
+  position: relative;
+}
+
+.rack-pdu-breaker::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 3px;
+  background: var(--accent-green);
+  border-radius: 1px;
+}
+
+.rack-pdu-amps {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ─── NAS (Disk Bays) ─────────────────────────────────────── */
+
+.rack-device-nas {
+  background: linear-gradient(180deg, #1a1a22 0%, var(--surface-card) 100%);
+}
+
+.rack-nas-bays {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.rack-nas-bay {
+  width: 40px;
+  height: 32px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.rack-nas-bay-active {
+  border-color: rgba(91, 141, 239, 0.3);
+}
+
+.rack-nas-disk {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  position: relative;
+}
+
+.rack-nas-disk::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-disabled);
+}
+
+.rack-nas-disk-spin {
+  border-color: var(--accent-blue);
+  animation: rack-disk-spin 2s linear infinite;
+}
+
+.rack-nas-disk-spin::after {
+  background: var(--accent-blue);
+}
+
+.rack-nas-bay-label {
+  font-size: 6px;
+  color: var(--text-disabled);
+  letter-spacing: 0.3px;
+}
+
+@keyframes rack-disk-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ─── LED Blink Animation ─────────────────────────────────── */
+
+@keyframes rack-led-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ─── Fallback ────────────────────────────────────────────── */
+
+.rack-fallback {
+  color: var(--text-disabled);
+  text-align: center;
+  padding: 4rem 2rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+}
+
+/* ─── Mobile ──────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .rack-container {
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 16px;
+  }
+
+  .rack-frame {
+    width: 100%;
+    min-width: unset;
+    max-width: 520px;
+  }
+
+  .rack-port {
+    width: 28px;
+    height: 28px;
+  }
+
+  .rack-core-port {
+    width: 28px;
+    height: 28px;
+  }
+
+  .rack-port-grid {
+    grid-template-columns: repeat(10, 1fr);
+    gap: 3px;
+  }
+
+  .rack-device-name {
+    font-size: 10px;
+  }
+}
+
+/* ─── Tablet ──────────────────────────────────────────────── */
+
+@media (min-width: 641px) and (max-width: 1100px) {
+  .rack-container {
+    gap: 40px;
+    padding: 20px;
+  }
+
+  .rack-frame {
+    width: 520px;
+    min-width: 380px;
+  }
+
+  .rack-port-grid {
+    grid-template-columns: repeat(10, 1fr);
+  }
+}
+
+/* ─── Reduced Motion ──────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .rack-switch-led { animation: none; }
+  .rack-nas-disk-spin { animation: none; }
+}
+
+/* ─── FX Off ──────────────────────────────────────────────── */
+
+.fx-off .rack-switch-led { animation: none; }
+.fx-off .rack-nas-disk-spin { animation: none; }

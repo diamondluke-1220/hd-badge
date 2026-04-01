@@ -79,6 +79,7 @@ function getCurrentViewMode() {
   if (currentRenderer === window.ReviewBoardRenderer) return 'reviewboard';
   if (currentRenderer === window.DendroRenderer) return 'dendro';
   if (currentRenderer === window.ArcadeRenderer) return 'arcade';
+  if (currentRenderer === window.RackRenderer) return 'rack';
   return 'grid';
 }
 
@@ -118,6 +119,8 @@ async function processLiveQueue() {
       if (nodeEl) await playPingTrace(nodeEl);
     } else if (mode === 'arcade') {
       if (currentRenderer) await currentRenderer.addBadge(badge);
+    } else if (mode === 'rack') {
+      const portEl = currentRenderer ? currentRenderer.addBadge(badge) : null;
     } else {
       const card = currentRenderer ? currentRenderer.addBadge(badge) : null;
     }

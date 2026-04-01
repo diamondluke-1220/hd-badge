@@ -1,0 +1,641 @@
+// ─── Network Rack Renderer ─────────────────────────────────
+// Implements the renderer interface: { init, addBadge, updateBadge, destroy }
+// Dual server rack layout: Root (Core A/B) → Division Switches → Patch Panels → Ports (employees).
+
+window.RackRenderer = {
+  _container: null,
+  _stats: null,
+  _allBadges: [],
+  _badgeIndex: {},      // employeeId → badge
+  _rackData: null,      // computed layout { rackA: Device[], rackB: Device[] }
+  _cssLink: null,
+  _resizeObserver: null,
+  _dualMode: false,     // true when ≥3 active divisions
+
+  // Rack assignment: which division themes go where
+  _RACK_A_THEMES: ['IT', 'Punk'],
+  _RACK_B_THEMES: ['Office', 'Corporate'],
+  _TARGET_U: 20,        // target rack height in U
+  _PORTS_PER_ROW: 12,
+
+  async init(container, stats) {
+    this._container = container;
+    this._stats = stats;
+    this._badgeIndex = {};
+
+    // Load CSS
+    this._cssLink = document.createElement('link');
+    this._cssLink.rel = 'stylesheet';
+    this._cssLink.href = '/css/rack.css';
+    document.head.appendChild(this._cssLink);
+
+    // Fetch all badges
+    let allBadges = [];
+    try {
+      allBadges = await BadgePool.fetchAll({ limit: 100 });
+    } catch {
+      container.innerHTML = '<div class="rack-fallback">Failed to load employee data.</div>';
+      return;
+    }
+
+    // Initialize shared stats (ticker, donut)
+    initRendererStats(stats);
+
+    if (allBadges.length === 0) {
+      container.innerHTML = '<div class="rack-fallback">No employees provisioned yet.<br><a href="/" style="color:var(--accent-blue);margin-top:8px;display:inline-block;">Be the first hire &rarr;</a></div>';
+      return;
+    }
+
+    // Index badges
+    this._allBadges = allBadges;
+    allBadges.forEach(b => { this._badgeIndex[b.employeeId] = b; });
+
+    // Build layout and render
+    this._rackData = this._computeLayout(allBadges);
+    this._render();
+  },
+
+  addBadge(badge) {
+    if (!this._container || !this._rackData) return null;
+
+    // Dedup
+    if (this._badgeIndex[badge.employeeId]) return null;
+
+    this._badgeIndex[badge.employeeId] = badge;
+    this._allBadges.push(badge);
+
+    // Find or create the port in the correct patch panel
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const deptName = badge.department;
+
+    // Find the patch panel element
+    const panelKey = `${divTheme}::${deptName}`;
+    let panel = this._container.querySelector(`[data-panel-key="${CSS.escape(panelKey)}"]`);
+
+    if (!panel) {
+      // Department not yet rendered — rebuild layout
+      this._rackData = this._computeLayout(this._allBadges);
+      this._render();
+      panel = this._container.querySelector(`[data-panel-key="${CSS.escape(panelKey)}"]`);
+      if (!panel) return null;
+    }
+
+    // Add port to the grid
+    const grid = panel.querySelector('.rack-port-grid');
+    if (!grid) return null;
+
+    // Remove an empty port if one exists
+    const emptyPort = grid.querySelector('.rack-port-empty');
+    if (emptyPort) emptyPort.remove();
+
+    const portEl = this._createPort(badge);
+    grid.appendChild(portEl);
+
+    // Update count
+    const countEl = panel.querySelector('.rack-port-count');
+    if (countEl) {
+      const ports = grid.querySelectorAll('.rack-port:not(.rack-port-empty)');
+      countEl.textContent = `${ports.length}`;
+    }
+
+    return portEl;
+  },
+
+  updateBadge(badge) {
+    if (!this._container) return;
+    const portEl = this._container.querySelector(`[data-employee-id="${badge.employeeId}"]`);
+    if (!portEl) return;
+
+    const img = portEl.querySelector('img');
+    if (img && badge.employeeId) {
+      img.src = `/api/badge/${badge.employeeId}/headshot?t=${Date.now()}`;
+    }
+
+    const nameEl = portEl.querySelector('.rack-port-tooltip-name');
+    if (nameEl && badge.name) nameEl.textContent = badge.name;
+
+    const titleEl = portEl.querySelector('.rack-port-tooltip-title');
+    if (titleEl && badge.title) titleEl.textContent = badge.title;
+  },
+
+  destroy() {
+    if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    if (this._container) this._container.innerHTML = '';
+    this._container = null;
+    this._stats = null;
+    this._allBadges = [];
+    this._badgeIndex = {};
+    this._rackData = null;
+  },
+
+  // ─── Layout Computation ─────────────────────────────────
+
+  _computeLayout(badges) {
+    // Group badges by division theme
+    const byDiv = {};
+    const execBadges = [];
+
+    badges.forEach(b => {
+      const theme = getDivisionForDept(b.department, b.isBandMember);
+      if (theme === '_exec') {
+        execBadges.push(b);
+        return;
+      }
+      if (!byDiv[theme]) byDiv[theme] = {};
+      if (!byDiv[theme][b.department]) byDiv[theme][b.department] = [];
+      byDiv[theme][b.department].push(b);
+    });
+
+    // Count active divisions (excluding exec and custom)
+    const activeThemes = Object.keys(byDiv).filter(t => t !== '_custom');
+    this._dualMode = activeThemes.length >= 3;
+
+    // Build device lists for each rack
+    const rackA = [];
+    const rackB = [];
+
+    // Add division switch + single patch panel per division (all dept employees merged)
+    const addDivision = (theme, rack) => {
+      const depts = byDiv[theme];
+      if (!depts) return;
+
+      const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === theme);
+      if (!divInfo) return;
+
+      const color = DIVISION_ACCENT_COLORS[theme] || '#4b5563';
+
+      // Merge all department employees into one division pool
+      const allEmployees = [];
+      Object.values(depts).forEach(emps => allEmployees.push(...emps));
+
+      // Division switch (1U)
+      rack.push({
+        type: 'switch',
+        name: divInfo.name,
+        theme: theme,
+        color: color,
+        portCount: Object.keys(depts).length,
+      });
+
+      // Division patch panel (1U, 12 ports, pool rotation handles overflow)
+      rack.push({
+        type: 'patch',
+        name: divInfo.name,
+        theme: theme,
+        color: color,
+        employees: allEmployees,
+        uSize: 1,
+        panelKey: theme,
+      });
+    };
+
+    // Assign divisions to racks
+    this._RACK_A_THEMES.forEach(t => addDivision(t, rackA));
+    this._RACK_B_THEMES.forEach(t => addDivision(t, rackB));
+
+    // Contractors — switch + patch panel
+    const customDepts = byDiv['_custom'];
+    if (customDepts) {
+      const customEmployees = [];
+      Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
+
+      const target = this._usedU(rackA) <= this._usedU(rackB) ? rackA : rackB;
+
+      // Contractor switch (1U)
+      target.push({
+        type: 'switch',
+        name: 'INDEPENDENT CONTRACTORS',
+        theme: '_custom',
+        color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
+        portCount: Object.keys(customDepts).length,
+      });
+
+      // Contractor patch panel (1U)
+      target.push({
+        type: 'patch',
+        name: 'INDEPENDENT CONTRACTORS',
+        theme: '_custom',
+        color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
+        employees: customEmployees,
+        uSize: 1,
+        panelKey: '_custom',
+      });
+    }
+
+    // NAS device (1U) — cosmetic, employee photos spin like disks
+    rackA.push({ type: 'nas' });
+
+    // Match rack heights — add blanks so both racks are the same total U
+    const coreU = 2;
+    const upsU = 3; // UPS (2U) + PDU (1U) added after
+    const devicesA = this._usedU(rackA);
+    const devicesB = this._usedU(rackB);
+    const totalA = coreU + devicesA + upsU;
+    const totalB = coreU + devicesB + upsU;
+    const maxU = Math.max(totalA, totalB);
+
+    // Fill shorter rack with blanks to match taller rack
+    const blanksA = maxU - totalA;
+    const blanksB = maxU - totalB;
+    for (let i = 0; i < blanksA; i++) rackA.push({ type: 'blank' });
+    for (let i = 0; i < blanksB; i++) rackB.push({ type: 'blank' });
+
+    // UPS + PDU always at bottom
+    rackA.push({ type: 'ups', pct: 80 + Math.floor(Math.random() * 15), runtime: 42 + Math.floor(Math.random() * 20) });
+    rackA.push({ type: 'pdu', outlets: this._countDevices(rackA) });
+    rackB.push({ type: 'ups', pct: 65 + Math.floor(Math.random() * 25), runtime: 28 + Math.floor(Math.random() * 30) });
+    rackB.push({ type: 'pdu', outlets: this._countDevices(rackB) });
+
+    return { rackA, rackB, execBadges };
+  },
+
+  // Empty departments are not rendered — they install dynamically when first employee joins
+
+  _usedU(rack) {
+    return rack.reduce((sum, d) => {
+      if (d.type === 'switch') return sum + 1;
+      if (d.type === 'patch') return sum + (d.uSize || 1);
+      if (d.type === 'nas') return sum + 1;
+      if (d.type === 'blank') return sum + 1;
+      if (d.type === 'ups') return sum + 2;
+      if (d.type === 'pdu') return sum + 1;
+      return sum;
+    }, 0);
+  },
+
+  _countDevices(rack) {
+    return rack.filter(d => d.type !== 'blank' && d.type !== 'ups' && d.type !== 'pdu').length;
+  },
+
+  _fillBlanks(rack) {
+    this._fillBlanksTo(rack, this._TARGET_U);
+  },
+
+  _fillBlanksTo(rack, targetU) {
+    const used = this._usedU(rack);
+    const blanksNeeded = Math.max(0, targetU - used);
+    for (let i = 0; i < blanksNeeded; i++) {
+      rack.push({ type: 'blank' });
+    }
+  },
+
+  // ─── Rendering ──────────────────────────────────────────
+
+  _render() {
+    const container = this._container;
+    container.innerHTML = '';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'rack-container';
+
+    if (this._dualMode) {
+      // Dual rack layout
+      const frameA = this._renderRack(this._rackData.rackA, 'IDF-101-PROD', 'RACK A', this._rackData.execBadges, 'A');
+      const frameB = this._renderRack(this._rackData.rackB, 'IDF-102-OFFICE', 'RACK B', this._rackData.execBadges, 'B');
+      wrapper.appendChild(frameA);
+      wrapper.appendChild(frameB);
+    } else {
+      // Single rack mode — merge everything
+      const merged = [...this._rackData.rackA, ...this._rackData.rackB];
+      const frame = this._renderRack(merged, 'IDF-101', 'RACK A', this._rackData.execBadges, 'A');
+      wrapper.appendChild(frame);
+    }
+
+    container.appendChild(wrapper);
+
+    // Resize observer
+    this._resizeObserver = new ResizeObserver(() => {
+      // Future: recalculate cable paths on resize
+    });
+    this._resizeObserver.observe(wrapper);
+  },
+
+  _renderRack(devices, locationId, label, execBadges, coreSide) {
+    const frame = document.createElement('div');
+    frame.className = 'rack-frame';
+    frame.setAttribute('data-rack-id', locationId);
+
+    // Rails
+    frame.innerHTML = `
+      <div class="rack-rail rack-rail-left"></div>
+      <div class="rack-rail rack-rail-right"></div>
+    `;
+
+    // Label
+    const labelEl = document.createElement('div');
+    labelEl.className = 'rack-frame-label';
+    labelEl.innerHTML = `
+      <span class="rack-frame-label-name">${esc(label)}</span>
+      <span>${esc(locationId)}</span>
+    `;
+    frame.appendChild(labelEl);
+
+    // Core switch (always first device)
+    frame.appendChild(this._renderCoreSwitch(execBadges, coreSide));
+
+    // Devices
+    devices.forEach(device => {
+      switch (device.type) {
+        case 'switch':
+          frame.appendChild(this._renderSwitch(device));
+          break;
+        case 'patch':
+          frame.appendChild(this._renderPatchPanel(device));
+          break;
+        case 'nas':
+          frame.appendChild(this._renderNAS());
+          break;
+        case 'blank':
+          frame.appendChild(this._renderBlank());
+          break;
+        case 'ups':
+          frame.appendChild(this._renderUPS(device));
+          break;
+        case 'pdu':
+          frame.appendChild(this._renderPDU(device));
+          break;
+      }
+    });
+
+    return frame;
+  },
+
+  _renderCoreSwitch(execBadges, side) {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-core rack-device-2u';
+    el.setAttribute('data-device-type', 'core');
+    el.setAttribute('data-core-side', side);
+
+    const coreLabel = side === 'A' ? 'CORE A' : 'CORE B';
+    const model = side === 'A' ? 'Crisco 9500-24Y4C' : 'Crisco 9500-24Y4C';
+
+    let portsHtml = '';
+    if (execBadges && execBadges.length > 0) {
+      // Split band members across cores: first half on A, second half on B
+      const half = Math.ceil(execBadges.length / 2);
+      const myMembers = side === 'A' ? execBadges.slice(0, half) : execBadges.slice(half);
+
+      portsHtml = '<div class="rack-core-ports">';
+      myMembers.forEach((b, i) => {
+        if (i > 0) portsHtml += '<div class="rack-core-separator"></div>';
+        portsHtml += `
+          <div class="rack-core-member">
+            <div class="rack-core-port" data-employee-id="${esc(b.employeeId)}">
+              <img src="/api/badge/${esc(b.employeeId)}/headshot" alt="${esc(b.name)}" loading="lazy"
+                onerror="this.style.display='none'">
+            </div>
+            <span class="rack-core-port-label">${esc(b.name.split(' ')[0])}</span>
+          </div>
+        `;
+      });
+      portsHtml += `
+        <div class="rack-core-separator"></div>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led"></div>
+          <div class="rack-switch-led"></div>
+          <div class="rack-switch-led"></div>
+        </div>
+      `;
+      portsHtml += '</div>';
+    }
+
+    // Trunk SFP ports + a few generic ports (cosmetic)
+    let connHtml = '<div class="rack-switch-ports">';
+    connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
+    connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
+    for (let i = 0; i < 8; i++) {
+      connHtml += `<div class="rack-conn-port ${i < 4 ? 'rack-conn-port-active' : ''}"></div>`;
+    }
+    connHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-header">
+        <span class="rack-device-name">${coreLabel}</span>
+        <span class="rack-device-model">${model}</span>
+      </div>
+      ${portsHtml}
+      ${connHtml}
+    `;
+
+    return el;
+  },
+
+  _renderSwitch(device) {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-switch rack-device-1u';
+    el.setAttribute('data-device-type', 'switch');
+    el.setAttribute('data-theme', device.theme);
+
+    // Row of switch ports — some active, some empty (cosmetic)
+    const totalPorts = 12;
+    const activePorts = Math.min(device.portCount + 1, totalPorts); // +1 for uplink
+    let portsHtml = '<div class="rack-switch-ports">';
+    for (let i = 0; i < totalPorts; i++) {
+      portsHtml += `<div class="rack-conn-port ${i < activePorts ? 'rack-conn-port-active' : ''}"></div>`;
+    }
+    portsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-accent" style="background:${device.color}"></div>
+      <div class="rack-device-header">
+        <span class="rack-device-name" style="color:${device.color}">${esc(device.name)}</span>
+        <span class="rack-device-model">Crisco 2960X</span>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led" style="background:${device.color}"></div>
+          <div class="rack-switch-led" style="background:${device.color}"></div>
+          <div class="rack-switch-led" style="background:${device.color}"></div>
+        </div>
+      </div>
+      ${portsHtml}
+    `;
+
+    return el;
+  },
+
+  _renderPatchPanel(device) {
+    // 1U = 12 ports. Show first 12 employees, rest handled by pool rotation (Phase 3).
+    const totalPorts = 12;
+    const filledCount = Math.min(device.employees.length, totalPorts);
+    const el = document.createElement('div');
+    el.className = `rack-device rack-device-patch rack-device-${device.uSize}u`;
+    el.setAttribute('data-device-type', 'patch');
+    el.setAttribute('data-panel-key', device.panelKey);
+    el.setAttribute('data-theme', device.theme);
+
+    // Build rows of 12 ports each
+    let rowsHtml = '';
+    for (let row = 0; row < device.uSize; row++) {
+      rowsHtml += '<div class="rack-port-row">';
+      for (let col = 0; col < 12; col++) {
+        const idx = row * 12 + col;
+        if (idx < filledCount) {
+          rowsHtml += this._createPortHtml(device.employees[idx]);
+        } else {
+          rowsHtml += '<div class="rack-port rack-port-empty"></div>';
+        }
+      }
+      rowsHtml += '</div>';
+    }
+
+    el.innerHTML = `
+      <div class="rack-device-accent" style="background:${device.color}"></div>
+      <div class="rack-patch-label">${esc(device.name)}</div>
+      ${rowsHtml}
+    `;
+
+    return el;
+  },
+
+
+  _renderNAS() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-nas rack-device-1u';
+    el.setAttribute('data-device-type', 'nas');
+
+    // 4 drive bays with spinning disk slots
+    let baysHtml = '<div class="rack-nas-bays">';
+    const labels = ['BAY 1', 'BAY 2', 'BAY 3', 'BAY 4'];
+    const statuses = ['active', 'active', 'active', 'standby'];
+    for (let i = 0; i < 4; i++) {
+      baysHtml += `
+        <div class="rack-nas-bay rack-nas-bay-${statuses[i]}">
+          <div class="rack-nas-disk ${statuses[i] === 'active' ? 'rack-nas-disk-spin' : ''}"></div>
+          <span class="rack-nas-bay-label">${labels[i]}</span>
+        </div>
+      `;
+    }
+    baysHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-header">
+        <span class="rack-device-name">SPINOLOGY DiskStation</span>
+        <span class="rack-device-model">DS-1621+</span>
+        <div class="rack-switch-leds">
+          <div class="rack-switch-led" style="background:var(--accent-blue)"></div>
+          <div class="rack-switch-led" style="background:var(--accent-green)"></div>
+        </div>
+      </div>
+      ${baysHtml}
+    `;
+
+    return el;
+  },
+
+  _renderBlank() {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-blank rack-device-1u';
+    el.innerHTML = `
+      <div class="rack-blank-screws">
+        <div class="rack-blank-screw"></div>
+        <div class="rack-blank-screw"></div>
+      </div>
+    `;
+    return el;
+  },
+
+  _renderUPS(device) {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-ups rack-device-2u';
+    el.setAttribute('data-device-type', 'ups');
+
+    const load = 15 + Math.floor(Math.random() * 25);
+    const voltage = 120 + Math.floor(Math.random() * 3);
+
+    el.innerHTML = `
+      <div class="rack-device-header">
+        <span class="rack-device-name">EATEN 5PX</span>
+        <span class="rack-ups-status">&#9679; ONLINE</span>
+      </div>
+      <div class="rack-ups-body">
+        <div class="rack-ups-lcd">
+          <div class="rack-ups-lcd-line">${voltage}V ${load}% LOAD</div>
+          <div class="rack-ups-lcd-line rack-ups-lcd-line-dim">BAT: ${device.pct}% ${device.runtime}min</div>
+        </div>
+        <div class="rack-ups-info">
+          <div class="rack-ups-bar">
+            <div class="rack-ups-track">
+              <div class="rack-ups-fill" style="width:${device.pct}%"></div>
+            </div>
+            <span class="rack-ups-pct">${device.pct}%</span>
+          </div>
+          <div class="rack-ups-meta">
+            <span>Runtime: ${device.runtime}min</span>
+            <span>Load: ${load}%</span>
+          </div>
+          <div class="rack-ups-leds">
+            <div class="rack-ups-led rack-ups-led-on" title="Online"></div>
+            <div class="rack-ups-led rack-ups-led-bat" title="Battery"></div>
+            <div class="rack-ups-led rack-ups-led-fault" title="Fault"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    return el;
+  },
+
+  _renderPDU(device) {
+    const el = document.createElement('div');
+    el.className = 'rack-device rack-device-pdu rack-device-1u';
+    el.setAttribute('data-device-type', 'pdu');
+
+    const totalOutlets = Math.min(device.outlets + 2, 10);
+    const amps = (1.2 + Math.random() * 3.5).toFixed(1);
+
+    let outletsHtml = '<div class="rack-pdu-outlets">';
+    for (let i = 0; i < totalOutlets; i++) {
+      outletsHtml += `<div class="rack-pdu-outlet ${i < device.outlets ? 'rack-pdu-outlet-active' : ''}"></div>`;
+    }
+    outletsHtml += '</div>';
+
+    el.innerHTML = `
+      <div class="rack-device-header">
+        <span class="rack-device-name">EATEN ePDU G3</span>
+        <span class="rack-device-model">EMAB22</span>
+      </div>
+      <div class="rack-pdu-body">
+        <div class="rack-pdu-breaker" title="Main breaker"></div>
+        ${outletsHtml}
+        <span class="rack-pdu-amps">${amps}A</span>
+      </div>
+    `;
+
+    return el;
+  },
+
+  // ─── Port Creation ──────────────────────────────────────
+
+  _createPort(badge) {
+    const el = document.createElement('div');
+    el.className = 'rack-port';
+    el.setAttribute('data-employee-id', badge.employeeId);
+    el.innerHTML = this._portInnerHtml(badge);
+    el.addEventListener('click', () => {
+      if (typeof showBadgeDetail === 'function') {
+        showBadgeDetail(badge.employeeId, badge.name);
+      }
+    });
+    return el;
+  },
+
+  _createPortHtml(badge) {
+    return `
+      <div class="rack-port" data-employee-id="${esc(badge.employeeId)}"
+           onclick="if(typeof showBadgeDetail==='function')showBadgeDetail('${esc(badge.employeeId)}','${esc(badge.name)}')">
+        ${this._portInnerHtml(badge)}
+      </div>
+    `;
+  },
+
+  _portInnerHtml(badge) {
+    return `
+      <img src="/api/badge/${esc(badge.employeeId)}/headshot" alt="${esc(badge.name)}" loading="lazy"
+        onerror="this.style.display='none'">
+      <div class="rack-port-tooltip">
+        <div class="rack-port-tooltip-name">${esc(badge.name)}</div>
+        <div class="rack-port-tooltip-title">${esc(badge.title || '')}</div>
+      </div>
+    `;
+  },
+};
