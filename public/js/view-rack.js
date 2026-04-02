@@ -178,6 +178,7 @@ window.RackRenderer = {
     this._cancelAllPackets();
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
+    if (this._onWindowResize) { window.removeEventListener('resize', this._onWindowResize); this._onWindowResize = null; }
     if (this._container) this._container.innerHTML = '';
     this._container = null;
     this._stats = null;
@@ -333,6 +334,55 @@ window.RackRenderer = {
     }, 0);
   },
 
+  // ─── Zoom to Fit ────────────────────────────────────────
+
+  _applyZoomToFit(wrapper) {
+    if (!wrapper) return;
+
+    // The inner content div gets scaled; the outer .rack-container clips
+    let inner = wrapper.querySelector('.rack-zoom-inner');
+    if (!inner) {
+      // Wrap all children in an inner div (once)
+      inner = document.createElement('div');
+      inner.className = 'rack-zoom-inner';
+      while (wrapper.firstChild) inner.appendChild(wrapper.firstChild);
+      wrapper.appendChild(inner);
+    }
+
+    // Reset scale to measure natural size
+    inner.style.transform = '';
+
+    requestAnimationFrame(() => {
+      const contentH = inner.scrollHeight;
+      const contentW = inner.scrollWidth;
+      // Available space = wrapper's box minus its padding
+      const style = getComputedStyle(wrapper);
+      const padTop = parseFloat(style.paddingTop) || 0;
+      const padBot = parseFloat(style.paddingBottom) || 0;
+      const padL = parseFloat(style.paddingLeft) || 0;
+      const padR = parseFloat(style.paddingRight) || 0;
+      const viewportH = wrapper.clientHeight - padTop - padBot;
+      const viewportW = wrapper.clientWidth - padL - padR;
+
+      if (!contentH || !viewportH) return;
+
+      const scaleH = viewportH / contentH;
+      const scaleW = viewportW / contentW;
+      const scale = Math.min(1, scaleH, scaleW);
+
+      inner.style.transformOrigin = 'top center';
+      inner.style.transform = `scale(${scale.toFixed(4)})`;
+      this._zoomScale = scale;
+      // Lock the container — no scrollbar
+      wrapper.style.overflow = 'hidden';
+      // Tighten padding when zoomed to maximize space
+      if (scale < 0.95) {
+        wrapper.style.paddingTop = '4px';
+        wrapper.style.paddingBottom = '4px';
+      }
+    });
+  },
+
   // ─── Rendering ──────────────────────────────────────────
 
   _render() {
@@ -430,11 +480,15 @@ window.RackRenderer = {
     // Build topology graph (always, needed for packet pathfinding)
     this._graph = this._buildGraph();
 
-    // SVG cable overlay (after racks are in DOM)
+    // Zoom to fit first, then render cables (cables need final scaled positions)
     if (this._dualMode) {
       requestAnimationFrame(() => {
-        this._renderCables(wrapper);
-        this._startCloudRain();
+        this._applyZoomToFit(wrapper);
+        // Cables render after zoom so getBoundingClientRect is in final space
+        requestAnimationFrame(() => {
+          this._renderCables(wrapper);
+          this._startCloudRain();
+        });
       });
     }
 
@@ -462,6 +516,20 @@ window.RackRenderer = {
       }, 500);
     });
     this._resizeObserver.observe(wrapper);
+
+    // Window resize → recalc zoom-to-fit, then recalc cable positions
+    this._zoomWrapper = wrapper;
+    this._onWindowResize = () => {
+      this._applyZoomToFit(wrapper);
+      // Cables need recalc after zoom settles
+      requestAnimationFrame(() => {
+        if (this._cableSvg) {
+          this._cancelAllPackets();
+          this._updateCablePaths(wrapper);
+        }
+      });
+    };
+    window.addEventListener('resize', this._onWindowResize);
   },
 
   _addRackEars(el) {
@@ -1505,12 +1573,10 @@ window.RackRenderer = {
       const framesRow = this._container.querySelector('.rack-frames-row');
       if (framesRow) {
         const ref = framesRow.getBoundingClientRect();
-        const fr = fromEl.getBoundingClientRect();
-        const portX = fr.left + fr.width / 2 - ref.left;
-        const portY = fr.top + fr.height / 2 - ref.top;
+        const port = this._toSvgCoords(fromEl.getBoundingClientRect(), ref);
         // Which SVG path end is closer to the from-port?
-        const distToStart = Math.hypot(startPt.x - portX, startPt.y - portY);
-        const distToEnd = Math.hypot(endPt.x - portX, endPt.y - portY);
+        const distToStart = Math.hypot(startPt.x - port.x, startPt.y - port.y);
+        const distToEnd = Math.hypot(endPt.x - port.x, endPt.y - port.y);
         direction = distToStart <= distToEnd ? 1 : -1;
       }
     }
@@ -1653,37 +1719,27 @@ window.RackRenderer = {
 
     const coords = { cloud: null, fwWan: {}, wifiAp: null, switchBottom: {} };
 
+    const s = this._zoomScale || 1;
+
     // Cloud bottom-center (cloud is above framesRow, so y will be negative)
     const cloud = container.querySelector('[data-device-type="cloud"]');
     if (cloud) {
       const cr = cloud.getBoundingClientRect();
       coords.cloud = {
-        x: cr.left + cr.width / 2 - ref.left,
-        y: cr.bottom - ref.top,
+        x: (cr.left + cr.width / 2 - ref.left) / s,
+        y: (cr.bottom - ref.top) / s,
       };
     }
 
     // Firewall WAN ports
     ['a', 'b'].forEach(side => {
       const wan = container.querySelector(`[data-port-id="fw-${side}-wan"]`);
-      if (wan) {
-        const wr = wan.getBoundingClientRect();
-        coords.fwWan[side] = {
-          x: wr.left + wr.width / 2 - ref.left,
-          y: wr.top + wr.height / 2 - ref.top,
-        };
-      }
+      if (wan) coords.fwWan[side] = this._toSvgCoords(wan.getBoundingClientRect(), ref);
     });
 
     // WiFi AP anchor
     const wifiAnchor = container.querySelector('[data-port-id="wifi-ap-eth"]');
-    if (wifiAnchor) {
-      const war = wifiAnchor.getBoundingClientRect();
-      coords.wifiAp = {
-        x: war.left + war.width / 2 - ref.left,
-        y: war.top + war.height / 2 - ref.top,
-      };
-    }
+    if (wifiAnchor) coords.wifiAp = this._toSvgCoords(wifiAnchor.getBoundingClientRect(), ref);
 
     // Switch bottom edges (for switch→patch virtual drops)
     const switches = container.querySelectorAll('.rack-device-switch[data-theme]');
@@ -1691,23 +1747,44 @@ window.RackRenderer = {
       const theme = sw.getAttribute('data-theme');
       const sr = sw.getBoundingClientRect();
       coords.switchBottom[theme] = {
-        x: sr.left + sr.width / 2 - ref.left,
-        y: sr.bottom - ref.top,
+        x: (sr.left + sr.width / 2 - ref.left) / s,
+        y: (sr.bottom - ref.top) / s,
       };
     });
 
     this._virtualCoords = coords;
   },
 
+  _zoomScale: 1,
+
+  // Convert a getBoundingClientRect result to unscaled SVG coordinates relative to framesRow
+  _toSvgCoords(rect, refRect) {
+    const s = this._zoomScale || 1;
+    return {
+      x: (rect.left + rect.width / 2 - refRect.left) / s,
+      y: (rect.top + rect.height / 2 - refRect.top) / s,
+    };
+  },
+
+  _toSvgRect(rect, refRect) {
+    const s = this._zoomScale || 1;
+    return {
+      left: (rect.left - refRect.left) / s,
+      right: (rect.right - refRect.left) / s,
+      top: (rect.top - refRect.top) / s,
+      bottom: (rect.bottom - refRect.top) / s,
+      width: rect.width / s,
+      height: rect.height / s,
+    };
+  },
+
   _getPortCoords(container, portSelector) {
-    // Get a port element's center position relative to framesRow
     const framesRow = container.querySelector('.rack-frames-row');
     if (!framesRow) return null;
     const ref = framesRow.getBoundingClientRect();
     const el = container.querySelector(portSelector);
     if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2 - ref.left, y: r.top + r.height / 2 - ref.top };
+    return this._toSvgCoords(el.getBoundingClientRect(), ref);
   },
 
   // ─── Route Resolution ───────────────────────────────────
@@ -1921,9 +1998,9 @@ window.RackRenderer = {
     const framesRow = this._container.querySelector('.rack-frames-row');
     if (!framesRow) return;
     const ref = framesRow.getBoundingClientRect();
-    const fwRect = fwEl.getBoundingClientRect();
-    const cx = fwRect.left + fwRect.width / 2 - ref.left;
-    const cy = fwRect.top + fwRect.height / 2 - ref.top;
+    const pt = this._toSvgCoords(fwEl.getBoundingClientRect(), ref);
+    const cx = pt.x;
+    const cy = pt.y;
 
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     text.setAttribute('x', cx);
@@ -2535,7 +2612,13 @@ window.RackRenderer = {
     const framesRow = container.querySelector('.rack-frames-row');
     if (!framesRow) return;
 
-    const containerRect = framesRow.getBoundingClientRect();
+    const rawRect = framesRow.getBoundingClientRect();
+    const s = this._zoomScale || 1;
+    // Unscale: getBoundingClientRect returns scaled screen pixels, SVG needs unscaled coords
+    const containerRect = {
+      left: rawRect.left, top: rawRect.top,
+      width: rawRect.width / s, height: rawRect.height / s,
+    };
     svg.setAttribute('width', containerRect.width);
     svg.setAttribute('height', containerRect.height);
     svg.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`);
@@ -2556,8 +2639,8 @@ window.RackRenderer = {
       const id = f.getAttribute('data-rack-id');
       const fr = f.getBoundingClientRect();
       frameEdges[id] = {
-        right: fr.right - containerRect.left,
-        left: fr.left - containerRect.left,
+        right: (fr.right - rawRect.left) / s,
+        left: (fr.left - rawRect.left) / s,
       };
     });
 
@@ -2576,11 +2659,11 @@ window.RackRenderer = {
       const fromRect = fromEl.getBoundingClientRect();
       const toRect = toEl.getBoundingClientRect();
 
-      // Center points relative to framesRow
-      const x1 = fromRect.left + fromRect.width / 2 - containerRect.left;
-      const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
-      const x2 = toRect.left + toRect.width / 2 - containerRect.left;
-      const y2 = toRect.top + toRect.height / 2 - containerRect.top;
+      // Center points relative to framesRow (unscaled)
+      const x1 = (fromRect.left + fromRect.width / 2 - rawRect.left) / s;
+      const y1 = (fromRect.top + fromRect.height / 2 - rawRect.top) / s;
+      const x2 = (toRect.left + toRect.width / 2 - rawRect.left) / s;
+      const y2 = (toRect.top + toRect.height / 2 - rawRect.top) / s;
 
       // Find parent rack frame for edge calculations
       const fromFrame = fromEl.closest('.rack-frame');
