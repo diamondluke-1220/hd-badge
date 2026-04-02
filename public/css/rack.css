@@ -58,6 +58,7 @@ body.view-rack .public-orgchart {
   justify-content: center;
   align-items: flex-start;
   gap: 60px;
+  overflow: visible;
 }
 
 .rack-column {
@@ -73,7 +74,7 @@ body.view-rack .public-orgchart {
 .rack-column .rack-device-wifi {
   position: absolute;
   bottom: 100%;
-  right: 14px;
+  left: 14px;
   margin-bottom: -46px;
   z-index: 2;
 }
@@ -318,14 +319,10 @@ body.view-rack .public-orgchart {
 /* Clouds row — spans full width, pushes clouds to outer edges */
 .rack-clouds-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   width: 100%;
   max-width: 1280px;
   margin-bottom: 8px;
-}
-
-.rack-clouds-row .rack-internet-cloud:only-child {
-  /* Single rack mode — keep cloud left */
 }
 
 .rack-internet-cloud {
@@ -909,7 +906,7 @@ body.view-rack .public-orgchart {
   font-size: 14px;
   font-weight: 900;
   letter-spacing: 5px;
-  color: rgba(168, 85, 247, var(--silkscreen-opacity));
+  color: rgba(168, 85, 247, 0.28);
   pointer-events: none;
   z-index: 0;
   font-family: 'JetBrains Mono', monospace;
@@ -1086,11 +1083,31 @@ body.view-rack .public-orgchart {
   object-fit: cover;
 }
 
-.rack-core-separator {
-  width: 1px;
-  height: 20px;
-  background: rgba(212, 168, 67, 0.2);
-  margin: 0 2px;
+.rack-core-right {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.rack-core-ports-left,
+.rack-core-ports-right {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 2px;
+}
+
+/* SFP trunk ports on division switches */
+.rack-switch-sfp-divider {
+  margin-left: auto;
+}
+
+.rack-switch-sfp {
+  flex-shrink: 0;
 }
 
 /* ─── Division Switch ─────────────────────────────────────── */
@@ -1232,9 +1249,7 @@ body.view-rack .public-orgchart {
   background: rgba(212, 168, 67, 0.08);
 }
 
-.rack-conn-port-trunk::after {
-  background: var(--accent-gold);
-}
+/* Trunk port LEDs use same green/amber as access ports — no override */
 
 .rack-conn-label {
   font-size: 8px;
@@ -2146,11 +2161,6 @@ body.view-rack .public-orgchart {
     height: 28px;
   }
 
-  .rack-port-grid {
-    grid-template-columns: repeat(10, 1fr);
-    gap: 3px;
-  }
-
   .rack-device-name {
     font-size: 10px;
   }
@@ -2171,6 +2181,28 @@ body.view-rack .public-orgchart {
   }
 }
 
+/* ─── SVG Cable Overlay ──────────────────────────────────── */
+
+/* WiFi AP cable anchor — invisible target for SVG cable endpoint */
+.rack-wifi-cable-anchor {
+  width: 4px;
+  height: 4px;
+  margin: 0 auto;
+}
+
+.rack-cable-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 3;
+  overflow: visible;
+}
+
+.rack-cable-path {
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
+}
+
 /* ─── Tablet ──────────────────────────────────────────────── */
 
 @media (min-width: 641px) and (max-width: 1100px) {
@@ -2181,10 +2213,6 @@ body.view-rack .public-orgchart {
   .rack-frame {
     width: 520px;
     min-width: 380px;
-  }
-
-  .rack-port-grid {
-    grid-template-columns: repeat(10, 1fr);
   }
 
   .rack-wifi-body-box {

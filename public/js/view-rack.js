@@ -81,21 +81,21 @@ window.RackRenderer = {
       if (!panel) return null;
     }
 
-    // Add port to the grid
-    const grid = panel.querySelector('.rack-port-grid');
-    if (!grid) return null;
+    // Add port to the first row with an empty slot
+    const row = panel.querySelector('.rack-port-row');
+    if (!row) return null;
 
     // Remove an empty port if one exists
-    const emptyPort = grid.querySelector('.rack-port-empty');
+    const emptyPort = row.querySelector('.rack-port-empty');
     if (emptyPort) emptyPort.remove();
 
     const portEl = this._createPort(badge);
-    grid.appendChild(portEl);
+    row.appendChild(portEl);
 
     // Update port count
     const countEl = panel.querySelector('.rack-port-count');
     if (countEl) {
-      const ports = grid.querySelectorAll('.rack-port:not(.rack-port-empty)');
+      const ports = panel.querySelectorAll('.rack-port:not(.rack-port-empty)');
       countEl.textContent = `${ports.length}`;
     }
 
@@ -295,22 +295,6 @@ window.RackRenderer = {
     }, 0);
   },
 
-  _countDevices(rack) {
-    return rack.filter(d => d.type !== 'blank' && d.type !== 'ups' && d.type !== 'pdu').length;
-  },
-
-  _fillBlanks(rack) {
-    this._fillBlanksTo(rack, this._TARGET_U);
-  },
-
-  _fillBlanksTo(rack, targetU) {
-    const used = this._usedU(rack);
-    const blanksNeeded = Math.max(0, targetU - used);
-    for (let i = 0; i < blanksNeeded; i++) {
-      rack.push({ type: 'blank' });
-    }
-  },
-
   // ─── Rendering ──────────────────────────────────────────
 
   _render() {
@@ -320,13 +304,10 @@ window.RackRenderer = {
     const wrapper = document.createElement('div');
     wrapper.className = 'rack-container';
 
-    // Clouds row — separate from rack columns so they align independently
+    // Single centered internet cloud
     const cloudsRow = document.createElement('div');
     cloudsRow.className = 'rack-clouds-row';
     cloudsRow.appendChild(this._renderInternetCloud('A'));
-    if (this._dualMode) {
-      cloudsRow.appendChild(this._renderInternetCloud('B'));
-    }
     wrapper.appendChild(cloudsRow);
 
     // Rack columns with above-rack devices
@@ -403,9 +384,21 @@ window.RackRenderer = {
       }
     }
 
-    // Resize observer
+    // Randomize device LED animation offsets so they don't blink in sync
+    wrapper.querySelectorAll('.rack-led-blink-gold, .rack-led-slow-blink, .rack-led-blink-blue, .rack-ups-led-bat, .rack-fw-led-act').forEach(led => {
+      led.style.animationDelay = `-${(Math.random() * 6).toFixed(1)}s`;
+    });
+
+    // SVG cable overlay (after racks are in DOM)
+    if (this._dualMode) {
+      requestAnimationFrame(() => this._renderCables(wrapper));
+    }
+
+    // Resize observer — recalculate cable paths
     this._resizeObserver = new ResizeObserver(() => {
-      // Future: recalculate cable paths on resize
+      if (this._cableSvg && this._dualMode) {
+        this._updateCablePaths(wrapper);
+      }
     });
     this._resizeObserver.observe(wrapper);
   },
@@ -521,13 +514,14 @@ window.RackRenderer = {
     const label = side === 'A' ? 'FW-A' : 'FW-B';
 
     // Port groups: WAN | Core cross-connects + HA | empties
+    const sideL = side.toLowerCase();
     let portsHtml = '<div class="rack-switch-ports">';
     portsHtml += '<div class="rack-fw-port-group">';
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-wan" title="WAN"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-fw-port-wan" data-port-id="fw-${sideL}-wan" title="WAN"></div>`;
     portsHtml += '</div>';
     portsHtml += '<div class="rack-fw-port-divider"></div>';
     portsHtml += '<div class="rack-fw-port-group">';
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core A"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-fw-port-core" data-port-id="fw-${sideL}-core" title="Core ${side}" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core B"></div>';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-ha" title="HA Link"></div>';
     portsHtml += '</div>';
@@ -600,6 +594,7 @@ window.RackRenderer = {
             <span class="rack-wifi-brand">LINKSYS</span>
           </div>
         </div>
+        <div class="rack-wifi-cable-anchor" data-port-id="wifi-ap-eth"></div>
       </div>
     `;
 
@@ -634,16 +629,32 @@ window.RackRenderer = {
       membersHtml += '</div>';
     }
 
-    // Trunk SFP ports + generic ports (left side)
-    let connHtml = '<div class="rack-switch-ports">';
-    connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
-    connHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk"></div>';
-    connHtml += '<div class="rack-switch-port-divider"></div>';
-    for (let i = 0; i < 8; i++) {
-      if (i === 4) connHtml += '<div class="rack-switch-port-divider"></div>';
-      connHtml += `<div class="rack-conn-port ${i < 4 ? 'rack-conn-port-active' : ''}"></div>`;
-    }
-    connHtml += '</div>';
+    // Port assignments per core switch side
+    // Core A left: WLC(1), spare, BRS(3), FW-A(4) | right: IT(1), Punk(2), spare, cross-rack(4)
+    // Core B left: cross-rack(1), spare, spare, FW-B(4) | right: spare, Office(2), Corporate(3), VPN(4)
+    const portMap = side === 'A'
+      ? { left: ['wlc-uplink', 'spare', 'brs-uplink', 'fw-a-uplink'], right: ['it-uplink', 'punk-uplink', 'spare', 'cross-rack'] }
+      : { left: ['cross-rack', 'vpn-uplink', 'spare', 'fw-b-uplink'], right: ['spare', 'office-uplink', 'corporate-uplink', 'spare'] };
+
+    // Left trunk ports (4) — connected ports get dual LEDs with animation
+    let leftPortsHtml = '<div class="rack-switch-ports rack-core-ports-left">';
+    portMap.left.forEach(id => {
+      const connected = id !== 'spare';
+      const cls = connected ? 'rack-conn-port-active rack-conn-port-dual' : '';
+      const anim = connected ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
+      leftPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}" data-port-id="core-${side.toLowerCase()}-${id}" ${anim}></div>`;
+    });
+    leftPortsHtml += '</div>';
+
+    // Right trunk ports (4)
+    let rightPortsHtml = '<div class="rack-switch-ports rack-core-ports-right">';
+    portMap.right.forEach(id => {
+      const connected = id !== 'spare';
+      const cls = connected ? 'rack-conn-port-active rack-conn-port-dual' : '';
+      const anim = connected ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
+      rightPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}" data-port-id="core-${side.toLowerCase()}-${id}" ${anim}></div>`;
+    });
+    rightPortsHtml += '</div>';
 
     el.innerHTML = `
       <div class="rack-device-accent"></div>
@@ -653,9 +664,12 @@ window.RackRenderer = {
             <span class="rack-device-name">${coreLabel}</span>
             <span class="rack-device-model">Crisco 9500-24Y4C</span>
           </div>
-          ${connHtml}
+          ${leftPortsHtml}
         </div>
         ${membersHtml}
+        <div class="rack-core-right">
+          ${rightPortsHtml}
+        </div>
         <span class="rack-core-silkscreen">CRISCO</span>
         <div class="rack-switch-leds rack-core-leds">
           <div class="rack-switch-led rack-led-solid-green" title="SYST"></div>
@@ -679,6 +693,7 @@ window.RackRenderer = {
     const totalPorts = device.totalPorts || 12;
     // Port 0 = uplink to core (always lit), ports 1+ = one per employee in patch panel below
     const employeePorts = device.portCount; // already capped at 12
+    const themeSlug = device.theme.replace('_', '');
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
       if (i > 0 && i % 4 === 0) portsHtml += '<div class="rack-switch-port-divider"></div>';
@@ -687,6 +702,11 @@ window.RackRenderer = {
       const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
       portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" data-switch-port="${i}" ${style}></div>`;
     }
+    // SFP trunk ports (right side, separated by divider) — first is unused, second carries the uplink cable
+    const sfpStyle = `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"`;
+    portsHtml += '<div class="rack-switch-port-divider rack-switch-sfp-divider"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-trunk rack-switch-sfp" data-port-id="sw-${themeSlug}-core-uplink" title="Core Uplink"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-switch-sfp" data-port-id="sw-${themeSlug}-spare" title="Spare" ${sfpStyle}></div>`;
     portsHtml += '</div>';
 
     el.innerHTML = `
@@ -715,8 +735,8 @@ window.RackRenderer = {
     const apCount = Math.max(1, this._allBadges.length * 3);
 
     let portsHtml = '<div class="rack-switch-ports">';
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>';
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-wlc-port-ap" title="AP Mgmt"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="wlc-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap" data-port-id="wlc-ap-uplink" title="AP Mgmt" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-wlc-port-ap" title="AP Mgmt"></div>';
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
@@ -851,7 +871,7 @@ window.RackRenderer = {
           </div>
           <div class="rack-brs-controls">
             <div class="rack-switch-ports">
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-uplink" title="Core Uplink" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
               <div class="rack-conn-port rack-conn-port-active" title="MGMT"></div>
             </div>
             <div class="rack-switch-leds rack-brs-leds">
@@ -999,9 +1019,9 @@ window.RackRenderer = {
 
     let portsHtml = '<div class="rack-switch-ports">';
     // 2 uplink ports (to core) + 1 tunnel port + 1 downlink (to contractor switch) + empties
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-conn-port-trunk" title="Core Uplink"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="vpn-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-vpn-port-tunnel" title="IPsec Tunnel"></div>';
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active" title="SW-CTR"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual" data-port-id="vpn-contractor-downlink" title="SW-CTR" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
     }
@@ -1164,5 +1184,309 @@ window.RackRenderer = {
         <div class="rack-port-tooltip-title">${esc(badge.title || '')}</div>
       </div>
     `;
+  },
+
+  // ─── SVG Cable Overlay ──────────────────────────────────
+
+  // Cable definitions: [fromPortId, toPortId, color, width, routeType]
+  // routeTypes: 'cross-rack', 'drop-left' (vertical drop nudged left of silkscreen),
+  //   'arc-right' (swing outside right edge), 'arc-left' (swing outside left edge),
+  //   'margin-right' (right gutter routing), 'margin-right-stagger' (staggered vertical entry)
+  _CABLE_DEFS: [
+    // Cross-rack trunk (gold, 5px)
+    ['core-a-cross-rack', 'core-b-cross-rack', '#D4A843', 3, 'cross-rack'],
+    // FW → Core: short vertical drop, nudged left to avoid CRISCO silkscreen
+    ['fw-a-core', 'core-a-fw-a-uplink', '#3B82F6', 2.5, 'drop-left'],
+    ['fw-b-core', 'core-b-fw-b-uplink', '#3B82F6', 2.5, 'drop-left'],
+    // BRS → Core A: left gutter routing to 3rd left port (entry at 24px below port)
+    ['core-a-brs-uplink', 'brs-core-uplink', '#3B82F6', 2.5, 'margin-left-24'],
+    // WLC → Core A: arc up left outside of rack
+    ['wlc-core-uplink', 'core-a-wlc-uplink', '#3B82F6', 2.5, 'arc-left'],
+    // WLC AP mgmt → WiFi AP: solid line, exit down first then up left gutter
+    ['wlc-ap-uplink', 'wifi-ap-eth', '#22C55E', 2, 'margin-left-down'],
+    // Rack A division switches → Core A right: nested routing (inner cable first, outer wraps around)
+    // IT first = inner lane, lower entry. Punk second = outer lane, higher entry. No crossing.
+    ['core-a-it-uplink', 'sw-IT-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
+    ['core-a-punk-uplink', 'sw-Punk-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
+    // VPN → Core B left port 2: route through inter-rack gap, enter at same height as Office
+    ['vpn-core-uplink', 'core-b-vpn-uplink', '#3B82F6', 2.5, 'margin-left-42'],
+    // Rack B division switches → Core B right: nested routing (inner first, outer wraps around)
+    // Office (closer switch, port 2) = inner, Corporate (further switch, port 3) = outer
+    ['core-b-office-uplink', 'sw-Office-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
+    ['core-b-corporate-uplink', 'sw-Corporate-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
+    // VPN → Contractors: down from VPN, right gutter between UPS/switch, curve up to SFP
+    ['vpn-contractor-downlink', 'sw-custom-spare', '#3B82F6', 2.5, 'under-and-up'],
+  ],
+
+  _cableSvg: null,
+
+  _renderCables(container) {
+    // Create SVG element sized to the rack container
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('rack-cable-svg');
+    svg.setAttribute('aria-hidden', 'true');
+
+    // Insert SVG into the frames row (between the two rack columns)
+    const framesRow = container.querySelector('.rack-frames-row');
+    if (!framesRow) return;
+    framesRow.style.position = 'relative';
+    framesRow.appendChild(svg);
+
+    this._cableSvg = svg;
+    this._updateCablePaths(container);
+  },
+
+  _updateCablePaths(container) {
+    const svg = this._cableSvg;
+    if (!svg) return;
+
+    const framesRow = container.querySelector('.rack-frames-row');
+    if (!framesRow) return;
+
+    const containerRect = framesRow.getBoundingClientRect();
+    svg.setAttribute('width', containerRect.width);
+    svg.setAttribute('height', containerRect.height);
+    svg.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`);
+
+    // Clear existing paths
+    svg.innerHTML = '';
+
+    // Get rack frame edges for cable routing gutters
+    const frames = container.querySelectorAll('.rack-frame');
+    const frameEdges = {};
+    frames.forEach(f => {
+      const id = f.getAttribute('data-rack-id');
+      const fr = f.getBoundingClientRect();
+      frameEdges[id] = {
+        right: fr.right - containerRect.left,
+        left: fr.left - containerRect.left,
+      };
+    });
+
+    // Lane counters for staggering parallel cables in the same gutter
+    const rightLanes = { A: 0, B: 0 };
+    const staggerIdxByRack = { A: 0, B: 0 };
+    let leftLane = 0;
+
+    // Draw each cable
+    this._CABLE_DEFS.forEach(([fromId, toId, color, width, routeType, style]) => {
+      const fromEl = container.querySelector(`[data-port-id="${fromId}"]`);
+      const toEl = container.querySelector(`[data-port-id="${toId}"]`);
+      if (!fromEl || !toEl) return;
+
+      const fromRect = fromEl.getBoundingClientRect();
+      const toRect = toEl.getBoundingClientRect();
+
+      // Center points relative to framesRow
+      const x1 = fromRect.left + fromRect.width / 2 - containerRect.left;
+      const y1 = fromRect.top + fromRect.height / 2 - containerRect.top;
+      const x2 = toRect.left + toRect.width / 2 - containerRect.left;
+      const y2 = toRect.top + toRect.height / 2 - containerRect.top;
+
+      // Find parent rack frame for edge calculations
+      const fromFrame = fromEl.closest('.rack-frame');
+      const toFrame = toEl.closest('.rack-frame');
+      const rackId = fromFrame ? fromFrame.getAttribute('data-rack-id') : null;
+      const rackSide = rackId && rackId.includes('101') ? 'A' : 'B';
+      const edges = rackId && frameEdges[rackId] ? frameEdges[rackId] : { right: Math.max(x1, x2) + 40, left: Math.min(x1, x2) - 40 };
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      let d;
+
+      switch (routeType) {
+        case 'cross-rack':
+          d = this._crossRackPath(x1, y1, x2, y2);
+          break;
+        case 'drop-left':
+          // Vertical drop nudged left to avoid CRISCO silkscreen
+          d = this._dropLeftPath(x1, y1, x2, y2);
+          break;
+        case 'arc-left':
+          // Left gutter routing — WLC uses this
+          d = this._arcLeftPath(x1, y1, x2, y2, edges.left - 18 - (leftLane * 6));
+          leftLane++;
+          break;
+        case 'margin-left-down': {
+          // Exit down first to clear adjacent ports, then left gutter up to target
+          const gutterX = edges.left - 18 - (leftLane * 6);
+          d = this._marginLeftDownPath(x1, y1, x2, y2, gutterX);
+          leftLane++;
+          break;
+        }
+        case 'margin-right': {
+          // Right gutter routing for Rack A switches, nudge entry down to clear cross-rack
+          const gutterX = edges.right + 18 + (rightLanes[rackSide] * 6);
+          d = this._marginRoutedPath(x1, y1, x2, y2, gutterX, 10);
+          rightLanes[rackSide]++;
+          break;
+        }
+        case 'margin-right-stagger': {
+          // Right gutter with staggered vertical entry into core port
+          const gutterX = edges.right + 18 + (rightLanes[rackSide] * 6);
+          d = this._marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdxByRack[rackSide]);
+          rightLanes[rackSide]++;
+          staggerIdxByRack[rackSide]++;
+          break;
+        }
+        case 'under-and-up': {
+          // Down from port → right gutter between UPS and device → curve up to target above
+          const gutterX = edges.right + 14;
+          d = this._underAndUpPath(x1, y1, x2, y2, gutterX);
+          break;
+        }
+        default:
+          if (routeType && routeType.startsWith('margin-left-')) {
+            const offset = parseInt(routeType.split('-')[2], 10) || 24;
+            const gutterX = edges.left - 6 - (leftLane * 6);
+            d = this._marginLeftPath(x1, y1, x2, y2, gutterX, offset);
+            leftLane++;
+          } else {
+            d = `M ${x1} ${y1} L ${x2} ${y2}`;
+          }
+      }
+
+      path.setAttribute('d', d);
+      path.setAttribute('stroke', color);
+      path.setAttribute('stroke-width', width);
+      path.setAttribute('stroke-linecap', 'round');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('opacity', '0.85');
+      if (style === 'dashed') path.setAttribute('stroke-dasharray', '6 4');
+      path.classList.add('rack-cable-path');
+
+      svg.appendChild(path);
+    });
+  },
+
+  _dropLeftPath(x1, y1, x2, y2) {
+    // FW → Core vertical drop, nudged left to avoid silkscreen
+    const nudge = -3;
+    const midY = (y1 + y2) / 2;
+    const midX = Math.min(x1, x2) + nudge;
+    return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+  },
+
+  _marginLeftPath(x1, y1, x2, y2, gutterX, entryOffset) {
+    // Left gutter routing: port → left to gutter → vertical up → curve in below port height → up to port
+    const r = 8;
+    const topY = Math.min(y1, y2);
+    const botY = Math.max(y1, y2);
+    const topX = y1 < y2 ? x1 : x2;
+    const botX = y1 < y2 ? x2 : x1;
+    const entryY = topY + entryOffset;
+
+    return `M ${botX} ${botY} `
+      + `L ${gutterX + r} ${botY} `
+      + `Q ${gutterX} ${botY}, ${gutterX} ${botY - r} `
+      + `L ${gutterX} ${entryY + r} `
+      + `Q ${gutterX} ${entryY}, ${gutterX + r} ${entryY} `
+      + `L ${topX} ${entryY} `
+      + `L ${topX} ${topY}`;
+  },
+
+  _marginLeftDownPath(x1, y1, x2, y2, gutterX) {
+    // WLC AP port → drop down first to clear adjacent ports → left to gutter → up to WiFi AP
+    const r = 8;
+    const dropBelow = 20; // drop below WLC port before turning left
+    // WLC is lower (from), WiFi AP is higher (to)
+    const topY = Math.min(y1, y2); // WiFi AP
+    const botY = Math.max(y1, y2); // WLC port
+    const topX = y1 < y2 ? x1 : x2;
+    const botX = y1 < y2 ? x2 : x1;
+    const loopY = botY + dropBelow;
+
+    return `M ${botX} ${botY} `
+      + `L ${botX} ${loopY - r} `
+      + `Q ${botX} ${loopY}, ${botX - r} ${loopY} `
+      + `L ${gutterX + r} ${loopY} `
+      + `Q ${gutterX} ${loopY}, ${gutterX} ${loopY - r} `
+      + `L ${gutterX} ${topY + r} `
+      + `Q ${gutterX} ${topY}, ${gutterX + r} ${topY} `
+      + `L ${topX} ${topY}`;
+  },
+
+
+  _arcLeftPath(x1, y1, x2, y2, gutterX) {
+    // Curved exit → straight vertical run in left gutter → curved entry direct to port
+    const r = 8;
+    const topY = Math.min(y1, y2);
+    const botY = Math.max(y1, y2);
+    const topX = y1 < y2 ? x1 : x2;
+    const botX = y1 < y2 ? x2 : x1;
+
+    return `M ${botX} ${botY} `
+      + `L ${gutterX + r} ${botY} `
+      + `Q ${gutterX} ${botY}, ${gutterX} ${botY - r} `
+      + `L ${gutterX} ${topY + r} `
+      + `Q ${gutterX} ${topY}, ${gutterX + r} ${topY} `
+      + `L ${topX} ${topY}`;
+  },
+
+  _marginRoutedPath(x1, y1, x2, y2, gutterX, entryNudge) {
+    // Route from switch SFP → right gutter → up to core port
+    // entryNudge pushes the core-side entry point down slightly to clear cross-rack cable
+    const r = 8;
+    const topY = Math.min(y1, y2) + (entryNudge || 0);
+    const botY = Math.max(y1, y2);
+    const topX = y1 < y2 ? x1 : x2;
+    const botX = y1 < y2 ? x2 : x1;
+
+    return `M ${botX} ${botY} `
+      + `L ${gutterX - r} ${botY} `
+      + `Q ${gutterX} ${botY}, ${gutterX} ${botY - r} `
+      + `L ${gutterX} ${topY + r} `
+      + `Q ${gutterX} ${topY}, ${gutterX - r} ${topY} `
+      + `L ${topX} ${topY}`;
+  },
+
+  _marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdx) {
+    // Right gutter with staggered entry into core ports
+    // Each cable enters at a different height below the port, then goes straight up
+    // This creates clean, non-overlapping vertical connections into Core B
+    const r = 8;
+    const staggerStep = 6; // vertical spacing between staggered cables
+    const topY = Math.min(y1, y2);
+    const botY = Math.max(y1, y2);
+    const topX = y1 < y2 ? x1 : x2;
+    const botX = y1 < y2 ? x2 : x1;
+
+    // Entry point: outer cables (higher index) enter closer to port, inner cables enter lower
+    // This nests cables cleanly — outer wraps around inner without crossing
+    const entryY = topY + 42 - (staggerIdx * staggerStep);
+
+    return `M ${botX} ${botY} `
+      + `L ${gutterX - r} ${botY} `
+      + `Q ${gutterX} ${botY}, ${gutterX} ${botY - r} `
+      + `L ${gutterX} ${entryY + r} `
+      + `Q ${gutterX} ${entryY}, ${gutterX - r} ${entryY} `
+      + `L ${topX} ${entryY} `
+      + `L ${topX} ${topY}`;
+  },
+
+  _underAndUpPath(x1, y1, x2, y2, gutterX) {
+    // VPN (lower) → down → right gutter → curve up → over to Contractors SFP (higher)
+    // from = VPN port (lower), to = Contractors SFP (higher)
+    const r = 8;
+    const dropBelow = 30; // how far below the VPN port before turning right
+    const topY = Math.min(y1, y2); // Contractors (target)
+    const botY = Math.max(y1, y2); // VPN (source)
+    const topX = y1 < y2 ? x1 : x2; // Contractors x
+    const botX = y1 < y2 ? x2 : x1; // VPN x
+    const loopY = botY + dropBelow; // lowest point of the cable
+
+    return `M ${botX} ${botY} `
+      + `L ${botX} ${loopY - r} `
+      + `Q ${botX} ${loopY}, ${botX + r} ${loopY} `
+      + `L ${gutterX - r} ${loopY} `
+      + `Q ${gutterX} ${loopY}, ${gutterX} ${loopY - r} `
+      + `L ${gutterX} ${topY + r} `
+      + `Q ${gutterX} ${topY}, ${gutterX - r} ${topY} `
+      + `L ${topX} ${topY}`;
+  },
+
+  _crossRackPath(x1, y1, x2, y2) {
+    // Arc across the gap between racks
+    const midY = Math.min(y1, y2) - 20;
+    return `M ${x1} ${y1} C ${x1 + 30} ${midY}, ${x2 - 30} ${midY}, ${x2} ${y2}`;
   },
 };
