@@ -630,11 +630,11 @@ window.RackRenderer = {
     }
 
     // Port assignments per core switch side
-    // Core A left: WLC(1), spare, BRS(3), FW-A(4) | right: IT(1), Punk(2), spare, cross-rack(4)
-    // Core B left: cross-rack(1), spare, spare, FW-B(4) | right: spare, Office(2), Corporate(3), VPN(4)
+    // Core A left: WLC(1), BRS-out(2), BRS-in(3), FW-A(4) | right: IT(1), Punk(2), trunk-B→A(3), trunk-A→B(4)
+    // Core B left: trunk-A→B(1), trunk-B→A(2), VPN(3), FW-B(4) | right: spare, Office(2), Corporate(3), spare
     const portMap = side === 'A'
-      ? { left: ['wlc-uplink', 'spare', 'brs-uplink', 'fw-a-uplink'], right: ['it-uplink', 'punk-uplink', 'spare', 'cross-rack'] }
-      : { left: ['cross-rack', 'vpn-uplink', 'spare', 'fw-b-uplink'], right: ['spare', 'office-uplink', 'corporate-uplink', 'spare'] };
+      ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink'], right: ['it-uplink', 'punk-uplink', 'trunk-ba', 'trunk-ab'] }
+      : { left: ['trunk-ab', 'trunk-ba', 'vpn-uplink', 'fw-b-uplink'], right: ['spare', 'office-uplink', 'corporate-uplink', 'spare'] };
 
     // Left trunk ports (4) — connected ports get dual LEDs with animation
     let leftPortsHtml = '<div class="rack-switch-ports rack-core-ports-left">';
@@ -871,8 +871,8 @@ window.RackRenderer = {
           </div>
           <div class="rack-brs-controls">
             <div class="rack-switch-ports">
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-uplink" title="Core Uplink" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
-              <div class="rack-conn-port rack-conn-port-active" title="MGMT"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-uplink" title="Core Inbound" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-outbound" title="Core Outbound" style="--port-delay:-8.1s;--port-speed:19.4s"></div>
             </div>
             <div class="rack-switch-leds rack-brs-leds">
               <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
@@ -1193,25 +1193,29 @@ window.RackRenderer = {
   //   'arc-right' (swing outside right edge), 'arc-left' (swing outside left edge),
   //   'margin-right' (right gutter routing), 'margin-right-stagger' (staggered vertical entry)
   _CABLE_DEFS: [
-    // Cross-rack trunk (gold, 5px)
-    ['core-a-cross-rack', 'core-b-cross-rack', '#D4A843', 3, 'cross-rack'],
+    // Cross-rack trunks — directional, dual gold cables in the inter-rack gap
+    // A→B: Core A right port 4 → Core B left port 1
+    ['core-a-trunk-ab', 'core-b-trunk-ab', '#D4A843', 3, 'cross-rack'],
+    // B→A: Core B left port 2 → Core A right port 3
+    ['core-b-trunk-ba', 'core-a-trunk-ba', '#D4A843', 3, 'cross-rack'],
     // FW → Core: short vertical drop, nudged left to avoid CRISCO silkscreen
     ['fw-a-core', 'core-a-fw-a-uplink', '#3B82F6', 2.5, 'drop-left'],
     ['fw-b-core', 'core-b-fw-b-uplink', '#3B82F6', 2.5, 'drop-left'],
-    // BRS → Core A: left gutter routing to 3rd left port (entry at 24px below port)
-    ['core-a-brs-uplink', 'brs-core-uplink', '#3B82F6', 2.5, 'margin-left-24'],
+    // BRS — dedicated inbound (Core port 3, inner) and outbound (Core port 2, outer)
+    // Inbound: Core A port 3 → BRS, direct left-gutter route (inner, longer run)
+    ['core-a-brs-inbound', 'brs-core-uplink', '#3B82F6', 2.5, 'margin-left-24'],
+    // Outbound: BRS → Core A port 2, drops down into cable mgmt then left to gutter (outer, wider route)
+    ['brs-core-outbound', 'core-a-brs-outbound', '#3B82F6', 2.5, 'margin-left-down'],
     // WLC → Core A: arc up left outside of rack
     ['wlc-core-uplink', 'core-a-wlc-uplink', '#3B82F6', 2.5, 'arc-left'],
     // WLC AP mgmt → WiFi AP: solid line, exit down first then up left gutter
     ['wlc-ap-uplink', 'wifi-ap-eth', '#22C55E', 2, 'margin-left-down'],
     // Rack A division switches → Core A right: nested routing (inner cable first, outer wraps around)
-    // IT first = inner lane, lower entry. Punk second = outer lane, higher entry. No crossing.
     ['core-a-it-uplink', 'sw-IT-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     ['core-a-punk-uplink', 'sw-Punk-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
-    // VPN → Core B left port 2: route through inter-rack gap, enter at same height as Office
+    // VPN → Core B left port 3: route through inter-rack gap
     ['vpn-core-uplink', 'core-b-vpn-uplink', '#3B82F6', 2.5, 'margin-left-42'],
     // Rack B division switches → Core B right: nested routing (inner first, outer wraps around)
-    // Office (closer switch, port 2) = inner, Corporate (further switch, port 3) = outer
     ['core-b-office-uplink', 'sw-Office-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     ['core-b-corporate-uplink', 'sw-Corporate-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     // VPN → Contractors: down from VPN, right gutter between UPS/switch, curve up to SFP
@@ -1267,6 +1271,7 @@ window.RackRenderer = {
     const rightLanes = { A: 0, B: 0 };
     const staggerIdxByRack = { A: 0, B: 0 };
     let leftLane = 0;
+    let crossRackLane = 0;
 
     // Draw each cable
     this._CABLE_DEFS.forEach(([fromId, toId, color, width, routeType, style]) => {
@@ -1295,7 +1300,8 @@ window.RackRenderer = {
 
       switch (routeType) {
         case 'cross-rack':
-          d = this._crossRackPath(x1, y1, x2, y2);
+          d = this._crossRackPath(x1, y1, x2, y2, crossRackLane);
+          crossRackLane++;
           break;
         case 'drop-left':
           // Vertical drop nudged left to avoid CRISCO silkscreen
@@ -1395,13 +1401,17 @@ window.RackRenderer = {
     const botX = y1 < y2 ? x2 : x1;
     const loopY = botY + dropBelow;
 
+    // Entry between WLC run (direct at port height) and BRS inbound run (24px offset)
+    const entryY = topY + 14;
+
     return `M ${botX} ${botY} `
       + `L ${botX} ${loopY - r} `
       + `Q ${botX} ${loopY}, ${botX - r} ${loopY} `
       + `L ${gutterX + r} ${loopY} `
       + `Q ${gutterX} ${loopY}, ${gutterX} ${loopY - r} `
-      + `L ${gutterX} ${topY + r} `
-      + `Q ${gutterX} ${topY}, ${gutterX + r} ${topY} `
+      + `L ${gutterX} ${entryY + r} `
+      + `Q ${gutterX} ${entryY}, ${gutterX + r} ${entryY} `
+      + `L ${topX} ${entryY} `
       + `L ${topX} ${topY}`;
   },
 
@@ -1484,9 +1494,10 @@ window.RackRenderer = {
       + `L ${topX} ${topY}`;
   },
 
-  _crossRackPath(x1, y1, x2, y2) {
-    // Arc across the gap between racks
-    const midY = Math.min(y1, y2) - 20;
+  _crossRackPath(x1, y1, x2, y2, lane) {
+    // Arc across the gap between racks — stagger vertically for parallel trunks
+    const laneOffset = (lane || 0) * 16;
+    const midY = Math.min(y1, y2) - 20 - laneOffset;
     return `M ${x1} ${y1} C ${x1 + 30} ${midY}, ${x2 - 30} ${midY}, ${x2} ${y2}`;
   },
 };
