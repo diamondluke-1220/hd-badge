@@ -59,24 +59,55 @@ window.RackRenderer = {
   addBadge(badge) {
     if (!this._container || !this._rackData) return null;
 
+    // Preserve scroll — SSE badge additions must not jump the page
+    const scrollY = window.scrollY;
+
     // Dedup
     if (this._badgeIndex[badge.employeeId]) return null;
 
     this._badgeIndex[badge.employeeId] = badge;
     this._allBadges.push(badge);
 
-    // Find or create the port in the correct patch panel
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const deptName = badge.department;
 
-    // Find the patch panel element
-    const panelKey = `${divTheme}::${deptName}`;
+    // Exec/band members go directly to core portraits, no animation
+    if (divTheme === '_exec') return null;
+
+    // Queue for animated ingress when cable animation is available
+    if (this._dualMode && this._cableSvg && this._INGRESS_ROUTES[divTheme]) {
+      this._ingressQueue.push(badge);
+      this._startScheduler();
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+      return null;
+    }
+
+    // Fallback: place directly (non-dual mode or no cables)
+    const result = this._placeBadgePort(badge);
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    return result;
+  },
+
+  _placeBadgePort(badge) {
+    if (!this._container) return null;
+    const scrollY = window.scrollY;
+
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+
+    // Panel key is just the division theme (all departments merged into one panel per division)
+    const panelKey = divTheme;
     let panel = this._container.querySelector(`[data-panel-key="${CSS.escape(panelKey)}"]`);
 
     if (!panel) {
-      // Department not yet rendered — rebuild layout
+      // Department not yet rendered — if packets are in flight, skip the full re-render
+      // and just drop this badge. It'll get picked up on next view init.
+      if (this._activePackets.length > 0 || this._inFlightCount > 0) {
+        return null;
+      }
+      // No animations active — safe to rebuild layout
+      const scrollY = window.scrollY;
       this._rackData = this._computeLayout(this._allBadges);
       this._render();
+      window.scrollTo(0, scrollY);
       panel = this._container.querySelector(`[data-panel-key="${CSS.escape(panelKey)}"]`);
       if (!panel) return null;
     }
@@ -119,6 +150,8 @@ window.RackRenderer = {
       wlcCount.textContent = `${this._allBadges.length * 3} APs`;
     }
 
+    // Restore scroll — badge placement must not jump the page
+    requestAnimationFrame(() => window.scrollTo(0, scrollY));
     return portEl;
   },
 
@@ -140,6 +173,9 @@ window.RackRenderer = {
   },
 
   destroy() {
+    this._stopCloudRain();
+    this._stopScheduler();
+    this._cancelAllPackets();
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._container) this._container.innerHTML = '';
@@ -148,6 +184,11 @@ window.RackRenderer = {
     this._allBadges = [];
     this._badgeIndex = {};
     this._rackData = null;
+    this._graph = null;
+    this._cableSvg = null;
+    this._cablePaths = null;
+    this._cableBusy = null;
+    this._virtualCoords = null;
   },
 
   // ─── Layout Computation ─────────────────────────────────
@@ -168,9 +209,8 @@ window.RackRenderer = {
       byDiv[theme][b.department].push(b);
     });
 
-    // Count active divisions (excluding exec and custom)
-    const activeThemes = Object.keys(byDiv).filter(t => t !== '_custom');
-    this._dualMode = activeThemes.length >= 3;
+    // Always render dual racks — the infrastructure exists regardless of badge population
+    this._dualMode = true;
 
     // Build device lists for each rack
     const rackA = [];
@@ -178,17 +218,15 @@ window.RackRenderer = {
 
     // Add division switch + single patch panel per division (all dept employees merged)
     const addDivision = (theme, rack) => {
-      const depts = byDiv[theme];
-      if (!depts) return;
-
       const divInfo = PUBLIC_DIVISIONS.find(d => d.theme === theme);
       if (!divInfo) return;
 
+      const depts = byDiv[theme];
       const color = DIVISION_ACCENT_COLORS[theme] || '#4b5563';
 
-      // Merge all department employees into one division pool
+      // Merge all department employees into one division pool (may be empty)
       const allEmployees = [];
-      Object.values(depts).forEach(emps => allEmployees.push(...emps));
+      if (depts) Object.values(depts).forEach(emps => allEmployees.push(...emps));
 
       // Division switch (1U) — active ports match employee count in patch panel below
       rack.push({
@@ -389,16 +427,39 @@ window.RackRenderer = {
       led.style.animationDelay = `-${(Math.random() * 6).toFixed(1)}s`;
     });
 
+    // Build topology graph (always, needed for packet pathfinding)
+    this._graph = this._buildGraph();
+
     // SVG cable overlay (after racks are in DOM)
     if (this._dualMode) {
-      requestAnimationFrame(() => this._renderCables(wrapper));
+      requestAnimationFrame(() => {
+        this._renderCables(wrapper);
+        this._startCloudRain();
+      });
     }
 
-    // Resize observer — recalculate cable paths
-    this._resizeObserver = new ResizeObserver(() => {
-      if (this._cableSvg && this._dualMode) {
+    // Resize observer — debounced, only act on significant size changes
+    // Small changes (badge port added) should NOT cancel in-flight packets
+    this._lastResizeWidth = 0;
+    this._lastResizeHeight = 0;
+    this._resizeDebounce = null;
+    this._resizeObserver = new ResizeObserver((entries) => {
+      if (!this._cableSvg || !this._dualMode) return;
+      const entry = entries[0];
+      const w = Math.round(entry.contentRect.width);
+      const h = Math.round(entry.contentRect.height);
+      // Ignore small height changes (< 20px) caused by badge placement
+      const dw = Math.abs(w - this._lastResizeWidth);
+      const dh = Math.abs(h - this._lastResizeHeight);
+      if (dw < 5 && dh < 20) return;
+      this._lastResizeWidth = w;
+      this._lastResizeHeight = h;
+      // Debounce: wait 500ms for resize to settle
+      clearTimeout(this._resizeDebounce);
+      this._resizeDebounce = setTimeout(() => {
+        this._cancelAllPackets();
         this._updateCablePaths(wrapper);
-      }
+      }, 500);
     });
     this._resizeObserver.observe(wrapper);
   },
@@ -501,6 +562,7 @@ window.RackRenderer = {
         <path class="rack-cloud-fill" d="M30,50 Q10,50 10,38 Q10,28 20,25 Q18,15 28,12 Q38,5 50,10 Q55,3 68,6 Q78,2 88,10 Q100,8 105,20 Q115,22 112,35 Q115,48 100,50 Z"/>
         <text x="60" y="36" text-anchor="middle" class="rack-cloud-text">INTERNET</text>
       </svg>
+      <div class="rack-cloud-anchor" data-port-id="cloud-out"></div>
     `;
     return el;
   },
@@ -900,8 +962,8 @@ window.RackRenderer = {
     this._brsRendering = false;
     this._brsJobCount = 0;
 
-    // Start demo mode — fires random renders every 4-8 seconds
-    this._startBRSDemo();
+    // BRS renders are now triggered by ingress packets via _playIngress
+    // this._startBRSDemo();
 
     return el;
   },
@@ -1220,15 +1282,1241 @@ window.RackRenderer = {
     ['core-b-corporate-uplink', 'sw-Corporate-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     // VPN → Contractors: down from VPN, right gutter between UPS/switch, curve up to SFP
     ['vpn-contractor-downlink', 'sw-custom-spare', '#3B82F6', 2.5, 'under-and-up'],
+    // Cloud → Firewalls: visible WAN uplinks from the internet
+    ['cloud-out', 'fw-a-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
+    ['cloud-out', 'fw-b-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
   ],
 
+  // ─── Topology Graph ─────────────────────────────────────
+  // Directed graph built from _CABLE_DEFS for packet pathfinding.
+  // Nodes = devices, edges = cables (or virtual links for cloud/switch→patch).
+
+  _TOPOLOGY_NODES: [
+    'cloud', 'fw-a', 'fw-b', 'core-a', 'core-b', 'brs', 'wlc', 'wifi-ap', 'vpn',
+    'sw-IT', 'sw-Punk', 'sw-Office', 'sw-Corporate', 'sw-custom',
+    'patch-IT', 'patch-Punk', 'patch-Office', 'patch-Corporate', 'patch-custom',
+  ],
+
+  // Map every data-port-id to its parent device node
+  _PORT_TO_NODE: {
+    'fw-a-wan': 'fw-a', 'fw-a-core': 'fw-a',
+    'fw-b-wan': 'fw-b', 'fw-b-core': 'fw-b',
+    'core-a-wlc-uplink': 'core-a', 'core-a-brs-outbound': 'core-a',
+    'core-a-brs-inbound': 'core-a', 'core-a-fw-a-uplink': 'core-a',
+    'core-a-it-uplink': 'core-a', 'core-a-punk-uplink': 'core-a',
+    'core-a-trunk-ba': 'core-a', 'core-a-trunk-ab': 'core-a',
+    'core-b-trunk-ab': 'core-b', 'core-b-trunk-ba': 'core-b',
+    'core-b-vpn-uplink': 'core-b', 'core-b-fw-b-uplink': 'core-b',
+    'core-b-office-uplink': 'core-b', 'core-b-corporate-uplink': 'core-b',
+    'sw-IT-core-uplink': 'sw-IT', 'sw-IT-spare': 'sw-IT',
+    'sw-Punk-core-uplink': 'sw-Punk', 'sw-Punk-spare': 'sw-Punk',
+    'sw-Office-core-uplink': 'sw-Office', 'sw-Office-spare': 'sw-Office',
+    'sw-Corporate-core-uplink': 'sw-Corporate', 'sw-Corporate-spare': 'sw-Corporate',
+    'sw-custom-core-uplink': 'sw-custom', 'sw-custom-spare': 'sw-custom',
+    'wlc-core-uplink': 'wlc', 'wlc-ap-uplink': 'wlc',
+    'brs-core-uplink': 'brs', 'brs-core-outbound': 'brs',
+    'vpn-core-uplink': 'vpn', 'vpn-contractor-downlink': 'vpn',
+    'wifi-ap-eth': 'wifi-ap',
+    'cloud-out': 'cloud',
+  },
+
+  // Cable indices that are strictly one-way (cross-rack trunks + BRS in/out)
+  _DIRECTIONAL_CABLES: new Set([0, 1, 4, 5]),
+
+  // Virtual edges: no physical cable, animated as short drops or invisible paths
+  _VIRTUAL_EDGES: [
+    // Cloud→FW and cloud→WiFi are now real cables (indices 14-16), no longer virtual
+    { from: 'sw-IT', to: 'patch-IT', type: 'switch-drop' },
+    { from: 'sw-Punk', to: 'patch-Punk', type: 'switch-drop' },
+    { from: 'sw-Office', to: 'patch-Office', type: 'switch-drop' },
+    { from: 'sw-Corporate', to: 'patch-Corporate', type: 'switch-drop' },
+    { from: 'sw-custom', to: 'patch-custom', type: 'switch-drop' },
+  ],
+
+  _graph: null, // built on render, Map<nodeId, Edge[]>
+
+  _buildGraph() {
+    const graph = new Map();
+    // Initialize all nodes
+    this._TOPOLOGY_NODES.forEach(n => graph.set(n, []));
+
+    // Add cable edges
+    this._CABLE_DEFS.forEach(([fromPortId, toPortId], idx) => {
+      const fromNode = this._PORT_TO_NODE[fromPortId];
+      const toNode = this._PORT_TO_NODE[toPortId];
+      if (!fromNode || !toNode) return;
+
+      const edge = { from: fromNode, to: toNode, cableIndex: idx, type: 'cable' };
+      graph.get(fromNode).push(edge);
+
+      // Bidirectional cables get a reverse edge
+      if (!this._DIRECTIONAL_CABLES.has(idx)) {
+        graph.get(toNode).push({ from: toNode, to: fromNode, cableIndex: idx, type: 'cable' });
+      }
+    });
+
+    // Add virtual edges (cloud→FW, switch→patch)
+    this._VIRTUAL_EDGES.forEach(ve => {
+      graph.get(ve.from).push({ from: ve.from, to: ve.to, cableIndex: null, type: ve.type });
+    });
+
+    return graph;
+  },
+
+  _findPath(graph, source, dest) {
+    if (source === dest) return [];
+    const visited = new Set([source]);
+    // BFS queue: each entry is [currentNode, pathOfEdges]
+    const queue = [[source, []]];
+
+    while (queue.length > 0) {
+      const [node, path] = queue.shift();
+      const neighbors = graph.get(node);
+      if (!neighbors) continue;
+
+      for (const edge of neighbors) {
+        if (visited.has(edge.to)) continue;
+        const newPath = [...path, edge];
+        if (edge.to === dest) return newPath;
+        visited.add(edge.to);
+        queue.push([edge.to, newPath]);
+      }
+    }
+
+    return null; // no path found
+  },
+
   _cableSvg: null,
+  _cablePaths: null,     // Map<cableIndex, SVGPathElement>
+  _cableBusy: null,      // Map<cableIndex, boolean>
+  _activePackets: [],     // in-flight packet objects
+  _animFrameId: null,     // requestAnimationFrame handle
+  _lastAnimTime: 0,       // timestamp of last animation frame
+
+  // ─── Packet Animation Engine ───────────────────────────
+
+  _packetClipId: 0, // incrementing ID for unique clip-path references
+
+  _createBadgePacket(badge, radius = 12) {
+    // Round portrait photo with division-colored ring — travels along cables
+    if (!this._cableSvg) return null;
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const ringColor = DIVISION_ACCENT_COLORS[divTheme] || '#ffffff';
+    const id = `pkt-clip-${this._packetClipId++}`;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.classList.add('rack-packet', 'rack-packet-badge');
+    g.setAttribute('data-packet-type', 'badge');
+
+    // Clip path for circular crop
+    const clipPath = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    clipPath.setAttribute('id', id);
+    const clipCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    clipCircle.setAttribute('r', radius);
+    clipPath.appendChild(clipCircle);
+    g.appendChild(clipPath);
+
+    // Headshot image
+    const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    img.setAttribute('href', `/api/badge/${badge.employeeId}/headshot`);
+    img.setAttribute('x', -radius);
+    img.setAttribute('y', -radius);
+    img.setAttribute('width', radius * 2);
+    img.setAttribute('height', radius * 2);
+    img.setAttribute('clip-path', `url(#${id})`);
+    img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+    g.appendChild(img);
+
+    // White ring border
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('r', radius);
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', ringColor);
+    ring.setAttribute('stroke-width', '1.5');
+    ring.setAttribute('filter', 'url(#packet-glow)');
+    g.appendChild(ring);
+
+    // Start hidden for materialization
+    g.setAttribute('opacity', '0');
+    this._cableSvg.appendChild(g);
+    return g;
+  },
+
+  _createDotPacket(color = '#3B82F6', radius = 2) {
+    // Small anonymous dot for idle traffic
+    if (!this._cableSvg) return null;
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('r', radius);
+    circle.setAttribute('fill', color);
+    circle.setAttribute('opacity', '0.6');
+    circle.classList.add('rack-packet', 'rack-packet-dot');
+    this._cableSvg.appendChild(circle);
+    return circle;
+  },
+
+  _completeMove(packet) {
+    // Move segment finished — resolve promise, clear busy, remove from active list
+    // but keep the SVG element alive for the next move
+    if (packet.cableIndex != null && this._cableBusy) {
+      this._cableBusy.set(packet.cableIndex, false);
+    }
+    const idx = this._activePackets.indexOf(packet);
+    if (idx !== -1) this._activePackets.splice(idx, 1);
+    if (packet.resolve) { packet.resolve(); packet.resolve = null; }
+  },
+
+  _removePacket(packet) {
+    // Full cleanup — destroy SVG element and all state
+    if (packet.el && packet.el.parentNode) {
+      packet.el.remove();
+    }
+    // Clear cable busy flag
+    if (packet.cableIndex != null && this._cableBusy) {
+      this._cableBusy.set(packet.cableIndex, false);
+    }
+    // Remove from active list
+    const idx = this._activePackets.indexOf(packet);
+    if (idx !== -1) this._activePackets.splice(idx, 1);
+    // Resolve promise if pending
+    if (packet.resolve) packet.resolve();
+  },
+
+  _movePacketAlongCable(packet, cableIndex, fromNode, speed = 0.3) {
+    // Moves packet along cable from fromNode toward the other end.
+    // Direction is auto-detected by comparing SVG path start/end to cable def ports.
+    const path = this._cablePaths && this._cablePaths.get(cableIndex);
+    if (!path) {
+      return Promise.resolve();
+    }
+
+    // Auto-detect direction: check if SVG path start (progress=0) is near the fromNode's port
+    const def = this._CABLE_DEFS[cableIndex];
+    const fromPortNode = this._PORT_TO_NODE[def[0]];
+    // If fromNode matches the cable's "from" port, SVG path may or may not start there
+    // Check actual SVG geometry: path start vs from-port position
+    const pathLen = path.getTotalLength();
+    const startPt = path.getPointAtLength(0);
+    const endPt = path.getPointAtLength(pathLen);
+
+    // Find the from-port element position to determine which end is "from"
+    const fromPortId = fromNode === fromPortNode ? def[0] : def[1];
+    const fromEl = this._container && this._container.querySelector(`[data-port-id="${fromPortId}"]`);
+    let direction = 1; // default: follow SVG path direction
+    if (fromEl) {
+      const framesRow = this._container.querySelector('.rack-frames-row');
+      if (framesRow) {
+        const ref = framesRow.getBoundingClientRect();
+        const fr = fromEl.getBoundingClientRect();
+        const portX = fr.left + fr.width / 2 - ref.left;
+        const portY = fr.top + fr.height / 2 - ref.top;
+        // Which SVG path end is closer to the from-port?
+        const distToStart = Math.hypot(startPt.x - portX, startPt.y - portY);
+        const distToEnd = Math.hypot(endPt.x - portX, endPt.y - portY);
+        direction = distToStart <= distToEnd ? 1 : -1;
+      }
+    }
+
+    return new Promise(resolve => {
+      packet.cableIndex = cableIndex;
+      packet.progress = direction === 1 ? 0 : 1;
+      // Convert speed from "progress/sec" to distance-normalized:
+      // Target ~150px/sec visual speed. Speed param is a multiplier.
+      const pxPerSec = 150 * speed / 0.4; // 0.4 is the default speed param
+      packet.speed = pxPerSec / pathLen; // progress per second, normalized to path length
+      packet.direction = direction;
+      packet.resolve = resolve;
+      packet.type = 'cable';
+      packet.pathEl = path;
+      packet.pathLength = pathLen;
+
+      if (this._cableBusy) this._cableBusy.set(cableIndex, true);
+
+      if (!this._activePackets.includes(packet)) {
+        this._activePackets.push(packet);
+      }
+      this._startAnimLoop();
+    });
+  },
+
+  _movePacketVirtual(packet, x1, y1, x2, y2, duration = 1000) {
+    // Linear interpolation between two points (for cloud drops, switch→patch)
+    return new Promise(resolve => {
+      packet.cableIndex = null;
+      packet.type = 'virtual';
+      packet.resolve = resolve;
+      packet.vx1 = x1; packet.vy1 = y1;
+      packet.vx2 = x2; packet.vy2 = y2;
+      packet.progress = 0;
+      packet.speed = 1000 / duration; // progress per second
+      packet.direction = 1;
+
+      // Set initial position
+      packet.el.setAttribute('cx', x1);
+      packet.el.setAttribute('cy', y1);
+
+      if (!this._activePackets.includes(packet)) {
+        this._activePackets.push(packet);
+      }
+      this._startAnimLoop();
+    });
+  },
+
+  _startAnimLoop() {
+    if (this._animFrameId) return; // already running
+    this._lastAnimTime = 0;
+    this._animFrameId = requestAnimationFrame(t => this._animLoop(t));
+  },
+
+  _animLoop(timestamp) {
+    if (this._activePackets.length === 0) {
+      this._animFrameId = null;
+      return;
+    }
+
+    const dt = this._lastAnimTime ? (timestamp - this._lastAnimTime) / 1000 : 0.016;
+    this._lastAnimTime = timestamp;
+
+    // Cap delta to prevent jumps after tab switch
+    const clampedDt = Math.min(dt, 0.1);
+
+    // Process packets in reverse so splice during removal is safe
+    for (let i = this._activePackets.length - 1; i >= 0; i--) {
+      const pkt = this._activePackets[i];
+      pkt.progress += pkt.speed * pkt.direction * clampedDt;
+
+      // Check completion — resolve the move promise but keep the SVG element alive
+      const done = pkt.direction === 1 ? pkt.progress >= 1 : pkt.progress <= 0;
+      if (done) {
+        pkt.progress = pkt.direction === 1 ? 1 : 0;
+        this._updatePacketPosition(pkt);
+        this._completeMove(pkt);
+        continue;
+      }
+
+      this._updatePacketPosition(pkt);
+    }
+
+    this._animFrameId = requestAnimationFrame(t => this._animLoop(t));
+  },
+
+  _updatePacketPosition(pkt) {
+    let x, y;
+    if (pkt.type === 'cable' && pkt.pathEl) {
+      const pt = pkt.pathEl.getPointAtLength(pkt.progress * pkt.pathLength);
+      x = pt.x; y = pt.y;
+    } else if (pkt.type === 'virtual') {
+      const t = pkt.progress;
+      x = pkt.vx1 + (pkt.vx2 - pkt.vx1) * t;
+      y = pkt.vy1 + (pkt.vy2 - pkt.vy1) * t;
+    } else return;
+
+    // Badge packets use <g> with transform, dot packets use <circle> with cx/cy
+    if (pkt.el.tagName === 'g') {
+      pkt.el.setAttribute('transform', `translate(${x},${y})`);
+    } else {
+      pkt.el.setAttribute('cx', x);
+      pkt.el.setAttribute('cy', y);
+    }
+  },
+
+  _cancelAllPackets() {
+    // Remove all packet SVG elements and mark as cancelled
+    for (const pkt of this._activePackets) {
+      pkt._cancelled = true;
+      if (pkt.el && pkt.el.parentNode) pkt.el.remove();
+      if (pkt.resolve) pkt.resolve();
+    }
+    this._activePackets = [];
+    // Clear all busy flags
+    if (this._cableBusy) {
+      for (const key of this._cableBusy.keys()) {
+        this._cableBusy.set(key, false);
+      }
+    }
+    // Stop animation loop
+    if (this._animFrameId) {
+      cancelAnimationFrame(this._animFrameId);
+      this._animFrameId = null;
+    }
+    this._lastAnimTime = 0;
+  },
+
+  // ─── Virtual Edge Coordinates ──────────────────────────
+  // Cached positions for cloud drops and switch→patch drops, relative to framesRow.
+  // Recalculated on render and resize.
+
+  _virtualCoords: null, // { cloud: {x,y}, fwWan: {a:{x,y}, b:{x,y}}, wifiAp: {x,y}, switchBottom: {theme:{x,y}} }
+
+  _computeVirtualCoords(container) {
+    const framesRow = container.querySelector('.rack-frames-row');
+    if (!framesRow) return;
+    const ref = framesRow.getBoundingClientRect();
+
+    const coords = { cloud: null, fwWan: {}, wifiAp: null, switchBottom: {} };
+
+    // Cloud bottom-center (cloud is above framesRow, so y will be negative)
+    const cloud = container.querySelector('[data-device-type="cloud"]');
+    if (cloud) {
+      const cr = cloud.getBoundingClientRect();
+      coords.cloud = {
+        x: cr.left + cr.width / 2 - ref.left,
+        y: cr.bottom - ref.top,
+      };
+    }
+
+    // Firewall WAN ports
+    ['a', 'b'].forEach(side => {
+      const wan = container.querySelector(`[data-port-id="fw-${side}-wan"]`);
+      if (wan) {
+        const wr = wan.getBoundingClientRect();
+        coords.fwWan[side] = {
+          x: wr.left + wr.width / 2 - ref.left,
+          y: wr.top + wr.height / 2 - ref.top,
+        };
+      }
+    });
+
+    // WiFi AP anchor
+    const wifiAnchor = container.querySelector('[data-port-id="wifi-ap-eth"]');
+    if (wifiAnchor) {
+      const war = wifiAnchor.getBoundingClientRect();
+      coords.wifiAp = {
+        x: war.left + war.width / 2 - ref.left,
+        y: war.top + war.height / 2 - ref.top,
+      };
+    }
+
+    // Switch bottom edges (for switch→patch virtual drops)
+    const switches = container.querySelectorAll('.rack-device-switch[data-theme]');
+    switches.forEach(sw => {
+      const theme = sw.getAttribute('data-theme');
+      const sr = sw.getBoundingClientRect();
+      coords.switchBottom[theme] = {
+        x: sr.left + sr.width / 2 - ref.left,
+        y: sr.bottom - ref.top,
+      };
+    });
+
+    this._virtualCoords = coords;
+  },
+
+  _getPortCoords(container, portSelector) {
+    // Get a port element's center position relative to framesRow
+    const framesRow = container.querySelector('.rack-frames-row');
+    if (!framesRow) return null;
+    const ref = framesRow.getBoundingClientRect();
+    const el = container.querySelector(portSelector);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2 - ref.left, y: r.top + r.height / 2 - ref.top };
+  },
+
+  // ─── Route Resolution ───────────────────────────────────
+  // Deterministic routing: given (entry, destination, options) → complete step sequence.
+  // Each step has: { type, cable?, from?, trigger?, pause?, mode?, node? }
+  // The animation layer just walks the steps. No routing logic in _playIngress.
+
+  // Division → network topology mapping
+  _DIV_TOPOLOGY: {
+    'IT':         { fw: 'fw-a', core: 'core-a', switchCable: 8, rackSide: 'A' },
+    'Punk':       { fw: 'fw-a', core: 'core-a', switchCable: 9, rackSide: 'A' },
+    'Office':     { fw: 'fw-b', core: 'core-b', switchCable: 11, rackSide: 'B' },
+    'Corporate':  { fw: 'fw-b', core: 'core-b', switchCable: 12, rackSide: 'B' },
+    'custom':     { fw: 'fw-b', core: 'core-b', switchCable: 13, rackSide: 'B', viaVpn: true },
+  },
+
+  // Cable lookup: which cable connects two adjacent nodes?
+  _ADJACENCY_CABLES: {
+    'cloud→fw-a': 14, 'cloud→fw-b': 15,
+    'fw-a→core-a': 2, 'fw-b→core-b': 3,
+    'wifi-ap→wlc': 7, 'wlc→core-a': 6,
+    'core-a→core-b': 0, 'core-b→core-a': 1,
+    'core-a→brs': 4, 'brs→core-a': 5,
+    'core-b→vpn': 10, 'vpn→sw-custom': 13,
+    'core-a→sw-IT': 8, 'core-a→sw-Punk': 9,
+    'core-b→sw-Office': 11, 'core-b→sw-Corporate': 12,
+  },
+
+  _getCable(fromNode, toNode) {
+    return this._ADJACENCY_CABLES[`${fromNode}→${toNode}`] ?? null;
+  },
+
+  // Resolve a complete route: entry point → destination panel, with all hops and triggers
+  _resolveRoute(entryType, divTheme, options = {}) {
+    const topo = this._DIV_TOPOLOGY[divTheme];
+    if (!topo) return null;
+
+    const brs = options.brs !== false; // default: attempt BRS
+    const steps = [];
+    const isWifi = entryType === 'wifi';
+
+    // Step 1: Materialize at entry point
+    steps.push({
+      type: 'materialize',
+      mode: isWifi ? 'wifi' : 'cloud',
+      node: isWifi ? 'wifi-ap' : 'cloud',
+    });
+
+    // Step 2: Entry cables to first core
+    if (isWifi) {
+      // WiFi: AP → WLC → Core A
+      steps.push({ type: 'cable', cable: this._getCable('wifi-ap', 'wlc'), from: 'wifi-ap' });
+      steps.push({ type: 'cable', cable: this._getCable('wlc', 'core-a'), from: 'wlc' });
+    } else {
+      // Internet: Cloud → FW → Core
+      const fwNode = topo.fw; // 'fw-a' or 'fw-b'
+      steps.push({ type: 'cable', cable: this._getCable('cloud', fwNode), from: 'cloud' });
+      steps.push({
+        type: 'cable', cable: this._getCable(fwNode, topo.core), from: fwNode,
+        trigger: 'fw-inspect', triggerNode: fwNode, pause: 500,
+      });
+    }
+
+    // Current position after entry cables
+    let currentCore = isWifi ? 'core-a' : topo.core;
+
+    // Step 3: BRS side trip (only from Core A)
+    if (brs) {
+      // If we're at Core B, cross-rack to Core A first
+      if (currentCore === 'core-b') {
+        steps.push({ type: 'cable', cable: this._getCable('core-b', 'core-a'), from: 'core-b' });
+        currentCore = 'core-a';
+      }
+      steps.push({ type: 'cable', cable: this._getCable('core-a', 'brs'), from: 'core-a' });
+      steps.push({ type: 'brs-render', pause: 2500 });
+      steps.push({ type: 'cable', cable: this._getCable('brs', 'core-a'), from: 'brs' });
+      currentCore = 'core-a';
+    }
+
+    // Step 4: Route to destination switch
+    if (currentCore !== topo.core) {
+      // Cross-rack to destination's core
+      steps.push({ type: 'cable', cable: this._getCable(currentCore, topo.core), from: currentCore });
+    }
+
+    // VPN detour for contractors
+    if (topo.viaVpn) {
+      steps.push({
+        type: 'cable', cable: this._getCable('core-b', 'vpn'), from: 'core-b',
+        trigger: 'vpn-tunnel', triggerNode: 'vpn',
+      });
+      steps.push({ type: 'cable', cable: this._getCable('vpn', 'sw-custom'), from: 'vpn' });
+    } else {
+      const swNode = `sw-${divTheme}`;
+      steps.push({ type: 'cable', cable: topo.switchCable, from: topo.core });
+    }
+
+    // Step 5: Beam down to patch panel
+    steps.push({ type: 'beam-down', divTheme });
+
+    // Step 6: Place badge
+    steps.push({ type: 'place-badge' });
+
+    // Attach metadata for debugging / Core CLI display
+    return {
+      steps,
+      entry: entryType,
+      divTheme,
+      rackSide: topo.rackSide,
+      fw: topo.fw,
+    };
+  },
+
+  // Resolve a probe route (idle traffic): random short hop, no triggers
+  _resolveProbeRoute() {
+    const hops = [
+      // Short intra-rack hops
+      { cables: [{ cable: 8, from: 'core-a' }] },
+      { cables: [{ cable: 9, from: 'core-a' }] },
+      { cables: [{ cable: 11, from: 'core-b' }] },
+      { cables: [{ cable: 12, from: 'core-b' }] },
+      { cables: [{ cable: 2, from: 'fw-a' }] },
+      { cables: [{ cable: 3, from: 'fw-b' }] },
+      // Cross-rack
+      { cables: [{ cable: 0, from: 'core-a' }] },
+      { cables: [{ cable: 1, from: 'core-b' }] },
+      // BRS ping
+      { cables: [{ cable: 4, from: 'core-a' }, { cable: 5, from: 'brs' }] },
+    ];
+    return hops[Math.floor(Math.random() * hops.length)];
+  },
+
+  // Scheduler state
+  _ingressQueue: [],
+  _inFlightCount: 0,
+  _MAX_IN_FLIGHT: 3,
+  _LAUNCH_INTERVAL: 3000, // ms between launches
+  _schedulerTimer: null,
+  _brsBusy: false,
+  _lastLaunchRack: null, // 'A' or 'B', for alternating
+
+  _startScheduler() {
+    if (this._schedulerTimer) return;
+    this._schedulerTick(); // immediate first tick
+    this._schedulerTimer = setInterval(() => this._schedulerTick(), this._LAUNCH_INTERVAL);
+  },
+
+  _stopScheduler() {
+    if (this._schedulerTimer) {
+      clearInterval(this._schedulerTimer);
+      this._schedulerTimer = null;
+    }
+    this._ingressQueue = [];
+    this._inFlightCount = 0;
+    this._brsBusy = false;
+    this._lastLaunchRack = null;
+  },
+
+  _schedulerTick() {
+    if (this._ingressQueue.length === 0 || this._inFlightCount >= this._MAX_IN_FLIGHT) return;
+
+    // Try to alternate rack sides
+    let badge = null;
+    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
+
+    for (let i = 0; i < this._ingressQueue.length; i++) {
+      const b = this._ingressQueue[i];
+      const theme = getDivisionForDept(b.department, b.isBandMember);
+      const route = this._INGRESS_ROUTES[theme];
+      if (route && route.rackSide === preferSide) {
+        badge = this._ingressQueue.splice(i, 1)[0];
+        break;
+      }
+    }
+
+    // Fallback: take first in queue regardless of side
+    if (!badge && this._ingressQueue.length > 0) {
+      badge = this._ingressQueue.shift();
+    }
+
+    if (!badge) return;
+
+    const theme = getDivisionForDept(badge.department, badge.isBandMember);
+    const route = this._INGRESS_ROUTES[theme];
+    this._lastLaunchRack = route ? route.rackSide : null;
+
+    this._inFlightCount++;
+    this._playIngress(badge).finally(() => {
+      this._inFlightCount--;
+    });
+  },
+
+  // ─── Device Trigger Effects ────────────────────────────
+
+  _triggerFlash(el, className, duration = 500) {
+    if (!el) return;
+    el.classList.add(className);
+    setTimeout(() => el.classList.remove(className), duration);
+  },
+
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  },
+
+  _triggerFWInspect(fwEl, duration = 500) {
+    if (!fwEl || !this._cableSvg) return;
+    // Green glow on the device
+    this._triggerFlash(fwEl, 'rack-trigger-fw-inspect', duration);
+
+    // "✓ PASS" text in SVG overlay — guaranteed visible above all rack elements
+    const framesRow = this._container.querySelector('.rack-frames-row');
+    if (!framesRow) return;
+    const ref = framesRow.getBoundingClientRect();
+    const fwRect = fwEl.getBoundingClientRect();
+    const cx = fwRect.left + fwRect.width / 2 - ref.left;
+    const cy = fwRect.top + fwRect.height / 2 - ref.top;
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', cx);
+    text.setAttribute('y', cy + 4); // slight baseline adjust
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('font-family', 'monospace');
+    text.setAttribute('font-size', '11');
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('fill', '#22C55E');
+    text.setAttribute('filter', 'url(#packet-glow)');
+    text.setAttribute('opacity', '0');
+    text.textContent = '✓ PASS';
+    this._cableSvg.appendChild(text);
+
+    // Animate: pop in, hold, fade out
+    const start = performance.now();
+    const animate = (now) => {
+      const t = (now - start) / duration;
+      if (t >= 1) { text.remove(); return; }
+      if (t < 0.2) {
+        // Pop in
+        const s = t / 0.2;
+        text.setAttribute('opacity', String(s));
+        text.setAttribute('font-size', String(8 + s * 5));
+      } else if (t < 0.7) {
+        // Hold
+        text.setAttribute('opacity', '1');
+        text.setAttribute('font-size', '13');
+      } else {
+        // Fade out
+        text.setAttribute('opacity', String(1 - (t - 0.7) / 0.3));
+      }
+      requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  },
+
+  // ─── Cloud Binary Rain ─────────────────────────────────
+  // Idle matrix-style digits streaming down from the cloud. Runs continuously.
+  // When a badge ingress starts, the rain digits get "absorbed" into the materialization.
+
+  _cloudRainTimer: null,
+  _cloudRainDrops: [],
+  _cloudRainFrame: null,
+
+  _startCloudRain() {
+    if (this._cloudRainFrame) return;
+    if (!this._cableSvg || !this._virtualCoords?.cloud) return;
+
+    const svg = this._cableSvg;
+    const cloud = this._virtualCoords.cloud;
+    const colors = ['#5B8DEF', '#93C5FD', '#B4D4FF', '#FFFFFF', '#3B6FCF'];
+    const maxDrops = 36;
+
+    // Cloud bounds — cloud SVG is ~160x80, centered. cloud.x/y is bottom-center.
+    // Approximate the cloud interior as an ellipse
+    const cloudW = 60; // half-width of rain zone
+    const cloudH = 55; // height of cloud above bottom edge
+    const cloudTop = cloud.y - cloudH;
+    const cloudBot = cloud.y - 5; // stop just inside bottom edge
+
+    // Spawn a new digit every 200-400ms
+    this._cloudRainTimer = setInterval(() => {
+      if (this._cloudRainDrops.length >= maxDrops) return;
+
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.textContent = Math.random() < 0.5 ? '0' : '1';
+      txt.setAttribute('font-family', 'monospace');
+      txt.setAttribute('font-size', `${8 + Math.random() * 5}`);
+      txt.setAttribute('fill', colors[Math.floor(Math.random() * colors.length)]);
+      txt.setAttribute('text-anchor', 'middle');
+      txt.classList.add('rack-cloud-rain-digit');
+
+      // Start near top of cloud, random x within cloud width
+      const startX = cloud.x + (Math.random() - 0.5) * cloudW * 1.4;
+      const startY = cloudTop + Math.random() * 10;
+      txt.setAttribute('x', startX);
+      txt.setAttribute('y', startY);
+      txt.setAttribute('opacity', '0');
+      svg.appendChild(txt);
+
+      this._cloudRainDrops.push({
+        el: txt,
+        x: startX,
+        y: startY,
+        speed: 12 + Math.random() * 20,
+        fadeInY: startY + 5,
+        maxY: cloudBot, // stop inside the cloud
+        opacity: 0.3 + Math.random() * 0.4,
+      });
+    }, 200 + Math.random() * 200);
+
+    // Animation loop for rain
+    const animateRain = (now) => {
+      if (!this._cloudRainFrame && this._cloudRainFrame !== 0) return;
+
+      const dt = this._cloudRainLastTime ? (now - this._cloudRainLastTime) / 1000 : 0.016;
+      this._cloudRainLastTime = now;
+      const clampedDt = Math.min(dt, 0.1);
+
+      for (let i = this._cloudRainDrops.length - 1; i >= 0; i--) {
+        const d = this._cloudRainDrops[i];
+        d.y += d.speed * clampedDt;
+
+        // Fade in near top
+        if (d.y < d.fadeInY) {
+          const fadeT = (d.y - (d.fadeInY - 5)) / 5;
+          d.el.setAttribute('opacity', String(Math.max(0, fadeT * d.opacity)));
+        }
+        // Fade out near bottom
+        else if (d.y > d.maxY - 15) {
+          const fadeT = (d.maxY - d.y) / 15;
+          d.el.setAttribute('opacity', String(Math.max(0, fadeT * d.opacity)));
+        } else {
+          d.el.setAttribute('opacity', String(d.opacity));
+        }
+
+        d.el.setAttribute('y', d.y);
+
+        // Remove when past max
+        if (d.y >= d.maxY) {
+          d.el.remove();
+          this._cloudRainDrops.splice(i, 1);
+        }
+      }
+
+      this._cloudRainFrame = requestAnimationFrame(animateRain);
+    };
+    this._cloudRainLastTime = 0;
+    this._cloudRainFrame = requestAnimationFrame(animateRain);
+  },
+
+  _stopCloudRain() {
+    if (this._cloudRainTimer) {
+      clearInterval(this._cloudRainTimer);
+      this._cloudRainTimer = null;
+    }
+    if (this._cloudRainFrame) {
+      cancelAnimationFrame(this._cloudRainFrame);
+      this._cloudRainFrame = null;
+    }
+    for (const d of this._cloudRainDrops) {
+      if (d.el.parentNode) d.el.remove();
+    }
+    this._cloudRainDrops = [];
+    this._cloudRainLastTime = 0;
+  },
+
+  // Badge materialization — two modes:
+  //   'cloud': blue/white binary rain from cloud, assembles portrait top-down
+  //   'wifi':  green signal fragments radiate from antennas, get captured, assemble portrait top-down
+  async _materializeBadge(pkt, x, y, duration = 1200, mode = 'cloud') {
+    if (!this._cableSvg || !pkt.el) return;
+    const svg = this._cableSvg;
+    const r = 12;
+    const particles = [];
+    const particleCount = 32;
+    const formY = y;
+
+    // Mode-specific config
+    const isWifi = mode === 'wifi';
+    const scanColor = isWifi ? '#22C55E' : '#93C5FD';
+    const particleColors = isWifi
+      ? ['#22C55E', '#4ADE80', '#86EFAC', '#FFFFFF', '#16A34A', '#4ADE80']
+      : ['#5B8DEF', '#93C5FD', '#B4D4FF', '#FFFFFF', '#5B8DEF', '#FFFFFF'];
+    const particleChars = isWifi
+      ? [')', '))', ')))', '~', '~', '▂', '▄', '▆', '█', '0', '1', '·']
+      : ['0', '1'];
+
+    // Position the badge at formation point, hidden via clip
+    pkt.el.setAttribute('transform', `translate(${x},${formY})`);
+    pkt.el.setAttribute('opacity', '1');
+
+    // Growing clip-path to reveal badge top-to-bottom
+    const clipId = `mat-clip-${this._packetClipId++}`;
+    const clipEl = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+    clipEl.setAttribute('id', clipId);
+    const clipRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    clipRect.setAttribute('x', -r - 2);
+    clipRect.setAttribute('y', -r - 2);
+    clipRect.setAttribute('width', r * 2 + 4);
+    clipRect.setAttribute('height', 0);
+    clipEl.appendChild(clipRect);
+    pkt.el.insertBefore(clipEl, pkt.el.firstChild);
+
+    const img = pkt.el.querySelector('image');
+    const ring = pkt.el.querySelector('circle[stroke]');
+    const origImgClip = img ? img.getAttribute('clip-path') : '';
+    if (img) img.setAttribute('clip-path', `url(#${clipId})`);
+    if (ring) ring.setAttribute('clip-path', `url(#${clipId})`);
+
+    // Scanline
+    const scanline = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    scanline.setAttribute('x', -r - 4);
+    scanline.setAttribute('width', r * 2 + 8);
+    scanline.setAttribute('height', 2);
+    scanline.setAttribute('fill', scanColor);
+    scanline.setAttribute('opacity', '0.9');
+    scanline.setAttribute('filter', 'url(#packet-glow)');
+    pkt.el.appendChild(scanline);
+
+    // Spawn particles
+    for (let i = 0; i < particleCount; i++) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.textContent = particleChars[Math.floor(Math.random() * particleChars.length)];
+      txt.setAttribute('font-family', 'monospace');
+      txt.setAttribute('font-size', `${9 + Math.random() * 5}`);
+      txt.setAttribute('fill', particleColors[Math.floor(Math.random() * particleColors.length)]);
+      txt.setAttribute('opacity', String(0.4 + Math.random() * 0.5));
+      txt.setAttribute('text-anchor', 'middle');
+
+      let px, py;
+      if (isWifi) {
+        // WiFi: radiate outward from antenna area, then converge inward
+        // Start in a wide ring around the AP, like signals being captured
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 25 + Math.random() * 40; // 25-65px out from center
+        px = x + Math.cos(angle) * dist;
+        py = y + Math.sin(angle) * dist * 0.6; // slightly flattened vertically
+      } else {
+        // Cloud: start inside cloud above, fall down
+        px = x + (Math.random() - 0.5) * r * 6;
+        py = y - 15 - Math.random() * 40;
+      }
+
+      txt.setAttribute('x', px);
+      txt.setAttribute('y', py);
+      svg.appendChild(txt);
+
+      const arrivalT = 0.1 + (i / particleCount) * 0.75;
+      particles.push({
+        el: txt, startX: px, startY: py,
+        targetX: x + (Math.random() - 0.5) * r * 0.8,
+        arrivalT,
+      });
+    }
+
+    // Cleanup helper — always call this, even on cancel
+    const cleanup = () => {
+      for (const p of particles) { if (p.el.parentNode) p.el.remove(); }
+      if (scanline.parentNode) scanline.remove();
+      if (clipEl.parentNode) clipEl.remove();
+      if (img && origImgClip) img.setAttribute('clip-path', origImgClip);
+      else if (img) img.removeAttribute('clip-path');
+      if (ring) ring.removeAttribute('clip-path');
+    };
+
+    // Animate: clip reveal + particles converge
+    const startTime = performance.now();
+    try {
+      await new Promise(resolve => {
+        const animate = (now) => {
+          // Bail if packet was cancelled (resize, destroy)
+          if (pkt._cancelled || !pkt.el || !pkt.el.parentNode) { resolve(); return; }
+
+          const elapsed = (now - startTime) / duration;
+          const t = Math.max(0, Math.min(elapsed, 1));
+
+          // Reveal badge top-to-bottom
+          const revealH = t * (r * 2 + 4);
+          clipRect.setAttribute('height', revealH);
+
+          // Scanline position
+          const scanY = -r - 2 + revealH;
+          scanline.setAttribute('y', scanY);
+          scanline.setAttribute('opacity', String(t < 0.9 ? 0.9 : (1 - t) * 9));
+
+          // Scanline world-Y position (relative to SVG, not to the <g>)
+          const scanWorldY = formY - r - 2 + revealH;
+
+          // Animate particles flying into the scanline
+          for (const p of particles) {
+            if (p.done) continue;
+            // Progress toward arrival: 0 = just started, 1 = reached scanline
+            const pt = Math.max(0, Math.min(1, t / p.arrivalT));
+            const ease = pt * pt; // ease-in: accelerate into the line
+
+            // Fly toward the scanline's current position
+            const targetY = scanWorldY;
+            p.el.setAttribute('x', p.startX + (p.targetX - p.startX) * ease);
+            p.el.setAttribute('y', p.startY + (targetY - p.startY) * ease);
+
+            if (pt >= 1) {
+              // Hit the scanline — bright flash then disappear
+              p.el.setAttribute('fill', '#FFFFFF');
+              p.el.setAttribute('opacity', '1');
+              p.el.setAttribute('font-size', '14');
+              setTimeout(() => { if (p.el.parentNode) p.el.setAttribute('opacity', '0'); }, 60);
+              p.done = true;
+            } else {
+              // Approaching — get brighter as they get closer
+              p.el.setAttribute('opacity', String(0.3 + pt * 0.5));
+            }
+          }
+
+          if (t >= 1) { resolve(); return; }
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      });
+    } finally {
+      cleanup();
+    }
+  },
+
+  // Beam down transport — cone of light from switch port to patch panel port
+  // Narrow at source (switch port), widens to frame the destination (patch port)
+  async _beamDown(pkt, fromX, fromY, toX, toY, duration = 1400) {
+    if (!this._cableSvg || !pkt.el) return;
+    const svg = this._cableSvg;
+    const r = 12; // badge radius
+
+    let beam = null;
+    let scanline = null;
+    let clipEl = null;
+    const img = pkt.el.querySelector('image');
+    const ring = pkt.el.querySelector('circle[stroke]');
+    let origImgClip = null;
+
+    try {
+      // Phase 1: Shrink badge at switch port, then hide it (150ms)
+      const shrinkDur = 150;
+      const startTime = performance.now();
+      await new Promise(resolve => {
+        const animate = (now) => {
+          if (pkt._cancelled || !pkt.el || !pkt.el.parentNode) { resolve(); return; }
+          const t = Math.min((now - startTime) / shrinkDur, 1);
+          const s = 1 - t;
+          pkt.el.setAttribute('transform', `translate(${fromX},${fromY}) scale(${s})`);
+          pkt.el.setAttribute('opacity', String(1 - t));
+          if (t >= 1) { resolve(); return; }
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      });
+
+      // Phase 2: Cone beam fires from switch to patch panel (300ms)
+      beam = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+      const narrowW = 2;
+      const wideW = r + 4;
+      beam.setAttribute('points',
+        `${fromX - narrowW},${fromY} ${fromX + narrowW},${fromY} ${toX + wideW},${toY} ${toX - wideW},${toY}`
+      );
+
+      // Add gradient if not exists
+      let defs = svg.querySelector('defs');
+      if (defs && !svg.querySelector('#beam-gradient')) {
+        const grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.setAttribute('id', 'beam-gradient');
+        grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+        grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+        const s1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', '#93C5FD'); s1.setAttribute('stop-opacity', '0.8');
+        const s2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+        s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', '#3B82F6'); s2.setAttribute('stop-opacity', '0.4');
+        grad.appendChild(s1); grad.appendChild(s2);
+        defs.appendChild(grad);
+      }
+
+      beam.setAttribute('fill', 'url(#beam-gradient)');
+      beam.setAttribute('opacity', '0');
+      beam.classList.add('rack-beam');
+      svg.appendChild(beam);
+
+      // Beam fade in
+      const beamInStart = performance.now();
+      await new Promise(resolve => {
+        const animate = (now) => {
+          if (pkt._cancelled) { resolve(); return; }
+          const t = Math.min((now - beamInStart) / 300, 1);
+          beam.setAttribute('opacity', String(t * 0.7));
+          if (t >= 1) { resolve(); return; }
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      });
+
+      // Phase 3: Badge materializes bottom-up at destination inside beam (800ms)
+      // Move badge to destination, set up clip for bottom-up reveal
+      pkt.el.setAttribute('transform', `translate(${toX},${toY})`);
+      pkt.el.setAttribute('opacity', '1');
+
+      const clipId = `beam-clip-${this._packetClipId++}`;
+      clipEl = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+      clipEl.setAttribute('id', clipId);
+      const clipRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      clipRect.setAttribute('x', -r - 2);
+      clipRect.setAttribute('width', r * 2 + 4);
+      // Start at bottom, height 0
+      clipRect.setAttribute('y', r + 2); // bottom of badge
+      clipRect.setAttribute('height', 0);
+      clipEl.appendChild(clipRect);
+      pkt.el.insertBefore(clipEl, pkt.el.firstChild);
+
+      origImgClip = img ? img.getAttribute('clip-path') : '';
+      if (img) img.setAttribute('clip-path', `url(#${clipId})`);
+      if (ring) ring.setAttribute('clip-path', `url(#${clipId})`);
+
+      // Scanline — bright line at the reveal edge, moving upward
+      scanline = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      scanline.setAttribute('x', -r - 4);
+      scanline.setAttribute('width', r * 2 + 8);
+      scanline.setAttribute('height', 2);
+      scanline.setAttribute('fill', '#93C5FD');
+      scanline.setAttribute('opacity', '0.9');
+      scanline.setAttribute('filter', 'url(#packet-glow)');
+      pkt.el.appendChild(scanline);
+
+      const revealDur = duration - 150 - 300 - 150; // ~800ms
+      const revealStart = performance.now();
+      const totalH = r * 2 + 4;
+      await new Promise(resolve => {
+        const animate = (now) => {
+          if (pkt._cancelled || !pkt.el || !pkt.el.parentNode) { resolve(); return; }
+          const t = Math.max(0, Math.min((now - revealStart) / revealDur, 1));
+
+          // Reveal bottom-up: clip rect grows upward from bottom
+          const revealH = t * totalH;
+          clipRect.setAttribute('y', r + 2 - revealH);
+          clipRect.setAttribute('height', revealH);
+
+          // Scanline at the top edge of the reveal, moving up
+          const scanY = r + 2 - revealH;
+          scanline.setAttribute('y', scanY - 1);
+          scanline.setAttribute('opacity', String(t < 0.9 ? 0.9 : (1 - t) * 9));
+
+          // Beam fades out as badge forms
+          beam.setAttribute('opacity', String(Math.max(0, 0.7 * (1 - t * 0.8))));
+
+          if (t >= 1) { resolve(); return; }
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      });
+
+      // Phase 4: Settle
+      await this._delay(150);
+    } finally {
+      if (beam && beam.parentNode) beam.remove();
+      if (scanline && scanline.parentNode) scanline.remove();
+      if (clipEl && clipEl.parentNode) clipEl.remove();
+      if (img && origImgClip) img.setAttribute('clip-path', origImgClip);
+      else if (img) img.removeAttribute('clip-path');
+      if (ring) ring.removeAttribute('clip-path');
+    }
+  },
+
+  // ─── Ingress Orchestration ─────────────────────────────
+
+  // Execute a resolved route — walks step array, fires triggers, handles all animation
+  async _executeRoute(badge, route, pkt) {
+    for (const step of route.steps) {
+      if (pkt._cancelled) break;
+
+      switch (step.type) {
+        case 'materialize': {
+          const coords = step.node === 'wifi-ap' ? this._virtualCoords?.wifiAp : this._virtualCoords?.cloud;
+          if (coords) {
+            if (step.node === 'wifi-ap') {
+              this._triggerFlash(this._container.querySelector('.rack-device-wifi'), 'rack-trigger-wifi-burst', 1200);
+            } else {
+              this._triggerFlash(this._container.querySelector('[data-device-type="cloud"]'), 'rack-trigger-cloud-pulse', 1200);
+            }
+            await this._materializeBadge(pkt, coords.x, coords.y, 1200, step.mode);
+          }
+          break;
+        }
+
+        case 'cable': {
+          if (step.cable == null) break;
+          await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
+          // Fire trigger if attached
+          if (step.trigger === 'fw-inspect') {
+            const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
+            this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 500);
+          } else if (step.trigger === 'vpn-tunnel') {
+            this._triggerFlash(this._container.querySelector('[data-device-type="vpn"]'), 'rack-trigger-vpn-tunnel', 500);
+          }
+          if (step.pause) await this._delay(step.pause);
+          break;
+        }
+
+        case 'brs-render': {
+          if (this._brsBusy) break; // skip if busy
+          try {
+            this._brsBusy = true;
+            this.triggerBRSRender(badge, step.pause || 2500);
+            await this._delay(step.pause || 2500);
+          } finally {
+            this._brsBusy = false;
+          }
+          break;
+        }
+
+        case 'beam-down': {
+          const dt = step.divTheme;
+          const panel = this._container.querySelector(`[data-panel-key="${CSS.escape(dt)}"]`);
+          const sw = this._container.querySelector(`.rack-device-switch[data-theme="${CSS.escape(dt)}"]`);
+          const filled = panel?.querySelectorAll('.rack-port:not(.rack-port-empty)').length || 0;
+
+          let srcCoords = null;
+          if (sw) {
+            const switchPort = sw.querySelector(`[data-switch-port="${filled + 1}"]`);
+            this._triggerFlash(switchPort, 'rack-trigger-switch-flash', 800);
+            if (switchPort) {
+              srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled + 1}"]`);
+            }
+          }
+          if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
+
+          let destCoords = null;
+          const empty = panel?.querySelector('.rack-port-empty');
+          if (empty) {
+            destCoords = this._getPortCoords(this._container, `[data-panel-key="${CSS.escape(dt)}"] .rack-port-empty`);
+          }
+          if (!destCoords && panel) {
+            const pr = panel.getBoundingClientRect();
+            const ref = this._container.querySelector('.rack-frames-row')?.getBoundingClientRect();
+            if (ref) destCoords = { x: pr.left + pr.width / 2 - ref.left, y: pr.top + pr.height / 2 - ref.top };
+          }
+
+          if (srcCoords && destCoords) {
+            await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 1400);
+          }
+          break;
+        }
+
+        case 'place-badge': {
+          const portEl = this._placeBadgePort(badge);
+          if (portEl) {
+            portEl.classList.add('rack-trigger-arrival-burst');
+            setTimeout(() => portEl.classList.remove('rack-trigger-arrival-burst'), 1500);
+          }
+          break;
+        }
+      }
+    }
+  },
+
+  async _playIngress(badge) {
+    if (!this._container || !this._cableSvg || !this._virtualCoords) {
+      this._placeBadgePort(badge);
+      return;
+    }
+
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const entryType = Math.random() < 0.1 ? 'wifi' : 'firewall';
+    const route = this._resolveRoute(entryType, divTheme, { brs: !this._brsBusy });
+
+    if (!route) {
+      this._placeBadgePort(badge);
+      return;
+    }
+
+    const pkt = { el: this._createBadgePacket(badge) };
+    if (!pkt.el) {
+      this._placeBadgePort(badge);
+      return;
+    }
+
+    try {
+      await this._executeRoute(badge, route, pkt);
+    } catch (err) {
+      this._placeBadgePort(badge);
+    } finally {
+      this._removePacket(pkt);
+    }
+  },
 
   _renderCables(container) {
     // Create SVG element sized to the rack container
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add('rack-cable-svg');
     svg.setAttribute('aria-hidden', 'true');
+
+    // Add glow filter for packet visibility
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    filter.setAttribute('id', 'packet-glow');
+    filter.setAttribute('x', '-50%'); filter.setAttribute('y', '-50%');
+    filter.setAttribute('width', '200%'); filter.setAttribute('height', '200%');
+    const blur = document.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+    blur.setAttribute('stdDeviation', '3');
+    blur.setAttribute('result', 'glow');
+    const merge = document.createElementNS('http://www.w3.org/2000/svg', 'feMerge');
+    const mn1 = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+    mn1.setAttribute('in', 'glow');
+    const mn2 = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+    mn2.setAttribute('in', 'SourceGraphic');
+    merge.appendChild(mn1); merge.appendChild(mn2);
+    filter.appendChild(blur); filter.appendChild(merge);
+    defs.appendChild(filter);
+    svg.appendChild(defs);
 
     // Insert SVG into the frames row (between the two rack columns)
     const framesRow = container.querySelector('.rack-frames-row');
@@ -1252,8 +2540,14 @@ window.RackRenderer = {
     svg.setAttribute('height', containerRect.height);
     svg.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`);
 
-    // Clear existing paths
-    svg.innerHTML = '';
+    // Clear existing cable paths (preserve <defs> for packet glow filter)
+    svg.querySelectorAll('.rack-cable-path').forEach(p => p.remove());
+    // Also clear any lingering packet circles
+    svg.querySelectorAll('.rack-packet').forEach(p => p.remove());
+
+    // Initialize cable path index
+    this._cablePaths = new Map();
+    this._cableBusy = new Map();
 
     // Get rack frame edges for cable routing gutters
     const frames = container.querySelectorAll('.rack-frame');
@@ -1274,7 +2568,7 @@ window.RackRenderer = {
     let crossRackLane = 0;
 
     // Draw each cable
-    this._CABLE_DEFS.forEach(([fromId, toId, color, width, routeType, style]) => {
+    this._CABLE_DEFS.forEach(([fromId, toId, color, width, routeType, style], cableIdx) => {
       const fromEl = container.querySelector(`[data-port-id="${fromId}"]`);
       const toEl = container.querySelector(`[data-port-id="${toId}"]`);
       if (!fromEl || !toEl) return;
@@ -1299,6 +2593,10 @@ window.RackRenderer = {
       let d;
 
       switch (routeType) {
+        case 'cloud-drop':
+          // Gentle curve from cloud (above SVG, negative y) down to FW WAN or WiFi AP
+          d = this._cloudDropPath(x1, y1, x2, y2);
+          break;
         case 'cross-rack':
           d = this._crossRackPath(x1, y1, x2, y2, crossRackLane);
           crossRackLane++;
@@ -1359,9 +2657,23 @@ window.RackRenderer = {
       path.setAttribute('opacity', '0.85');
       if (style === 'dashed') path.setAttribute('stroke-dasharray', '6 4');
       path.classList.add('rack-cable-path');
+      path.setAttribute('data-cable-index', cableIdx);
 
       svg.appendChild(path);
+
+      // Index for packet animation
+      this._cablePaths.set(cableIdx, path);
+      this._cableBusy.set(cableIdx, false);
     });
+
+    // Cache virtual edge positions (cloud drops, switch→patch drops)
+    this._computeVirtualCoords(container);
+  },
+
+  _cloudDropPath(x1, y1, x2, y2) {
+    // Gentle S-curve from cloud (above SVG) down to FW WAN port or WiFi AP
+    const midY = (y1 + y2) / 2;
+    return `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
   },
 
   _dropLeftPath(x1, y1, x2, y2) {
@@ -1499,5 +2811,318 @@ window.RackRenderer = {
     const laneOffset = (lane || 0) * 16;
     const midY = Math.min(y1, y2) - 20 - laneOffset;
     return `M ${x1} ${y1} C ${x1 + 30} ${midY}, ${x2 - 30} ${midY}, ${x2} ${y2}`;
+  },
+
+  // ─── Debug Step-Through Panel ──────────────────────────
+  // Toggle with: RackRenderer._toggleDebug()
+
+  _debugPanel: null,
+  _debugPkt: null,
+  _debugStepResolve: null,
+  _debugActive: false,
+
+  _CABLE_NAMES: {
+    0: 'Trunk A→B', 1: 'Trunk B→A', 2: 'FW-A → Core A', 3: 'FW-B → Core B',
+    4: 'Core A → BRS (in)', 5: 'BRS → Core A (out)', 6: 'WLC → Core A', 7: 'WLC ↔ WiFi AP',
+    8: 'Core A → IT Switch', 9: 'Core A → Punk Switch', 10: 'VPN ↔ Core B',
+    11: 'Core B → Office Switch', 12: 'Core B → Corporate Switch', 13: 'VPN → Contractors',
+    14: 'Cloud → FW-A', 15: 'Cloud → FW-B',
+  },
+
+  _toggleDebug() {
+    if (this._debugPanel) {
+      this._debugPanel.remove();
+      this._debugPanel = null;
+      this._debugActive = false;
+      return;
+    }
+    this._debugActive = true;
+    this._stopScheduler();
+
+    const panel = document.createElement('div');
+    panel.className = 'rack-debug-panel';
+    panel.innerHTML = `
+      <div class="rack-debug-header">Ingress Debugger</div>
+      <div class="rack-debug-row">
+        <label>Name</label>
+        <input type="text" id="rdbg-name" value="DEBUG USER" />
+      </div>
+      <div class="rack-debug-row">
+        <label>Dept</label>
+        <select id="rdbg-dept">
+          <option value="PRINTER JAMS">PRINTER JAMS (IT)</option>
+          <option value="MOSH PIT HR">MOSH PIT HR (Punk)</option>
+          <option value="WATERCOOLER SERVICES">WATERCOOLER SERVICES (Office)</option>
+          <option value="MANDATORY FUN COMMITTEE">MANDATORY FUN COMMITTEE (Corporate)</option>
+          <option value="FREELANCE">FREELANCE (Contractors)</option>
+        </select>
+      </div>
+      <div class="rack-debug-row">
+        <label>Path</label>
+        <select id="rdbg-path">
+          <option value="firewall">Firewall (90%)</option>
+          <option value="wifi">WiFi AP (10%)</option>
+        </select>
+      </div>
+      <div class="rack-debug-row">
+        <label>BRS</label>
+        <select id="rdbg-brs">
+          <option value="yes">Side trip</option>
+          <option value="no">Skip</option>
+        </select>
+      </div>
+      <div class="rack-debug-buttons">
+        <button id="rdbg-start">▶ Start</button>
+        <button id="rdbg-step" disabled>⏭ Next Step</button>
+        <button id="rdbg-reset">↺ Reset</button>
+      </div>
+      <div class="rack-debug-status" id="rdbg-status">Ready</div>
+      <div class="rack-debug-log" id="rdbg-log"></div>
+    `;
+    document.body.appendChild(panel);
+    this._debugPanel = panel;
+
+    panel.querySelector('#rdbg-start').addEventListener('click', () => this._debugStart());
+    panel.querySelector('#rdbg-step').addEventListener('click', () => this._debugStep());
+    panel.querySelector('#rdbg-reset').addEventListener('click', () => this._debugReset());
+
+    // Draggable by header
+    const header = panel.querySelector('.rack-debug-header');
+    let dragging = false, dx = 0, dy = 0;
+    header.style.cursor = 'grab';
+    header.addEventListener('mousedown', (e) => {
+      dragging = true;
+      dx = e.clientX - panel.offsetLeft;
+      dy = e.clientY - panel.offsetTop;
+      header.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      panel.style.left = (e.clientX - dx) + 'px';
+      panel.style.top = (e.clientY - dy) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      if (dragging) { dragging = false; header.style.cursor = 'grab'; }
+    });
+  },
+
+  _debugLog(msg) {
+    const log = document.getElementById('rdbg-log');
+    if (!log) return;
+    const line = document.createElement('div');
+    line.textContent = msg;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  },
+
+  _debugStatus(msg) {
+    const el = document.getElementById('rdbg-status');
+    if (el) el.textContent = msg;
+  },
+
+  // Wait for user to click "Next Step"
+  _debugWaitStep(label) {
+    this._debugStatus(`⏸ ${label}`);
+    this._debugLog(`→ ${label}`);
+    const stepBtn = document.getElementById('rdbg-step');
+    if (stepBtn) stepBtn.disabled = false;
+    return new Promise(resolve => {
+      this._debugStepResolve = () => {
+        if (stepBtn) stepBtn.disabled = true;
+        this._debugStatus(`▶ ${label}...`);
+        resolve();
+      };
+    });
+  },
+
+  _debugStep() {
+    if (this._debugStepResolve) {
+      const resolve = this._debugStepResolve;
+      this._debugStepResolve = null;
+      resolve();
+    }
+  },
+
+  _debugReset() {
+    // Cancel any in-flight debug packet
+    if (this._debugPkt) {
+      this._debugPkt._cancelled = true;
+      this._removePacket(this._debugPkt);
+      this._debugPkt = null;
+    }
+    this._cancelAllPackets();
+    this._brsBusy = false;
+    const log = document.getElementById('rdbg-log');
+    if (log) log.innerHTML = '';
+    this._debugStatus('Ready');
+    const stepBtn = document.getElementById('rdbg-step');
+    if (stepBtn) stepBtn.disabled = true;
+    const startBtn = document.getElementById('rdbg-start');
+    if (startBtn) startBtn.disabled = false;
+    this._debugLog('Reset complete');
+  },
+
+  async _debugStart() {
+    if (!this._container || !this._cableSvg || !this._virtualCoords) {
+      this._debugLog('ERROR: Rack not ready');
+      return;
+    }
+
+    const startBtn = document.getElementById('rdbg-start');
+    if (startBtn) startBtn.disabled = true;
+
+    const name = document.getElementById('rdbg-name')?.value || 'DEBUG USER';
+    const dept = document.getElementById('rdbg-dept')?.value || 'PRINTER JAMS';
+    const pathType = document.getElementById('rdbg-path')?.value || 'firewall';
+    const doBrs = document.getElementById('rdbg-brs')?.value === 'yes';
+
+    const songs = typeof SONG_LIST !== 'undefined' ? SONG_LIST : ['PLEASE HOLD', 'REPLY ALL', 'MANDATORY FUN'];
+    const badge = {
+      employeeId: `HD-DBG-${Date.now()}`,
+      name,
+      department: dept,
+      title: 'Debug Test',
+      song: songs[Math.floor(Math.random() * songs.length)],
+      isBandMember: false,
+    };
+
+    const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+    const route = this._resolveRoute(pathType, divTheme, { brs: doBrs });
+
+    if (!route) {
+      this._debugLog(`ERROR: No route for theme "${divTheme}"`);
+      if (startBtn) startBtn.disabled = false;
+      return;
+    }
+
+    // Log the full resolved route
+    this._debugLog(`Badge: ${name} | Dept: ${dept} | Theme: ${divTheme}`);
+    this._debugLog(`Entry: ${route.entry} | Rack: ${route.rackSide} | Steps: ${route.steps.length}`);
+    const stepSummary = route.steps
+      .filter(s => s.type === 'cable')
+      .map(s => this._CABLE_NAMES[s.cable] || `C${s.cable}`)
+      .join(' → ');
+    this._debugLog(`Route: ${stepSummary}`);
+
+    const pkt = { el: this._createBadgePacket(badge) };
+    this._debugPkt = pkt;
+    if (!pkt.el) {
+      this._debugLog('ERROR: Could not create packet');
+      if (startBtn) startBtn.disabled = false;
+      return;
+    }
+
+    try {
+      // Walk the resolved route, pausing before each step
+      for (const step of route.steps) {
+        if (pkt._cancelled) break;
+
+        switch (step.type) {
+          case 'materialize': {
+            const label = step.mode === 'wifi' ? 'WiFi AP' : 'Cloud';
+            await this._debugWaitStep(`Materialize on ${label}`);
+            // Delegate to _executeRoute for single step
+            const coords = step.node === 'wifi-ap' ? this._virtualCoords?.wifiAp : this._virtualCoords?.cloud;
+            if (coords) {
+              if (step.node === 'wifi-ap') {
+                this._triggerFlash(this._container.querySelector('.rack-device-wifi'), 'rack-trigger-wifi-burst', 1200);
+              } else {
+                this._triggerFlash(this._container.querySelector('[data-device-type="cloud"]'), 'rack-trigger-cloud-pulse', 1200);
+              }
+              await this._materializeBadge(pkt, coords.x, coords.y, 1200, step.mode);
+            }
+            this._debugLog('✓ Materialized');
+            break;
+          }
+
+          case 'cable': {
+            const cableName = this._CABLE_NAMES[step.cable] || `Cable ${step.cable}`;
+            await this._debugWaitStep(`Cable: ${cableName} (from ${step.from})`);
+            await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
+            this._debugLog(`✓ ${cableName}`);
+            if (step.trigger === 'fw-inspect') {
+              const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
+              this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 500);
+              await this._delay(step.pause || 500);
+              this._debugLog('  ⚡ FW inspection');
+            } else if (step.trigger === 'vpn-tunnel') {
+              this._triggerFlash(this._container.querySelector('[data-device-type="vpn"]'), 'rack-trigger-vpn-tunnel', 500);
+              this._debugLog('  ⚡ VPN tunnel');
+            } else if (step.pause) {
+              await this._delay(step.pause);
+            }
+            break;
+          }
+
+          case 'brs-render': {
+            await this._debugWaitStep('BRS: Render waveform');
+            try {
+              this._brsBusy = true;
+              this.triggerBRSRender(badge, step.pause || 2500);
+              await this._delay(step.pause || 2500);
+            } finally {
+              this._brsBusy = false;
+            }
+            this._debugLog('✓ BRS render');
+            break;
+          }
+
+          case 'beam-down': {
+            // Reuse _executeRoute logic for beam-down
+            const dt = step.divTheme;
+            const panel = this._container.querySelector(`[data-panel-key="${CSS.escape(dt)}"]`);
+            const sw = this._container.querySelector(`.rack-device-switch[data-theme="${CSS.escape(dt)}"]`);
+            const filled = panel?.querySelectorAll('.rack-port:not(.rack-port-empty)').length || 0;
+
+            let srcCoords = null;
+            if (sw) {
+              const port = sw.querySelector(`[data-switch-port="${filled + 1}"]`);
+              this._triggerFlash(port, 'rack-trigger-switch-flash', 800);
+              if (port) srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled + 1}"]`);
+            }
+            if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
+
+            let destCoords = null;
+            const empty = panel?.querySelector('.rack-port-empty');
+            if (empty) destCoords = this._getPortCoords(this._container, `[data-panel-key="${CSS.escape(dt)}"] .rack-port-empty`);
+            if (!destCoords && panel) {
+              const pr = panel.getBoundingClientRect();
+              const ref = this._container.querySelector('.rack-frames-row')?.getBoundingClientRect();
+              if (ref) destCoords = { x: pr.left + pr.width / 2 - ref.left, y: pr.top + pr.height / 2 - ref.top };
+            }
+
+            if (srcCoords && destCoords) {
+              await this._debugWaitStep('Beam down: Switch Port → Patch Panel');
+              await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 1400);
+              this._debugLog('✓ Beam down');
+            } else {
+              this._debugLog(`⚠ No beam (src: ${!!srcCoords}, dest: ${!!destCoords})`);
+            }
+            break;
+          }
+
+          case 'place-badge': {
+            await this._debugWaitStep('Place badge in patch panel');
+            const portEl = this._placeBadgePort(badge);
+            if (portEl) {
+              portEl.classList.add('rack-trigger-arrival-burst');
+              setTimeout(() => portEl.classList.remove('rack-trigger-arrival-burst'), 1500);
+            }
+            this._debugLog('✓ Badge placed');
+            break;
+          }
+        }
+      }
+
+      this._debugStatus('✅ Complete');
+    } catch (err) {
+      this._debugLog(`ERROR: ${err.message}`);
+      this._debugStatus('❌ Failed');
+    } finally {
+      this._removePacket(pkt);
+      this._debugPkt = null;
+      if (startBtn) startBtn.disabled = false;
+    }
   },
 };

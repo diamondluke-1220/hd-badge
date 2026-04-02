@@ -327,6 +327,16 @@ body.view-rack .public-orgchart {
 
 .rack-internet-cloud {
   display: flex;
+  position: relative;
+}
+
+.rack-cloud-anchor {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
 }
 
 .rack-cloud-svg {
@@ -2244,3 +2254,189 @@ body.view-rack .public-orgchart {
 .fx-off .rack-brs-led-render, .fx-off .rack-brs-led-queue { animation: none; }
 .fx-off .rack-brs-lcd { animation: none; }
 .fx-off .rack-storage-led-activity.active { animation: none; }
+
+/* ─── Packet Trigger Effects ─────────────────────────────── */
+
+/* Cloud pulse — brief bright fill on packet departure */
+.rack-trigger-cloud-pulse .rack-cloud-fill {
+  fill: rgba(147, 197, 253, 0.6);
+  transition: fill 0.15s ease-in;
+}
+
+/* Firewall inspection — green glow on device */
+.rack-trigger-fw-inspect {
+  box-shadow: 0 0 20px 6px rgba(34, 197, 94, 0.8), inset 0 0 16px rgba(34, 197, 94, 0.4) !important;
+  outline: 2px solid rgba(34, 197, 94, 0.7) !important;
+  outline-offset: -2px;
+}
+/* Floating PASS badge overlay — injected by JS */
+.rack-fw-pass-overlay {
+  position: absolute;
+  z-index: 10;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #22C55E;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.9), 0 0 20px rgba(34, 197, 94, 0.6);
+  pointer-events: none;
+  animation: rack-fw-pass-pop 0.5s ease-out forwards;
+}
+@keyframes rack-fw-pass-pop {
+  0% { opacity: 0; transform: scale(0.3); }
+  50% { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Switch port rapid flash */
+.rack-trigger-switch-flash {
+  background: rgba(59, 130, 246, 0.9) !important;
+  box-shadow: 0 0 6px 2px rgba(59, 130, 246, 0.6);
+}
+
+/* VPN tunnel pulse — blue glow */
+.rack-trigger-vpn-tunnel {
+  box-shadow: 0 0 12px 2px rgba(37, 99, 235, 0.7), inset 0 0 8px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* WiFi AP LED burst — all LEDs bright */
+.rack-trigger-wifi-burst .rack-wifi-led-pwr,
+.rack-trigger-wifi-burst .rack-wifi-led-wlan,
+.rack-trigger-wifi-burst .rack-wifi-led-eth,
+.rack-trigger-wifi-burst .rack-wifi-led-act {
+  background: #22C55E !important;
+  box-shadow: 0 0 4px 1px rgba(34, 197, 94, 0.8);
+}
+
+/* BRS render trigger — waveform brightens */
+.rack-trigger-brs-render .rack-brs-lcd {
+  filter: brightness(1.8) saturate(1.4);
+  transition: filter 0.2s ease-in;
+}
+
+/* Arrival burst on patch panel port */
+.rack-trigger-arrival-burst {
+  animation: rack-arrival-pulse 1.5s ease-out;
+}
+
+@keyframes rack-arrival-pulse {
+  0% { box-shadow: 0 0 12px 4px rgba(147, 197, 253, 0.9); }
+  30% { box-shadow: 0 0 8px 2px rgba(147, 197, 253, 0.6); }
+  100% { box-shadow: none; }
+}
+
+/* Badge packet portrait */
+.rack-packet-badge image {
+  pointer-events: none;
+}
+
+/* Packet processing state (existing class, used on port arrival) */
+.rack-conn-port-processing {
+  background: rgba(147, 197, 253, 0.8) !important;
+  box-shadow: 0 0 8px 2px rgba(147, 197, 253, 0.5);
+  transition: background 0.3s ease-out, box-shadow 0.3s ease-out;
+}
+
+/* ─── Debug Step-Through Panel ─────────────────────────── */
+.rack-debug-panel {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 10000;
+  background: #1a1a2e;
+  border: 1px solid #3B82F6;
+  border-radius: 8px;
+  padding: 12px;
+  width: 280px;
+  font-family: monospace;
+  font-size: 11px;
+  color: #c8d6e5;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+}
+.rack-debug-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: #93C5FD;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.rack-debug-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.rack-debug-row label {
+  width: 40px;
+  color: #6b7280;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.rack-debug-row input,
+.rack-debug-row select {
+  flex: 1;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #c8d6e5;
+  padding: 4px 6px;
+  font-family: monospace;
+  font-size: 11px;
+}
+.rack-debug-buttons {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 8px;
+}
+.rack-debug-buttons button {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  background: #0d1117;
+  color: #c8d6e5;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.rack-debug-buttons button:hover:not(:disabled) {
+  background: #1e293b;
+  border-color: #3B82F6;
+}
+.rack-debug-buttons button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#rdbg-step {
+  background: #1e3a5f;
+  border-color: #3B82F6;
+  color: #93C5FD;
+  font-weight: 700;
+}
+#rdbg-step:hover:not(:disabled) {
+  background: #264a73;
+}
+.rack-debug-status {
+  padding: 6px 8px;
+  background: #0d1117;
+  border-radius: 4px;
+  color: #93C5FD;
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+.rack-debug-log {
+  max-height: 160px;
+  overflow-y: auto;
+  background: #0d1117;
+  border-radius: 4px;
+  padding: 6px;
+  font-size: 10px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+.rack-debug-log div {
+  border-bottom: 1px solid #1a1a2e;
+  padding: 1px 0;
+}
