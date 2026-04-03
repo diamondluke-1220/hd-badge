@@ -29,12 +29,12 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - Server-side badge rendering via Playwright (warm page reuse for performance)
 - Four view modes with keyboard shortcuts (1/2/3/4):
   - **Grid** [1] — default card layout with photo circles, animated odometer counter, auto-shrink text
-  - **AI Review** [2] — 10x44 split-flap text grid with AI performance reviews (78 comedy reviews, 13 styles, 20 skills), progressive reveal animation, headshot tile panel with canvas color sampling
-  - **Dendrogram Tree** [3] — D3 horizontal hierarchy with neon glow nodes, network-themed (router icon, ethernet cables, packet animations, CLI popups), full-viewport layout
+  - **Rack** [2] — dual server rack network infrastructure visualization with animated ingress routes, cable animations, connection port lighting
+  - **AI Review** [3] — 10x44 split-flap text grid with AI performance reviews (78 comedy reviews, 13 styles, 20 skills), progressive reveal animation, headshot tile panel with canvas color sampling
   - **Arcade Select** [4] — fighting game character select with 36s VS cinematic, 3-act fight sequence, SNES boss portraits, ZzFX sound effects, combo counter, special moves
 
 **Live Show Features**
-- Presentation mode (`/presentation`) — band intro sequence, auto-rotating views (grid → dendro → arcade, 90s each), chyron ticker
+- Presentation mode (`/presentation`) — band intro sequence, auto-rotating views (grid → rack → arcade, 90s each), chyron ticker
 - SSE real-time badge events with per-IP connection limiting
 - Badge-updated events (silent refresh, no animation — prevents edit spam during shows)
 - Terminal onboarding animation, spotlight mode, stock ticker
@@ -66,7 +66,6 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - **Database:** SQLite (bun:sqlite, WAL mode, 5 migrations)
 - **Badge Rendering:** [Playwright](https://playwright.dev) (server-side, warm page reuse)
 - **Image Processing:** [sharp](https://sharp.pixelplumbing.com) (thumbnails, headshots, corner rounding)
-- **Visualizations:** [D3.js](https://d3js.org) (dendrogram tree view)
 - **Client-side:** Vanilla JS, Cropper.js
 - **CI/CD:** GitHub Actions → ghcr.io → Docker (Unraid)
 
@@ -148,7 +147,7 @@ public/
   js/badge-pool.js     # Badge data pool for view renderers
   js/view-grid.js      # Grid view (default, odometer counter, auto-shrink text)
   js/view-reviewboard.js # AI Review (split-flap text grid, headshot tiles)
-  js/view-dendro.js    # D3 dendrogram tree view (packet animations, CLI popups)
+  js/view-rack.js      # Network rack infrastructure view (dual racks, cable animations)
   js/view-arcade.js    # Arcade fighting game select view (layout, rotation, cursor)
   js/arcade-cinematic.js # VS cinematic system (fights, specials, effects)
   js/arcade-sound.js   # ZzFX procedural sound effects
@@ -159,7 +158,7 @@ public/
   css/badge.css        # Badge card styles (print-spec locked — DO NOT EDIT)
   css/arcade.css       # Arcade fighting game view styles
   css/presentation.css # Presentation mode display styles
-  css/dendro.css       # Dendrogram network tree styles
+  css/rack.css         # Network rack view styles
   css/reviewboard.css  # Split-flap review board styles
   css/flap-base.css    # Shared Vestaboard tile base styles
   lib/               # Vendored deps (d3, html2canvas, cropper, qrcode, zzfx)

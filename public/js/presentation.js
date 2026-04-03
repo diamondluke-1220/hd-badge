@@ -44,7 +44,6 @@
 
   const RENDERERS = {
     grid: window.GridRenderer,
-    dendro: window.DendroRenderer,
     arcade: window.ArcadeRenderer,
     rack: window.RackRenderer,
   };
@@ -298,7 +297,7 @@
     if (!badges.length || !pres.currentRenderer) return;
 
     // Stagger delay depends on view
-    const delays = { grid: 2500, dendro: 2000, arcade: 2000, rack: 2000 };
+    const delays = { grid: 2500, arcade: 2000, rack: 2000 };
     const delay = delays[view] || 2000;
 
     for (const badge of badges) {

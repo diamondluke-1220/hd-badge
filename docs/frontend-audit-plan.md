@@ -10,8 +10,7 @@ Systematic audit of 7 frontend JS files (~7,875 lines total) focusing on XSS ris
 |----------|------|-------|----------------|-----------|
 | 1 | app.js | 1,430 | ~14 | Highest innerHTML count, form handling, global state |
 | 2 | view-reviewboard.js | 1,667 | ~4 | Largest file, animation lifecycle, DOM rebuilds |
-| 3 | view-dendro.js | 965 | ~5 | D3 memory leaks, SVG cleanup on view switch |
-| 4 | live-viz.js | 890 | ~8 | SSE reconnect edge cases, D3 animation cleanup |
+| 3 | live-viz.js | 890 | ~8 | SSE reconnect edge cases, animation cleanup |
 | 5 | view-arcade.js | 874 | ~4 | Timer cleanup on view destroy |
 | 6 | arcade-cinematic.js | 936 | ~6 | setTimeout/setInterval cleanup |
 | 7 | shared.js / badge-pool.js / badge-render.js | ~403 | ~2 | Low risk — constants and rendering |
@@ -28,16 +27,7 @@ For each innerHTML assignment, classify as:
 
 Action: Convert all "user input" cases to `textContent` or DOM API. Review server data cases for injection vectors.
 
-### 2. D3 Memory Leaks
-
-**view-dendro.js** and **live-viz.js** use D3 for visualization:
-
-- Check `selection.exit().remove()` on data updates
-- Verify transition interruption (`selection.interrupt()`) before new transitions
-- Confirm SVG element cleanup on view switch (no orphaned `<svg>`)
-- Check for event listeners on D3 elements not removed on destroy
-
-### 3. Animation Cleanup on View Switch
+### 2. Animation Cleanup on View Switch
 
 Each view module has a `destroy()` function. Verify:
 
@@ -47,7 +37,7 @@ Each view module has a `destroy()` function. Verify:
 - All DOM event listeners added by the view are removed
 - All CSS animations/transitions stopped (not just hidden)
 
-### 4. SSE Reconnect Edge Cases
+### 3. SSE Reconnect Edge Cases
 
 **live-viz.js** and **presentation.js** manage SSE connections:
 
@@ -64,8 +54,7 @@ Each view module has a `destroy()` function. Verify:
 - Audit form handling and state management
 - Check for event listener leaks
 
-### Session 2: view-reviewboard.js + view-dendro.js (~45 min)
-- D3 exit/enter/update pattern audit
+### Session 2: view-reviewboard.js (~30 min)
 - Animation lifecycle verification
 - View destroy() completeness check
 - Split-flap DOM rebuild efficiency
@@ -73,7 +62,7 @@ Each view module has a `destroy()` function. Verify:
 ### Session 3: live-viz.js + presentation.js (~45 min)
 - SSE connection management audit
 - Reconnect backoff verification
-- D3 animation cleanup
+- Animation cleanup
 - Stock ticker memory profile
 
 ### Session 4: view-arcade.js + arcade-cinematic.js (~45 min)

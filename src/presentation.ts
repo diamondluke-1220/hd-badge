@@ -7,7 +7,7 @@ import { log } from './logger';
 // ─── Types ───────────────────────────────────────────────
 
 export type PresentationPhase = 'inactive' | 'band_intro' | 'rotation';
-export type PresentationView = 'grid' | 'dendro' | 'arcade';
+export type PresentationView = 'grid' | 'rack' | 'arcade';
 
 interface PresentationState {
   active: boolean;
@@ -23,7 +23,7 @@ interface PresentationState {
 
 // ─── Constants ───────────────────────────────────────────
 
-const VIEW_ORDER: PresentationView[] = ['grid', 'dendro', 'arcade'];
+const VIEW_ORDER: PresentationView[] = ['grid', 'rack', 'arcade'];
 const VIEW_DURATION_MS = 90_000;       // 90 seconds per view
 const BAND_INTRO_DURATION_MS = 18_000; // 18 seconds per band member
 const BAND_MEMBER_COUNT = 5;           // HD-00001 through HD-00005

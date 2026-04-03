@@ -274,8 +274,8 @@ test.describe('Badge Creation Flow — Desktop', () => {
 
     // Verify all 4 view options plus FX
     await expect(page.locator('.view-dropdown-item[data-mode="grid"]')).toBeVisible();
+    await expect(page.locator('.view-dropdown-item[data-mode="rack"]')).toBeVisible();
     await expect(page.locator('.view-dropdown-item[data-mode="reviewboard"]')).toBeVisible();
-    await expect(page.locator('.view-dropdown-item[data-mode="dendro"]')).toBeVisible();
     await expect(page.locator('.view-dropdown-item[data-mode="arcade"]')).toBeVisible();
     await expect(page.locator('#animToggleBtn')).toBeVisible();
 
