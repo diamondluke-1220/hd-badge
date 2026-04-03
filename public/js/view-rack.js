@@ -1479,13 +1479,13 @@ window.RackRenderer = {
     return g;
   },
 
-  _createDotPacket(color = '#3B82F6', radius = 2) {
+  _createDotPacket(color = '#3B82F6', radius = 3.5, opacity = 0.5) {
     // Small anonymous dot for idle traffic
     if (!this._cableSvg) return null;
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     circle.setAttribute('r', radius);
     circle.setAttribute('fill', color);
-    circle.setAttribute('opacity', '0.6');
+    circle.setAttribute('opacity', String(opacity));
     circle.classList.add('rack-packet', 'rack-packet-dot');
     this._cableSvg.appendChild(circle);
     return circle;
@@ -2561,11 +2561,88 @@ window.RackRenderer = {
       };
       this._idleTimers.push(setTimeout(vpnPulse, 5000 + Math.random() * 3000));
     }
+
+    // Idle cable traffic — background dots on cables
+    this._startIdleTraffic();
   },
 
   _stopIdleAnimations() {
     this._idleTimers.forEach(t => clearTimeout(t));
     this._idleTimers = [];
+    this._stopIdleTraffic();
+  },
+
+  // ─── Idle Cable Traffic ─────────────────────────────────
+  // Background packets on cables: dim blue intra-rack hops + gold cross-rack trunk dots.
+  // Yields to badge ingress (skips busy cables). Respects reduced-motion and FX toggle.
+
+  _idleTrafficTimers: [],
+
+  _startIdleTraffic() {
+    this._stopIdleTraffic();
+    if (!this._cableSvg || !this._cablePaths) return;
+
+    // Intra-rack hops: blue dots, 4-8s interval
+    const intraHops = [
+      { cable: 2, from: 'fw-a' },     // FW-A → Core A
+      { cable: 3, from: 'fw-b' },     // FW-B → Core B
+      { cable: 4, from: 'core-a' },   // Core A → BRS inbound
+      { cable: 5, from: 'brs' },      // BRS → Core A outbound
+      { cable: 6, from: 'wlc' },      // WLC → Core A
+      { cable: 7, from: 'wlc' },      // WLC → WiFi AP
+      { cable: 8, from: 'core-a' },   // Core A → IT switch
+      { cable: 9, from: 'core-a' },   // Core A → Punk switch
+      { cable: 10, from: 'vpn' },     // VPN → Core B
+      { cable: 11, from: 'core-b' },  // Core B → Office switch
+      { cable: 12, from: 'core-b' },  // Core B → Corporate switch
+      { cable: 13, from: 'vpn' },     // VPN → Contractors switch
+    ];
+
+    const fireIntra = () => {
+      if (this._reducedMotion || document.body.classList.contains('fx-off')) {
+        this._idleTrafficTimers.push(setTimeout(fireIntra, 4000 + Math.random() * 4000));
+        return;
+      }
+      const hop = intraHops[Math.floor(Math.random() * intraHops.length)];
+      if (!this._cableBusy?.get(hop.cable)) {
+        const dot = this._createDotPacket('#E2E8F0', 5, 0.6);
+        if (dot) {
+          const pkt = { el: dot, type: 'dot' };
+          this._movePacketAlongCable(pkt, hop.cable, hop.from, 0.3)
+            .then(() => { dot.remove(); })
+            .catch(() => { dot.remove(); });
+        }
+      }
+      this._idleTrafficTimers.push(setTimeout(fireIntra, 4000 + Math.random() * 4000));
+    };
+    this._idleTrafficTimers.push(setTimeout(fireIntra, 2000 + Math.random() * 3000));
+
+    // Cross-rack trunk: gold dots, 10-15s interval
+    const fireTrunk = () => {
+      if (this._reducedMotion || document.body.classList.contains('fx-off')) {
+        this._idleTrafficTimers.push(setTimeout(fireTrunk, 10000 + Math.random() * 5000));
+        return;
+      }
+      // Alternate direction: cable 0 (A→B) or cable 1 (B→A)
+      const cableIdx = Math.random() < 0.5 ? 0 : 1;
+      const fromNode = cableIdx === 0 ? 'core-a' : 'core-b';
+      if (!this._cableBusy?.get(cableIdx)) {
+        const dot = this._createDotPacket('#E2E8F0', 5.5, 0.65);
+        if (dot) {
+          const pkt = { el: dot, type: 'dot' };
+          this._movePacketAlongCable(pkt, cableIdx, fromNode, 0.25)
+            .then(() => { dot.remove(); })
+            .catch(() => { dot.remove(); });
+        }
+      }
+      this._idleTrafficTimers.push(setTimeout(fireTrunk, 10000 + Math.random() * 5000));
+    };
+    this._idleTrafficTimers.push(setTimeout(fireTrunk, 6000 + Math.random() * 4000));
+  },
+
+  _stopIdleTraffic() {
+    this._idleTrafficTimers.forEach(t => clearTimeout(t));
+    this._idleTrafficTimers = [];
   },
 
   // Badge materialization — two modes:
