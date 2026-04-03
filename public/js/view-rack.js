@@ -12,6 +12,7 @@ window.RackRenderer = {
   _resizeObserver: null,
   _dualMode: false,     // true when ≥3 active divisions
   _introPlayed: false,  // door open animation plays once per session
+  _reducedMotion: false, // true when prefers-reduced-motion: reduce
 
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
@@ -23,6 +24,7 @@ window.RackRenderer = {
     this._container = container;
     this._stats = stats;
     this._badgeIndex = {};
+    this._reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     // Load CSS
     this._cssLink = document.createElement('link');
@@ -183,6 +185,7 @@ window.RackRenderer = {
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._onWindowResize) { window.removeEventListener('resize', this._onWindowResize); this._onWindowResize = null; }
+    if (this._resizeDebounce) { clearTimeout(this._resizeDebounce); this._resizeDebounce = null; }
     if (this._container) this._container.innerHTML = '';
     this._container = null;
     this._stats = null;
@@ -494,9 +497,11 @@ window.RackRenderer = {
         // Cables render after zoom so getBoundingClientRect is in final space
         requestAnimationFrame(() => {
           this._renderCables(wrapper);
-          this._startCloudRain();
-          this._startThreatTraffic();
-          this._startIdleAnimations();
+          if (!this._reducedMotion) {
+            this._startCloudRain();
+            this._startThreatTraffic();
+            this._startIdleAnimations();
+          }
         });
       });
     }
@@ -838,8 +843,9 @@ window.RackRenderer = {
       // Port N maps 1:1 with patch panel badge N. Pre-activate for badges already present at render time.
       // Uplink to core is the SFP trunk port (rendered separately below), not port 0.
       const isActive = i < employeePorts;
+      const patternB = i % 2 === 1 ? ' rack-led-pattern-b' : '';
       const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
-      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" data-switch-port="${i}" ${style}></div>`;
+      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}${patternB}" data-switch-port="${i}" ${style}></div>`;
     }
     // SFP trunk ports (right side, separated by divider) — first is unused, second carries the uplink cable
     const sfpStyle = `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"`;
@@ -876,7 +882,7 @@ window.RackRenderer = {
     let portsHtml = '<div class="rack-switch-ports">';
     portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="wlc-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap" data-port-id="wlc-ap-uplink" title="AP Mgmt" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-wlc-port-ap" title="AP Mgmt"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap" title="AP Mgmt" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
     }
@@ -1039,8 +1045,7 @@ window.RackRenderer = {
     this._brsRendering = false;
     this._brsJobCount = 0;
 
-    // BRS renders are now triggered by ingress packets via _playIngress
-    // this._startBRSDemo();
+    // BRS renders are triggered by ingress packets via _playIngress
 
     return el;
   },
@@ -1136,21 +1141,6 @@ window.RackRenderer = {
     }, this._brsBars.length * 15 + 200);
   },
 
-  _startBRSDemo() {
-    const songs = typeof SONG_LIST !== 'undefined' ? SONG_LIST : ['PLEASE HOLD'];
-    const fire = () => {
-      if (!this._brsRendering) {
-        const song = songs[Math.floor(Math.random() * songs.length)];
-        const id = `HD-${String(Math.floor(10000 + Math.random() * 90000))}`;
-        this.triggerBRSRender({ employeeId: id, song });
-      }
-      // Next render in 4-8 seconds
-      setTimeout(fire, 4000 + Math.random() * 4000);
-    };
-    // First fire after 2 seconds
-    setTimeout(fire, 2000);
-  },
-
   _renderVPN() {
     const el = document.createElement('div');
     el.className = 'rack-device rack-device-vpn rack-device-1u';
@@ -1159,7 +1149,7 @@ window.RackRenderer = {
     let portsHtml = '<div class="rack-switch-ports">';
     // 2 uplink ports (to core) + 1 tunnel port + 1 downlink (to contractor switch) + empties
     portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="vpn-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-vpn-port-tunnel" title="IPsec Tunnel"></div>';
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-vpn-port-tunnel" title="IPsec Tunnel" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual" data-port-id="vpn-contractor-downlink" title="SW-CTR" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
@@ -1255,35 +1245,6 @@ window.RackRenderer = {
           <div class="rack-ups-led rack-ups-led-bat" title="Battery"></div>
           <div class="rack-ups-led rack-ups-led-fault" title="Fault"></div>
         </div>
-      </div>
-    `;
-
-    return el;
-  },
-
-  _renderPDU(device) {
-    const el = document.createElement('div');
-    el.className = 'rack-device rack-device-pdu rack-device-1u';
-    el.setAttribute('data-device-type', 'pdu');
-
-    const totalOutlets = Math.min(device.outlets + 2, 10);
-    const amps = (1.2 + Math.random() * 3.5).toFixed(1);
-
-    let outletsHtml = '<div class="rack-pdu-outlets">';
-    for (let i = 0; i < totalOutlets; i++) {
-      outletsHtml += `<div class="rack-pdu-outlet ${i < device.outlets ? 'rack-pdu-outlet-active' : ''}"></div>`;
-    }
-    outletsHtml += '</div>';
-
-    el.innerHTML = `
-      <div class="rack-device-header">
-        <span class="rack-device-name">EATEN ePDU G3</span>
-        <span class="rack-device-model">EMAB22</span>
-      </div>
-      <div class="rack-pdu-body">
-        <div class="rack-pdu-breaker" title="Main breaker"></div>
-        ${outletsHtml}
-        <span class="rack-pdu-amps">${amps}A</span>
       </div>
     `;
 
@@ -1474,7 +1435,7 @@ window.RackRenderer = {
 
   _packetClipId: 0, // incrementing ID for unique clip-path references
 
-  _createBadgePacket(badge, radius = 12) {
+  _createBadgePacket(badge, radius = 16) {
     // Round portrait photo with division-colored ring — travels along cables
     if (!this._cableSvg) return null;
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
@@ -1879,7 +1840,7 @@ window.RackRenderer = {
       // FW inspect fires when packet arrives at FW (not when it leaves for core)
       steps.push({
         type: 'cable', cable: this._getCable('cloud', fwNode), from: 'cloud',
-        trigger: 'fw-inspect', triggerNode: fwNode, pause: 500,
+        trigger: 'fw-inspect', triggerNode: fwNode, pause: 1200,
       });
       steps.push({ type: 'cable', cable: this._getCable(fwNode, topo.core), from: fwNode });
     }
@@ -2033,7 +1994,7 @@ window.RackRenderer = {
     return new Promise(resolve => setTimeout(resolve, ms));
   },
 
-  _triggerFWInspect(fwEl, duration = 500) {
+  _triggerFWInspect(fwEl, duration = 1200) {
     if (!fwEl || !this._cableSvg) return;
     // Green glow on the device
     this._triggerFlash(fwEl, 'rack-trigger-fw-inspect', duration);
@@ -2086,17 +2047,15 @@ window.RackRenderer = {
   // Fire-and-forget Cisco IOS-style popup centered below core switch.
   // A random band member on that core "directs" the traffic.
 
+  // Band members are static: Core A = Luke, Drew, Henry | Core B = Todd, Adam
+  _CLI_CORE_NAMES: { A: ['Luke', 'Drew', 'Henry'], B: ['Todd', 'Adam'] },
+
   _triggerCoreCli(coreSide, route) {
     const coreEl = this._container?.querySelector(`[data-core-side="${coreSide}"]`);
     if (!coreEl) return;
 
-    // Pick a random band member portrait on this core
-    const portraits = coreEl.querySelectorAll('.rack-core-port[data-employee-id]');
-    if (!portraits.length) return;
-    const portrait = portraits[Math.floor(Math.random() * portraits.length)];
-    const empId = portrait.getAttribute('data-employee-id');
-    const badge = this._badgeIndex[empId];
-    const firstName = badge ? badge.name.split(' ')[0] : 'Admin';
+    const names = this._CLI_CORE_NAMES[coreSide];
+    const firstName = names[Math.floor(Math.random() * names.length)];
 
     // Build CLI context from route data
     const div = route.divTheme || 'IT';
@@ -2163,12 +2122,12 @@ window.RackRenderer = {
     const svg = this._cableSvg;
     const cloud = this._virtualCoords.cloud;
     const colors = ['#5B8DEF', '#93C5FD', '#B4D4FF', '#FFFFFF', '#3B6FCF'];
-    const maxDrops = 36;
+    const maxDrops = 48;
 
-    // Cloud bounds — cloud SVG is ~160x80, centered. cloud.x/y is bottom-center.
+    // Cloud bounds — cloud SVG is ~200x100, centered. cloud.x/y is bottom-center.
     // Approximate the cloud interior as an ellipse
-    const cloudW = 60; // half-width of rain zone
-    const cloudH = 55; // height of cloud above bottom edge
+    const cloudW = 75; // half-width of rain zone
+    const cloudH = 70; // height of cloud above bottom edge
     const cloudTop = cloud.y - cloudH;
     const cloudBot = cloud.y - 5; // stop just inside bottom edge
 
@@ -2259,6 +2218,59 @@ window.RackRenderer = {
     this._cloudRainLastTime = 0;
   },
 
+  // Red rain precursor — briefly contaminate the cloud rain with red digits before a threat drops
+  _spawnThreatRain() {
+    const svg = this._cableSvg;
+    const cloud = this._virtualCoords?.cloud;
+    if (!svg || !cloud) return Promise.resolve();
+
+    const cloudW = 75;
+    const cloudH = 70;
+    const cloudTop = cloud.y - cloudH;
+    const cloudBot = cloud.y - 5;
+    const redColors = ['#EF4444', '#F87171', '#DC2626', '#FCA5A5'];
+    const count = 5;
+
+    return new Promise(resolve => {
+      let spawned = 0;
+      const spawnOne = () => {
+        if (spawned >= count || !svg.parentNode) { return; }
+        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        txt.textContent = Math.random() < 0.5 ? '0' : '1';
+        txt.setAttribute('font-family', 'monospace');
+        txt.setAttribute('font-size', `${9 + Math.random() * 5}`);
+        txt.setAttribute('fill', redColors[Math.floor(Math.random() * redColors.length)]);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.classList.add('rack-cloud-rain-digit');
+
+        const startX = cloud.x + (Math.random() - 0.5) * cloudW * 1.2;
+        const startY = cloudTop + Math.random() * 10;
+        txt.setAttribute('x', startX);
+        txt.setAttribute('y', startY);
+        txt.setAttribute('opacity', '0');
+        svg.appendChild(txt);
+
+        this._cloudRainDrops.push({
+          el: txt,
+          x: startX,
+          y: startY,
+          speed: 15 + Math.random() * 15,
+          fadeInY: startY + 5,
+          maxY: cloudBot,
+          opacity: 0.6 + Math.random() * 0.3,
+        });
+
+        spawned++;
+        if (spawned < count) {
+          setTimeout(spawnOne, 60);
+        }
+      };
+      spawnOne();
+      // Resolve after all red digits spawned + brief pause for visual effect
+      setTimeout(resolve, count * 60 + 300);
+    });
+  },
+
   // ─── Firewall Threat Traffic ────────────────────────────
   // Background red packets that hit firewalls and get rejected. Separate from badge ingress.
   // Counter rolls over at 99 with "ALL CLEAR" flash.
@@ -2290,6 +2302,9 @@ window.RackRenderer = {
     const fwNode = side === 'A' ? 'fw-a' : 'fw-b';
     const cableIndex = this._getCable('cloud', fwNode);
     if (cableIndex == null) return;
+
+    // Red rain precursor — inject red binary digits into cloud rain before threat drops
+    await this._spawnThreatRain();
 
     // Create red threat dot (small, no portrait)
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -2355,20 +2370,20 @@ window.RackRenderer = {
     text.textContent = `✗ ${label}`;
     this._cableSvg.appendChild(text);
 
-    const duration = 800;
+    const duration = 2000;
     const start = performance.now();
     const animate = (now) => {
       const t = (now - start) / duration;
       if (t >= 1) { text.remove(); return; }
-      if (t < 0.2) {
-        const s = t / 0.2;
+      if (t < 0.1) {
+        const s = t / 0.1;
         text.setAttribute('opacity', String(s));
         text.setAttribute('font-size', String(8 + s * 5));
-      } else if (t < 0.6) {
+      } else if (t < 0.7) {
         text.setAttribute('opacity', '1');
         text.setAttribute('font-size', '13');
       } else {
-        text.setAttribute('opacity', String(1 - (t - 0.6) / 0.4));
+        text.setAttribute('opacity', String(1 - (t - 0.7) / 0.3));
       }
       requestAnimationFrame(animate);
     };
@@ -2505,6 +2520,12 @@ window.RackRenderer = {
     const current = parseInt(countEl.textContent) || 0;
     countEl.textContent = `${current + 1} APs`;
     countEl.classList.add('rack-wlc-ap-bump');
+    // ALM LED amber burst
+    const almLed = this._container?.querySelector('.rack-device-wlc [title="ALM"]');
+    if (almLed) {
+      almLed.classList.add('rack-wlc-alm-burst');
+      setTimeout(() => almLed.classList.remove('rack-wlc-alm-burst'), 1200);
+    }
     setTimeout(() => {
       countEl.textContent = `${current} APs`;
       countEl.classList.remove('rack-wlc-ap-bump');
@@ -2553,7 +2574,7 @@ window.RackRenderer = {
   async _materializeBadge(pkt, x, y, duration = 1200, mode = 'cloud') {
     if (!this._cableSvg || !pkt.el) return;
     const svg = this._cableSvg;
-    const r = 12;
+    const r = 16;
     const particles = [];
     const particleCount = 32;
     const formY = y;
@@ -2709,7 +2730,7 @@ window.RackRenderer = {
   async _beamDown(pkt, fromX, fromY, toX, toY, duration = 1400) {
     if (!this._cableSvg || !pkt.el) return;
     const svg = this._cableSvg;
-    const r = 12; // badge radius
+    const r = 16; // badge radius
 
     let beam = null;
     let scanline = null;
@@ -2869,23 +2890,22 @@ window.RackRenderer = {
 
         case 'cable': {
           if (step.cable == null) break;
+          // Core CLI fires BEFORE cable movement — core "decides" route, then packet departs
+          if (step.coreTrigger === 'core-cli') {
+            const coreSide = step.from === 'core-a' ? 'A'
+              : step.from === 'core-b' ? 'B' : null;
+            if (coreSide) this._triggerCoreCli(coreSide, route);
+          }
           await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
-          // Fire trigger if attached
+          // Fire arrival triggers after cable movement
           if (step.trigger === 'fw-inspect') {
             const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
-            this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 500);
+            this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 1200);
           } else if (step.trigger === 'vpn-tunnel') {
             this._triggerFlash(this._container.querySelector('[data-device-type="vpn"]'), 'rack-trigger-vpn-tunnel', 500);
             this._triggerVPNSession();
           } else if (step.trigger === 'wlc-bump') {
             this._triggerWLCBump();
-          }
-          // Core CLI popup (fire-and-forget — egress/cross-rack routing decision)
-          if (step.coreTrigger === 'core-cli') {
-            // CLI fires on the source core (the one making the routing decision)
-            const coreSide = step.from === 'core-a' ? 'A'
-              : step.from === 'core-b' ? 'B' : null;
-            if (coreSide) this._triggerCoreCli(coreSide, route);
           }
           if (step.pause) await this._delay(step.pause);
           break;
@@ -2955,7 +2975,7 @@ window.RackRenderer = {
   },
 
   async _playIngress(badge) {
-    if (!this._container || !this._cableSvg || !this._virtualCoords) {
+    if (!this._container || !this._cableSvg || !this._virtualCoords || this._reducedMotion) {
       this._placeBadgePort(badge);
       return;
     }
@@ -3060,8 +3080,8 @@ window.RackRenderer = {
 
     // Lane counters for staggering parallel cables in the same gutter
     const rightLanes = { A: 0, B: 0 };
+    const leftLanes = { A: 0, B: 0 };
     const staggerIdxByRack = { A: 0, B: 0 };
-    let leftLane = 0;
     let crossRackLane = 0;
 
     // Draw each cable
@@ -3104,43 +3124,43 @@ window.RackRenderer = {
           break;
         case 'arc-left':
           // Left gutter routing — WLC uses this
-          d = this._arcLeftPath(x1, y1, x2, y2, edges.left - 18 - (leftLane * 6));
-          leftLane++;
+          d = this._arcLeftPath(x1, y1, x2, y2, edges.left - 22 - (leftLanes[rackSide] * 10));
+          leftLanes[rackSide]++;
           break;
         case 'margin-left-down': {
           // Exit down first to clear adjacent ports, then left gutter up to target
-          const gutterX = edges.left - 18 - (leftLane * 6);
+          const gutterX = edges.left - 22 - (leftLanes[rackSide] * 10);
           d = this._marginLeftDownPath(x1, y1, x2, y2, gutterX);
-          leftLane++;
+          leftLanes[rackSide]++;
           break;
         }
         case 'margin-right': {
-          // Right gutter routing for Rack A switches, nudge entry down to clear cross-rack
-          const gutterX = edges.right + 18 + (rightLanes[rackSide] * 6);
+          // Right gutter routing — keep tight to rack edge, especially Rack A (center-gap side)
+          const gutterX = edges.right + 8 + (rightLanes[rackSide] * 14);
           d = this._marginRoutedPath(x1, y1, x2, y2, gutterX, 10);
           rightLanes[rackSide]++;
           break;
         }
         case 'margin-right-stagger': {
           // Right gutter with staggered vertical entry into core port
-          const gutterX = edges.right + 18 + (rightLanes[rackSide] * 6);
+          const gutterX = edges.right + 8 + (rightLanes[rackSide] * 14);
           d = this._marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdxByRack[rackSide]);
           rightLanes[rackSide]++;
           staggerIdxByRack[rackSide]++;
           break;
         }
         case 'under-and-up': {
-          // Down from port → right gutter between UPS and device → curve up to target above
-          const gutterX = edges.right + 14;
+          // Down from port → right gutter close to rack edge → curve up to target above
+          const gutterX = edges.right + 10;
           d = this._underAndUpPath(x1, y1, x2, y2, gutterX);
           break;
         }
         default:
           if (routeType && routeType.startsWith('margin-left-')) {
             const offset = parseInt(routeType.split('-')[2], 10) || 24;
-            const gutterX = edges.left - 6 - (leftLane * 6);
+            const gutterX = edges.left - 3 - (leftLanes[rackSide] * 8);
             d = this._marginLeftPath(x1, y1, x2, y2, gutterX, offset);
-            leftLane++;
+            leftLanes[rackSide]++;
           } else {
             d = `M ${x1} ${y1} L ${x2} ${y2}`;
           }
@@ -3331,6 +3351,8 @@ window.RackRenderer = {
       this._debugPanel.remove();
       this._debugPanel = null;
       this._debugActive = false;
+      if (this._debugMoveHandler) { document.removeEventListener('mousemove', this._debugMoveHandler); this._debugMoveHandler = null; }
+      if (this._debugUpHandler) { document.removeEventListener('mouseup', this._debugUpHandler); this._debugUpHandler = null; }
       return;
     }
     this._debugActive = true;
@@ -3402,14 +3424,16 @@ window.RackRenderer = {
       header.style.cursor = 'grabbing';
       e.preventDefault();
     });
-    document.addEventListener('mousemove', (e) => {
+    this._debugMoveHandler = (e) => {
       if (!dragging) return;
       panel.style.left = (e.clientX - dx) + 'px';
       panel.style.top = (e.clientY - dy) + 'px';
-    });
-    document.addEventListener('mouseup', () => {
+    };
+    this._debugUpHandler = () => {
       if (dragging) { dragging = false; header.style.cursor = 'grab'; }
-    });
+    };
+    document.addEventListener('mousemove', this._debugMoveHandler);
+    document.addEventListener('mouseup', this._debugUpHandler);
   },
 
   _debugLog(msg) {
@@ -3546,11 +3570,20 @@ window.RackRenderer = {
           case 'cable': {
             const cableName = this._CABLE_NAMES[step.cable] || `Cable ${step.cable}`;
             await this._debugWaitStep(`Cable: ${cableName} (from ${step.from})`);
+            // Core CLI fires BEFORE cable movement — core "decides" route, then packet departs
+            if (step.coreTrigger === 'core-cli') {
+              const coreSide = step.from === 'core-a' ? 'A'
+                : step.from === 'core-b' ? 'B' : null;
+              if (coreSide) {
+                this._triggerCoreCli(coreSide, route);
+                this._debugLog(`  ⚡ Core ${coreSide} CLI popup`);
+              }
+            }
             await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
             this._debugLog(`✓ ${cableName}`);
             if (step.trigger === 'fw-inspect') {
               const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
-              this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 500);
+              this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 1200);
               await this._delay(step.pause || 500);
               this._debugLog('  ⚡ FW inspection');
             } else if (step.trigger === 'vpn-tunnel') {
@@ -3562,14 +3595,6 @@ window.RackRenderer = {
               this._debugLog('  ⚡ WLC AP bump');
             } else if (step.pause) {
               await this._delay(step.pause);
-            }
-            if (step.coreTrigger === 'core-cli') {
-              const coreSide = step.from === 'core-a' ? 'A'
-                : step.from === 'core-b' ? 'B' : null;
-              if (coreSide) {
-                this._triggerCoreCli(coreSide, route);
-                this._debugLog(`  ⚡ Core ${coreSide} CLI popup`);
-              }
             }
             break;
           }
