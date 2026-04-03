@@ -1811,7 +1811,7 @@ window.RackRenderer = {
     'core-b-vpn-uplink': 'Te1/0/3', 'core-b-fw-b-uplink': 'Te1/0/4',
     'core-b-office-uplink': 'Te2/0/2', 'core-b-corporate-uplink': 'Te2/0/3',
   },
-  _CLI_VLANS: { IT: 10, Punk: 20, Office: 30, Corporate: 40, custom: 99 },
+  _CLI_VLANS: { IT: 10, Punk: 20, Office: 30, Corporate: 40, _custom: 99 },
   _CLI_TEMPLATES: [
     (d) => `${d.name}# show mac address-table int ${d.intf}`,
     (d) => `${d.name}# show int ${d.intf} status`,
@@ -1832,7 +1832,7 @@ window.RackRenderer = {
     'Punk':       { fw: 'fw-a', core: 'core-a', switchCable: 9, rackSide: 'A' },
     'Office':     { fw: 'fw-b', core: 'core-b', switchCable: 11, rackSide: 'B' },
     'Corporate':  { fw: 'fw-b', core: 'core-b', switchCable: 12, rackSide: 'B' },
-    'custom':     { fw: 'fw-b', core: 'core-b', switchCable: 13, rackSide: 'B', viaVpn: true },
+    '_custom':    { fw: 'fw-b', core: 'core-b', switchCable: 13, rackSide: 'B', viaVpn: true },
   },
 
   // Cable lookup: which cable connects two adjacent nodes?
