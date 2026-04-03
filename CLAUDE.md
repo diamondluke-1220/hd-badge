@@ -106,6 +106,7 @@ bun run test:api      # API integration tests only
 bun run test:db       # DB unit tests only
 bun run test:e2e      # Playwright E2E smoke tests (10 tests, requires running server)
 bun run lint          # Grep-based lint checks
+bun run scripts/fight-sim.ts [count]  # Arcade fight Monte Carlo simulator (default 10k)
 ```
 
 **File naming convention:** `.test.ts` = Bun test runner, `.pw.ts` = Playwright runner. This prevents `bun test` from auto-discovering Playwright specs (which require the Playwright runner context).
