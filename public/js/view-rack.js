@@ -116,12 +116,14 @@ window.RackRenderer = {
     const row = panel.querySelector('.rack-port-row');
     if (!row) return null;
 
-    // Remove an empty port if one exists
+    // Replace the first empty port in-place (preserves position for beam-down alignment)
     const emptyPort = row.querySelector('.rack-port-empty');
-    if (emptyPort) emptyPort.remove();
-
     const portEl = this._createPort(badge);
-    row.appendChild(portEl);
+    if (emptyPort) {
+      emptyPort.replaceWith(portEl);
+    } else {
+      row.appendChild(portEl);
+    }
 
     // Update port count
     const countEl = panel.querySelector('.rack-port-count');
@@ -135,8 +137,8 @@ window.RackRenderer = {
     const sw = this._container.querySelector(`.rack-device-switch[data-theme="${divThemeEsc}"]`);
     if (sw) {
       const filledPorts = panel.querySelectorAll('.rack-port:not(.rack-port-empty)').length;
-      // Port 0 is uplink, so employee N maps to switch port N
-      const switchPort = sw.querySelector(`[data-switch-port="${filledPorts}"]`);
+      // Ports are 0-indexed (port 0 = first employee). Badge N maps to switch port N-1.
+      const switchPort = sw.querySelector(`[data-switch-port="${filledPorts - 1}"]`);
       if (switchPort && !switchPort.classList.contains('rack-conn-port-active')) {
         switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
         switchPort.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
@@ -174,6 +176,8 @@ window.RackRenderer = {
 
   destroy() {
     this._stopCloudRain();
+    this._stopThreatTraffic();
+    this._stopIdleAnimations();
     this._stopScheduler();
     this._cancelAllPackets();
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
@@ -190,6 +194,9 @@ window.RackRenderer = {
     this._cablePaths = null;
     this._cableBusy = null;
     this._virtualCoords = null;
+    this._coreCliPopup = { A: null, B: null };
+    this._threatCounts = { A: 0, B: 0 };
+    this._vpnSessions = 0;
   },
 
   // ─── Layout Computation ─────────────────────────────────
@@ -488,6 +495,8 @@ window.RackRenderer = {
         requestAnimationFrame(() => {
           this._renderCables(wrapper);
           this._startCloudRain();
+          this._startThreatTraffic();
+          this._startIdleAnimations();
         });
       });
     }
@@ -819,16 +828,16 @@ window.RackRenderer = {
     el.setAttribute('data-device-type', 'switch');
     el.setAttribute('data-theme', device.theme);
 
-    // Row of switch ports — port 0 is uplink (always active), remaining match patch panel employees
+    // Row of switch ports — all start dark, light up as badges arrive (or pre-lit for existing badges)
     const totalPorts = device.totalPorts || 12;
-    // Port 0 = uplink to core (always lit), ports 1+ = one per employee in patch panel below
     const employeePorts = device.portCount; // already capped at 12
     const themeSlug = device.theme.replace('_', '');
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
       if (i > 0 && i % 4 === 0) portsHtml += '<div class="rack-switch-port-divider"></div>';
-      // Port 0 = uplink, ports 1 through employeePorts = connected employees
-      const isActive = i === 0 || i <= employeePorts;
+      // Port N maps 1:1 with patch panel badge N. Pre-activate for badges already present at render time.
+      // Uplink to core is the SFP trunk port (rendered separately below), not port 0.
+      const isActive = i < employeePorts;
       const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
       portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}" data-switch-port="${i}" ${style}></div>`;
     }
@@ -1792,6 +1801,31 @@ window.RackRenderer = {
   // Each step has: { type, cable?, from?, trigger?, pause?, mode?, node? }
   // The animation layer just walks the steps. No routing logic in _playIngress.
 
+  // Core CLI popup — Cisco interface name mapping from data-port-id
+  _CLI_PORT_NAMES: {
+    'core-a-it-uplink': 'Te2/0/1', 'core-a-punk-uplink': 'Te2/0/2',
+    'core-a-trunk-ba': 'Te2/0/3', 'core-a-trunk-ab': 'Te2/0/4',
+    'core-a-wlc-uplink': 'Te1/0/1', 'core-a-brs-outbound': 'Te1/0/2',
+    'core-a-brs-inbound': 'Te1/0/3', 'core-a-fw-a-uplink': 'Te1/0/4',
+    'core-b-trunk-ab': 'Te1/0/1', 'core-b-trunk-ba': 'Te1/0/2',
+    'core-b-vpn-uplink': 'Te1/0/3', 'core-b-fw-b-uplink': 'Te1/0/4',
+    'core-b-office-uplink': 'Te2/0/2', 'core-b-corporate-uplink': 'Te2/0/3',
+  },
+  _CLI_VLANS: { IT: 10, Punk: 20, Office: 30, Corporate: 40, custom: 99 },
+  _CLI_TEMPLATES: [
+    (d) => `${d.name}# show mac address-table int ${d.intf}`,
+    (d) => `${d.name}# show int ${d.intf} status`,
+    (d) => `${d.name}# show vlan id ${d.vlanId} brief`,
+    (d) => `${d.name}# ping ${d.vlan} source ${d.intf} !!!!!`,
+    (d) => `${d.name}# conf t ; int ${d.intf} switchport access vlan ${d.vlanId}`,
+    (d) => `${d.name}# show cdp neighbors ${d.intf}`,
+    (d) => `${d.name}# show ip route ${d.vlan}`,
+    (d) => `${d.name}# show spanning-tree int ${d.intf}`,
+    (d) => `${d.name}# clear mac address-table dynamic int ${d.intf}`,
+    (d) => `${d.name}# show arp | inc ${d.vlan}`,
+  ],
+  _coreCliPopup: { A: null, B: null },
+
   // Division → network topology mapping
   _DIV_TOPOLOGY: {
     'IT':         { fw: 'fw-a', core: 'core-a', switchCable: 8, rackSide: 'A' },
@@ -1834,18 +1868,20 @@ window.RackRenderer = {
     });
 
     // Step 2: Entry cables to first core
+    const cliRoll = options.cli === true ? true : options.cli === false ? false : Math.random() < 0.3;
     if (isWifi) {
       // WiFi: AP → WLC → Core A
-      steps.push({ type: 'cable', cable: this._getCable('wifi-ap', 'wlc'), from: 'wifi-ap' });
+      steps.push({ type: 'cable', cable: this._getCable('wifi-ap', 'wlc'), from: 'wifi-ap', trigger: 'wlc-bump' });
       steps.push({ type: 'cable', cable: this._getCable('wlc', 'core-a'), from: 'wlc' });
     } else {
       // Internet: Cloud → FW → Core
       const fwNode = topo.fw; // 'fw-a' or 'fw-b'
-      steps.push({ type: 'cable', cable: this._getCable('cloud', fwNode), from: 'cloud' });
+      // FW inspect fires when packet arrives at FW (not when it leaves for core)
       steps.push({
-        type: 'cable', cable: this._getCable(fwNode, topo.core), from: fwNode,
+        type: 'cable', cable: this._getCable('cloud', fwNode), from: 'cloud',
         trigger: 'fw-inspect', triggerNode: fwNode, pause: 500,
       });
+      steps.push({ type: 'cable', cable: this._getCable(fwNode, topo.core), from: fwNode });
     }
 
     // Current position after entry cables
@@ -1853,9 +1889,11 @@ window.RackRenderer = {
 
     // Step 3: BRS side trip (only from Core A)
     if (brs) {
-      // If we're at Core B, cross-rack to Core A first
+      // If we're at Core B, cross-rack to Core A first — CLI on cross-rack
       if (currentCore === 'core-b') {
-        steps.push({ type: 'cable', cable: this._getCable('core-b', 'core-a'), from: 'core-b' });
+        const xStep = { type: 'cable', cable: this._getCable('core-b', 'core-a'), from: 'core-b' };
+        if (cliRoll) xStep.coreTrigger = 'core-cli';
+        steps.push(xStep);
         currentCore = 'core-a';
       }
       steps.push({ type: 'cable', cable: this._getCable('core-a', 'brs'), from: 'core-a' });
@@ -1866,20 +1904,26 @@ window.RackRenderer = {
 
     // Step 4: Route to destination switch
     if (currentCore !== topo.core) {
-      // Cross-rack to destination's core
-      steps.push({ type: 'cable', cable: this._getCable(currentCore, topo.core), from: currentCore });
+      // Cross-rack to destination's core — CLI on cross-rack
+      const xStep = { type: 'cable', cable: this._getCable(currentCore, topo.core), from: currentCore };
+      if (cliRoll) xStep.coreTrigger = 'core-cli';
+      steps.push(xStep);
     }
 
-    // VPN detour for contractors
+    // VPN detour for contractors — CLI on egress to VPN
     if (topo.viaVpn) {
-      steps.push({
+      const vpnStep = {
         type: 'cable', cable: this._getCable('core-b', 'vpn'), from: 'core-b',
         trigger: 'vpn-tunnel', triggerNode: 'vpn',
-      });
+      };
+      if (cliRoll) vpnStep.coreTrigger = 'core-cli';
+      steps.push(vpnStep);
       steps.push({ type: 'cable', cable: this._getCable('vpn', 'sw-custom'), from: 'vpn' });
     } else {
-      const swNode = `sw-${divTheme}`;
-      steps.push({ type: 'cable', cable: topo.switchCable, from: topo.core });
+      // Egress to division switch — CLI on routing decision
+      const egressStep = { type: 'cable', cable: topo.switchCable, from: topo.core };
+      if (cliRoll) egressStep.coreTrigger = 'core-cli';
+      steps.push(egressStep);
     }
 
     // Step 5: Beam down to patch panel
@@ -2038,6 +2082,72 @@ window.RackRenderer = {
     requestAnimationFrame(animate);
   },
 
+  // ─── Core CLI Popup ────────────────────────────────────
+  // Fire-and-forget Cisco IOS-style popup centered below core switch.
+  // A random band member on that core "directs" the traffic.
+
+  _triggerCoreCli(coreSide, route) {
+    const coreEl = this._container?.querySelector(`[data-core-side="${coreSide}"]`);
+    if (!coreEl) return;
+
+    // Pick a random band member portrait on this core
+    const portraits = coreEl.querySelectorAll('.rack-core-port[data-employee-id]');
+    if (!portraits.length) return;
+    const portrait = portraits[Math.floor(Math.random() * portraits.length)];
+    const empId = portrait.getAttribute('data-employee-id');
+    const badge = this._badgeIndex[empId];
+    const firstName = badge ? badge.name.split(' ')[0] : 'Admin';
+
+    // Build CLI context from route data
+    const div = route.divTheme || 'IT';
+    const vlanId = this._CLI_VLANS[div] || 10;
+    const vlan = `10.${vlanId}.0.1`;
+    // Pick a relevant port on this core
+    const prefix = `core-${coreSide.toLowerCase()}-`;
+    const portKeys = Object.keys(this._CLI_PORT_NAMES).filter(k => k.startsWith(prefix));
+    const portKey = portKeys[Math.floor(Math.random() * portKeys.length)] || portKeys[0];
+    const intf = this._CLI_PORT_NAMES[portKey] || 'Te1/0/1';
+
+    // Pick random template
+    const tpl = this._CLI_TEMPLATES[Math.floor(Math.random() * this._CLI_TEMPLATES.length)];
+    const text = tpl({ name: firstName, intf, vlan, vlanId, badgeName: '' });
+
+    // Remove existing popup on this core
+    if (this._coreCliPopup[coreSide]) {
+      this._coreCliPopup[coreSide].remove();
+      this._coreCliPopup[coreSide] = null;
+    }
+
+    // Create DOM popup
+    const popup = document.createElement('div');
+    popup.className = 'rack-core-cli-popup';
+    popup.textContent = text;
+    popup.style.opacity = '0';
+    coreEl.appendChild(popup);
+    this._coreCliPopup[coreSide] = popup;
+
+    // Animate: 3.5s total — pop-in (0-10%), hold (10-75%), fade-out (75-100%)
+    const duration = 3500;
+    const start = performance.now();
+    const animate = (now) => {
+      if (!popup.parentNode) return; // removed by replacement
+      const t = (now - start) / duration;
+      if (t >= 1) { popup.remove(); if (this._coreCliPopup[coreSide] === popup) this._coreCliPopup[coreSide] = null; return; }
+      if (t < 0.1) {
+        const s = t / 0.1;
+        popup.style.opacity = String(s);
+        popup.style.transform = `translateX(-50%) scale(${0.9 + 0.1 * s})`;
+      } else if (t < 0.75) {
+        popup.style.opacity = '1';
+        popup.style.transform = 'translateX(-50%) scale(1)';
+      } else {
+        popup.style.opacity = String(1 - (t - 0.75) / 0.25);
+      }
+      requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  },
+
   // ─── Cloud Binary Rain ─────────────────────────────────
   // Idle matrix-style digits streaming down from the cloud. Runs continuously.
   // When a badge ingress starts, the rain digits get "absorbed" into the materialization.
@@ -2147,6 +2257,294 @@ window.RackRenderer = {
     }
     this._cloudRainDrops = [];
     this._cloudRainLastTime = 0;
+  },
+
+  // ─── Firewall Threat Traffic ────────────────────────────
+  // Background red packets that hit firewalls and get rejected. Separate from badge ingress.
+  // Counter rolls over at 99 with "ALL CLEAR" flash.
+
+  _THREAT_LABELS: ['PORT SCAN', 'BRUTE FORCE', 'SQL INJECT', 'MALWARE', 'C2 BEACON', 'DDoS FRAG', 'EXPLOIT KIT', 'PHISHING'],
+  _threatTimer: null,
+  _threatCounts: { A: 0, B: 0 },
+
+  _startThreatTraffic() {
+    if (this._threatTimer) return;
+    const fire = () => {
+      this._fireThreatPacket();
+      // Next threat in 15-30s
+      this._threatTimer = setTimeout(fire, 15000 + Math.random() * 15000);
+    };
+    // First threat after 8-15s
+    this._threatTimer = setTimeout(fire, 8000 + Math.random() * 7000);
+  },
+
+  _stopThreatTraffic() {
+    if (this._threatTimer) { clearTimeout(this._threatTimer); this._threatTimer = null; }
+  },
+
+  async _fireThreatPacket() {
+    if (!this._container || !this._cableSvg || !this._virtualCoords) return;
+
+    // Pick random firewall
+    const side = Math.random() < 0.5 ? 'A' : 'B';
+    const fwNode = side === 'A' ? 'fw-a' : 'fw-b';
+    const cableIndex = this._getCable('cloud', fwNode);
+    if (cableIndex == null) return;
+
+    // Create red threat dot (small, no portrait)
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.classList.add('rack-packet', 'rack-packet-threat');
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('r', '4');
+    dot.setAttribute('fill', '#EF4444');
+    dot.setAttribute('filter', 'url(#packet-glow)');
+    g.appendChild(dot);
+    // Red glow ring
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('r', '7');
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', '#EF4444');
+    ring.setAttribute('stroke-width', '1');
+    ring.setAttribute('opacity', '0.5');
+    g.appendChild(ring);
+    this._cableSvg.appendChild(g);
+
+    // Position at cloud
+    const cloud = this._virtualCoords.cloud;
+    g.setAttribute('transform', `translate(${cloud.x},${cloud.y})`);
+    g.setAttribute('opacity', '1');
+
+    const pkt = { el: g };
+
+    // Animate along cloud→FW cable
+    await this._movePacketAlongCable(pkt, cableIndex, 'cloud', 0.5);
+
+    // Reject at firewall
+    const fwEl = this._container.querySelector(`[data-fw-side="${side}"]`);
+    if (fwEl) {
+      this._triggerFlash(fwEl, 'rack-trigger-fw-reject', 600);
+      this._triggerFWReject(fwEl, side);
+    }
+
+    // Scatter particles then remove
+    this._scatterThreat(pkt);
+  },
+
+  _triggerFWReject(fwEl, side) {
+    if (!this._cableSvg) return;
+
+    // Pick a threat label
+    const label = this._THREAT_LABELS[Math.floor(Math.random() * this._THREAT_LABELS.length)];
+
+    // Red "✗ DENY" + threat label in SVG
+    const framesRow = this._container.querySelector('.rack-frames-row');
+    if (!framesRow) return;
+    const ref = framesRow.getBoundingClientRect();
+    const pt = this._toSvgCoords(fwEl.getBoundingClientRect(), ref);
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', pt.x);
+    text.setAttribute('y', pt.y + 4);
+    text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('font-family', 'monospace');
+    text.setAttribute('font-size', '11');
+    text.setAttribute('font-weight', '700');
+    text.setAttribute('fill', '#EF4444');
+    text.setAttribute('filter', 'url(#packet-glow)');
+    text.setAttribute('opacity', '0');
+    text.textContent = `✗ ${label}`;
+    this._cableSvg.appendChild(text);
+
+    const duration = 800;
+    const start = performance.now();
+    const animate = (now) => {
+      const t = (now - start) / duration;
+      if (t >= 1) { text.remove(); return; }
+      if (t < 0.2) {
+        const s = t / 0.2;
+        text.setAttribute('opacity', String(s));
+        text.setAttribute('font-size', String(8 + s * 5));
+      } else if (t < 0.6) {
+        text.setAttribute('opacity', '1');
+        text.setAttribute('font-size', '13');
+      } else {
+        text.setAttribute('opacity', String(1 - (t - 0.6) / 0.4));
+      }
+      requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+
+    // Increment threat counter
+    this._threatCounts[side]++;
+    const countEl = this._container.querySelector(`[data-fw-threats="${side}"]`);
+    if (countEl) {
+      countEl.textContent = String(this._threatCounts[side]);
+      countEl.closest('.rack-fw-threat')?.classList.add('rack-fw-threat-active');
+    }
+
+    // Rollover at 99
+    if (this._threatCounts[side] >= 99) {
+      setTimeout(() => this._resetThreatCounter(side), 2000);
+    }
+  },
+
+  _resetThreatCounter(side) {
+    this._threatCounts[side] = 0;
+    const countEl = this._container?.querySelector(`[data-fw-threats="${side}"]`);
+    if (countEl) {
+      countEl.textContent = '0';
+      countEl.closest('.rack-fw-threat')?.classList.remove('rack-fw-threat-active');
+    }
+    // "ALL CLEAR" flash on the firewall
+    const fwEl = this._container?.querySelector(`[data-fw-side="${side}"]`);
+    if (fwEl) {
+      this._triggerFlash(fwEl, 'rack-trigger-fw-clear', 1200);
+
+      // SVG "ALL CLEAR" text
+      if (this._cableSvg) {
+        const framesRow = this._container.querySelector('.rack-frames-row');
+        if (!framesRow) return;
+        const ref = framesRow.getBoundingClientRect();
+        const pt = this._toSvgCoords(fwEl.getBoundingClientRect(), ref);
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pt.x);
+        text.setAttribute('y', pt.y + 4);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('font-family', 'monospace');
+        text.setAttribute('font-size', '11');
+        text.setAttribute('font-weight', '700');
+        text.setAttribute('fill', '#22C55E');
+        text.setAttribute('filter', 'url(#packet-glow)');
+        text.setAttribute('opacity', '0');
+        text.textContent = '✓ ALL CLEAR';
+        this._cableSvg.appendChild(text);
+
+        const duration = 1200;
+        const start = performance.now();
+        const animate = (now) => {
+          const t = (now - start) / duration;
+          if (t >= 1) { text.remove(); return; }
+          if (t < 0.15) {
+            text.setAttribute('opacity', String(t / 0.15));
+            text.setAttribute('font-size', String(9 + (t / 0.15) * 5));
+          } else if (t < 0.7) {
+            text.setAttribute('opacity', '1');
+            text.setAttribute('font-size', '14');
+          } else {
+            text.setAttribute('opacity', String(1 - (t - 0.7) / 0.3));
+          }
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      }
+    }
+  },
+
+  _scatterThreat(pkt) {
+    if (!pkt.el || !pkt.el.parentNode) return;
+    const svg = this._cableSvg;
+    const transform = pkt.el.getAttribute('transform');
+    const match = transform?.match(/translate\(([\d.]+),([\d.]+)\)/);
+    const cx = match ? parseFloat(match[1]) : 0;
+    const cy = match ? parseFloat(match[2]) : 0;
+    pkt.el.remove();
+
+    // Spawn 6 red scatter particles
+    const particles = [];
+    for (let i = 0; i < 6; i++) {
+      const p = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      p.setAttribute('cx', cx);
+      p.setAttribute('cy', cy);
+      p.setAttribute('r', '2');
+      p.setAttribute('fill', '#EF4444');
+      p.setAttribute('opacity', '1');
+      svg.appendChild(p);
+      const angle = (Math.PI * 2 / 6) * i + Math.random() * 0.5;
+      const speed = 30 + Math.random() * 40;
+      particles.push({ el: p, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed });
+    }
+
+    const start = performance.now();
+    const scatter = (now) => {
+      const t = (now - start) / 600;
+      if (t >= 1) { particles.forEach(p => p.el.remove()); return; }
+      particles.forEach(p => {
+        const nx = cx + p.vx * t;
+        const ny = cy + p.vy * t;
+        p.el.setAttribute('cx', nx);
+        p.el.setAttribute('cy', ny);
+        p.el.setAttribute('opacity', String(1 - t));
+      });
+      requestAnimationFrame(scatter);
+    };
+    requestAnimationFrame(scatter);
+  },
+
+  // ─── VPN Session Counter ──────────────────────────────
+  // Increments when contractor packets pass through VPN.
+
+  _vpnSessions: 0,
+
+  _triggerVPNSession() {
+    this._vpnSessions++;
+    const labelEl = this._container?.querySelector('.rack-vpn-tunnel-label');
+    if (labelEl) {
+      labelEl.textContent = `TUNNEL UP · ${this._vpnSessions}`;
+      // Brief bright pulse
+      labelEl.classList.add('rack-vpn-session-bump');
+      setTimeout(() => labelEl.classList.remove('rack-vpn-session-bump'), 600);
+    }
+  },
+
+  // ─── WLC AP Count Bump ────────────────────────────────
+  // Briefly bumps AP count +1 when WiFi path packet passes through.
+
+  _triggerWLCBump() {
+    const countEl = this._container?.querySelector('[data-wlc-aps]');
+    if (!countEl) return;
+    const current = parseInt(countEl.textContent) || 0;
+    countEl.textContent = `${current + 1} APs`;
+    countEl.classList.add('rack-wlc-ap-bump');
+    setTimeout(() => {
+      countEl.textContent = `${current} APs`;
+      countEl.classList.remove('rack-wlc-ap-bump');
+    }, 1500);
+  },
+
+  // ─── Idle Animations ──────────────────────────────────
+  // WLC radio heartbeat + VPN keepalive pulse. CSS-driven with JS timers.
+
+  _idleTimers: [],
+
+  _startIdleAnimations() {
+    if (!this._container) return;
+
+    // WLC radio heartbeat — RADIO LED flickers every 6-10s
+    const wlcLed = this._container.querySelector('.rack-device-wlc [title="RADIO"]');
+    if (wlcLed) {
+      const wlcBeat = () => {
+        wlcLed.classList.add('rack-wlc-radio-heartbeat');
+        setTimeout(() => wlcLed.classList.remove('rack-wlc-radio-heartbeat'), 400);
+        this._idleTimers.push(setTimeout(wlcBeat, 6000 + Math.random() * 4000));
+      };
+      this._idleTimers.push(setTimeout(wlcBeat, 3000 + Math.random() * 3000));
+    }
+
+    // VPN keepalive — tunnel label subtle pulse every 8-12s
+    const vpnLabel = this._container.querySelector('.rack-vpn-tunnel-label');
+    if (vpnLabel) {
+      const vpnPulse = () => {
+        vpnLabel.classList.add('rack-vpn-keepalive');
+        setTimeout(() => vpnLabel.classList.remove('rack-vpn-keepalive'), 600);
+        this._idleTimers.push(setTimeout(vpnPulse, 8000 + Math.random() * 4000));
+      };
+      this._idleTimers.push(setTimeout(vpnPulse, 5000 + Math.random() * 3000));
+    }
+  },
+
+  _stopIdleAnimations() {
+    this._idleTimers.forEach(t => clearTimeout(t));
+    this._idleTimers = [];
   },
 
   // Badge materialization — two modes:
@@ -2478,6 +2876,16 @@ window.RackRenderer = {
             this._triggerFWInspect(this._container.querySelector(`[data-fw-side="${fwSide}"]`), step.pause || 500);
           } else if (step.trigger === 'vpn-tunnel') {
             this._triggerFlash(this._container.querySelector('[data-device-type="vpn"]'), 'rack-trigger-vpn-tunnel', 500);
+            this._triggerVPNSession();
+          } else if (step.trigger === 'wlc-bump') {
+            this._triggerWLCBump();
+          }
+          // Core CLI popup (fire-and-forget — egress/cross-rack routing decision)
+          if (step.coreTrigger === 'core-cli') {
+            // CLI fires on the source core (the one making the routing decision)
+            const coreSide = step.from === 'core-a' ? 'A'
+              : step.from === 'core-b' ? 'B' : null;
+            if (coreSide) this._triggerCoreCli(coreSide, route);
           }
           if (step.pause) await this._delay(step.pause);
           break;
@@ -2503,10 +2911,16 @@ window.RackRenderer = {
 
           let srcCoords = null;
           if (sw) {
-            const switchPort = sw.querySelector(`[data-switch-port="${filled + 1}"]`);
-            this._triggerFlash(switchPort, 'rack-trigger-switch-flash', 800);
+            const switchPort = sw.querySelector(`[data-switch-port="${filled}"]`);
             if (switchPort) {
-              srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled + 1}"]`);
+              // Activate the switch port LED as the badge beams down
+              if (!switchPort.classList.contains('rack-conn-port-active')) {
+                switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
+                switchPort.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
+                switchPort.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+              }
+              this._triggerFlash(switchPort, 'rack-trigger-switch-flash', 800);
+              srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
             }
           }
           if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
@@ -2954,6 +3368,14 @@ window.RackRenderer = {
           <option value="no">Skip</option>
         </select>
       </div>
+      <div class="rack-debug-row">
+        <label>CLI</label>
+        <select id="rdbg-cli">
+          <option value="yes">Core popup</option>
+          <option value="no">Skip</option>
+          <option value="random">Random (30%)</option>
+        </select>
+      </div>
       <div class="rack-debug-buttons">
         <button id="rdbg-start">▶ Start</button>
         <button id="rdbg-step" disabled>⏭ Next Step</button>
@@ -3059,6 +3481,8 @@ window.RackRenderer = {
     const dept = document.getElementById('rdbg-dept')?.value || 'PRINTER JAMS';
     const pathType = document.getElementById('rdbg-path')?.value || 'firewall';
     const doBrs = document.getElementById('rdbg-brs')?.value === 'yes';
+    const cliVal = document.getElementById('rdbg-cli')?.value || 'random';
+    const doCli = cliVal === 'yes' ? true : cliVal === 'no' ? false : null; // null = random 30%
 
     const songs = typeof SONG_LIST !== 'undefined' ? SONG_LIST : ['PLEASE HOLD', 'REPLY ALL', 'MANDATORY FUN'];
     const badge = {
@@ -3071,7 +3495,7 @@ window.RackRenderer = {
     };
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const route = this._resolveRoute(pathType, divTheme, { brs: doBrs });
+    const route = this._resolveRoute(pathType, divTheme, { brs: doBrs, cli: doCli });
 
     if (!route) {
       this._debugLog(`ERROR: No route for theme "${divTheme}"`);
@@ -3131,9 +3555,21 @@ window.RackRenderer = {
               this._debugLog('  ⚡ FW inspection');
             } else if (step.trigger === 'vpn-tunnel') {
               this._triggerFlash(this._container.querySelector('[data-device-type="vpn"]'), 'rack-trigger-vpn-tunnel', 500);
-              this._debugLog('  ⚡ VPN tunnel');
+              this._triggerVPNSession();
+              this._debugLog('  ⚡ VPN tunnel + session');
+            } else if (step.trigger === 'wlc-bump') {
+              this._triggerWLCBump();
+              this._debugLog('  ⚡ WLC AP bump');
             } else if (step.pause) {
               await this._delay(step.pause);
+            }
+            if (step.coreTrigger === 'core-cli') {
+              const coreSide = step.from === 'core-a' ? 'A'
+                : step.from === 'core-b' ? 'B' : null;
+              if (coreSide) {
+                this._triggerCoreCli(coreSide, route);
+                this._debugLog(`  ⚡ Core ${coreSide} CLI popup`);
+              }
             }
             break;
           }
@@ -3160,9 +3596,17 @@ window.RackRenderer = {
 
             let srcCoords = null;
             if (sw) {
-              const port = sw.querySelector(`[data-switch-port="${filled + 1}"]`);
-              this._triggerFlash(port, 'rack-trigger-switch-flash', 800);
-              if (port) srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled + 1}"]`);
+              const port = sw.querySelector(`[data-switch-port="${filled}"]`);
+              if (port) {
+                // Activate switch port LED during beam-down
+                if (!port.classList.contains('rack-conn-port-active')) {
+                  port.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
+                  port.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
+                  port.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+                }
+                this._triggerFlash(port, 'rack-trigger-switch-flash', 800);
+                srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
+              }
             }
             if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
 
