@@ -161,18 +161,12 @@ window.RackRenderer = {
       if (!panel) return null;
     }
 
-    // Add port to the first row with an empty slot
-    const row = panel.querySelector('.rack-port-row');
-    if (!row) return null;
+    // Find the first empty port across all rows in this panel
+    const emptyPort = panel.querySelector('.rack-port-empty');
+    if (!emptyPort) return null; // panel completely full
 
-    // Replace the first empty port in-place (preserves position for beam-down alignment)
-    const emptyPort = row.querySelector('.rack-port-empty');
     const portEl = this._createPort(badge);
-    if (emptyPort) {
-      emptyPort.replaceWith(portEl);
-    } else {
-      row.appendChild(portEl);
-    }
+    emptyPort.replaceWith(portEl);
 
     // Update port count
     const countEl = panel.querySelector('.rack-port-count');
