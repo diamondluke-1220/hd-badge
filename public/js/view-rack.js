@@ -1640,10 +1640,12 @@ window.RackRenderer = {
   },
 
   _completeMove(packet) {
-    // Move segment finished — resolve promise, clear busy, remove from active list
-    // but keep the SVG element alive for the next move
+    // Move segment finished — resolve promise, clear busy, wake waiters
     if (packet.cableIndex != null && this._cableBusy) {
       this._cableBusy.set(packet.cableIndex, false);
+      // Wake any packet waiting for this cable
+      const waiter = this._cableWaiters?.get(packet.cableIndex);
+      if (waiter) { waiter(); this._cableWaiters.delete(packet.cableIndex); }
     }
     const idx = this._activePackets.indexOf(packet);
     if (idx !== -1) this._activePackets.splice(idx, 1);
@@ -1655,9 +1657,11 @@ window.RackRenderer = {
     if (packet.el && packet.el.parentNode) {
       packet.el.remove();
     }
-    // Clear cable busy flag
+    // Clear cable busy flag + wake waiters
     if (packet.cableIndex != null && this._cableBusy) {
       this._cableBusy.set(packet.cableIndex, false);
+      const waiter = this._cableWaiters?.get(packet.cableIndex);
+      if (waiter) { waiter(); this._cableWaiters.delete(packet.cableIndex); }
     }
     // Remove from active list
     const idx = this._activePackets.indexOf(packet);
@@ -1666,14 +1670,15 @@ window.RackRenderer = {
     if (packet.resolve) packet.resolve();
   },
 
-  // Wait for a cable to become free (with timeout to prevent deadlock)
+  // Wait for a cable to become free (promise-based, woken by _completeMove/_removePacket)
   async _waitForCable(cableIndex) {
     if (!this._cableBusy || !this._cableBusy.get(cableIndex)) return;
-    const maxWait = 10000; // 10s max wait
-    const start = Date.now();
-    while (this._cableBusy.get(cableIndex) && Date.now() - start < maxWait) {
-      await this._delay(100);
-    }
+    if (!this._cableWaiters) this._cableWaiters = new Map();
+    await Promise.race([
+      new Promise(resolve => { this._cableWaiters.set(cableIndex, resolve); }),
+      this._delay(10000), // timeout fallback
+    ]);
+    this._cableWaiters?.delete(cableIndex);
   },
 
   async _movePacketAlongCable(packet, cableIndex, fromNode, speed = 0.3) {
@@ -1823,11 +1828,15 @@ window.RackRenderer = {
       if (pkt.resolve) pkt.resolve();
     }
     this._activePackets = [];
-    // Clear all busy flags
+    // Clear all busy flags + wake all waiters
     if (this._cableBusy) {
       for (const key of this._cableBusy.keys()) {
         this._cableBusy.set(key, false);
       }
+    }
+    if (this._cableWaiters) {
+      for (const resolve of this._cableWaiters.values()) resolve();
+      this._cableWaiters.clear();
     }
     // Stop animation loop
     if (this._animFrameId) {
@@ -2259,12 +2268,10 @@ window.RackRenderer = {
     if (this._drainQueue.length === 0 && this._inFlightCount === 0 && dispatched === 0) {
       this._verifyPanelIntegrity();
       // Always transition to rotation — panels cycle for visual interest
-      console.log(`[rack-drain] ✓ DRAIN COMPLETE — settling for ${this._SETTLE_PERIOD_MS / 1000}s`);
       this._schedulerState = 'settling';
       this._settleTimer = setTimeout(() => {
         this._settleTimer = null;
         this._schedulerState = 'rotating';
-        console.log(`[rack-drain] ✓ SETTLE DONE — state=${this._schedulerState}, starting rotation`);
         this._startRotation();
       }, this._SETTLE_PERIOD_MS);
     }
@@ -2274,10 +2281,8 @@ window.RackRenderer = {
   // Panel-driven: round-robin through divisions, remove oldest, replace with pool badge.
 
   _startRotation() {
-    console.log(`[rack-rotation] _startRotation: state=${this._schedulerState} pool=${this._badgePool.length}`);
     if (this._schedulerState !== 'rotating') return;
     if (this._badgePool.length === 0) return;
-    console.log(`[rack-rotation] ✓ ROTATION LOOP STARTING`);
     this._runRotationLoop();
   },
 
@@ -2298,42 +2303,28 @@ window.RackRenderer = {
 
   // Rotation tick — panel-driven: pick a division, swap a badge
   _rotationTick() {
-    if (this._schedulerState !== 'rotating') {
-      console.log(`[rack-rotation] tick: wrong state ${this._schedulerState}`);
-      return;
-    }
-    if (this._inFlightCount >= this._MAX_IN_FLIGHT) {
-      console.log(`[rack-rotation] tick: at max in-flight (${this._inFlightCount})`);
-      return;
-    }
+    if (this._schedulerState !== 'rotating') return;
+    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
 
     const divs = Object.keys(this._DIV_TOPOLOGY);
-    const skipReasons = [];
 
     // Round-robin through divisions to find one that can rotate
     for (let i = 0; i < divs.length; i++) {
       const div = divs[(this._rotationDiv + i) % divs.length];
-      if (this._divInFlight[div] >= this._MAX_PER_DIV) {
-        skipReasons.push(`${div}:divBusy`);
-        continue;
-      }
+      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
 
       const panelContents = this._getPanelContents(div);
       const divPool = this._badgePool.filter(e => e.divTheme === div);
 
       // Need at least 1 badge NOT currently displayed to swap in
       const replacement = divPool.find(e => !panelContents.includes(e.badge.employeeId));
-      if (!replacement) {
-        skipReasons.push(`${div}:allDisplayed(${divPool.length}pool/${panelContents.length}panel)`);
-        continue;
-      }
+      if (!replacement) continue;
 
-      // If panel is full, remove oldest to make room. If not full, just fill the empty slot.
+      // If panel is full, remove a random badge to make room (not always slot 1)
       const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-      const panelFull = panelContents.length >= cap;
-      const removeId = panelFull ? panelContents[0] : null;
-
-      console.log(`[rack-rotation] ► DISPATCHING: ${div} — remove=${removeId || 'none'} replace=${replacement.badge.employeeId} (${divPool.length}pool/${panelContents.length}panel/${cap}cap)`);
+      const removeId = panelContents.length >= cap
+        ? panelContents[Math.floor(Math.random() * panelContents.length)]
+        : null;
 
       // Advance round-robin past this division
       this._rotationDiv = (this._rotationDiv + i + 1) % divs.length;
@@ -2349,9 +2340,6 @@ window.RackRenderer = {
           }
           await this._executeCoreDownloadCli(div);
           await this._playIngress(replacement.badge);
-          console.log(`[rack-rotation] ✓ COMPLETE: ${div} — ${replacement.badge.employeeId}`);
-        } catch (err) {
-          console.error(`[rack-rotation] ✗ FAILED: ${div}`, err);
         } finally {
           this._inFlightCount--;
           this._divInFlight[div]--;
@@ -2360,8 +2348,6 @@ window.RackRenderer = {
 
       return; // one rotation per tick
     }
-
-    console.log(`[rack-rotation] tick: no division eligible — ${skipReasons.join(', ')}`);
   },
 
   // Phase A: Port shutdown + degauss removal
@@ -3098,14 +3084,17 @@ window.RackRenderer = {
   // WLC radio heartbeat + VPN keepalive pulse. CSS-driven with JS timers.
 
   _idleTimers: [],
+  _idleActive: false,
 
   _startIdleAnimations() {
     if (!this._container) return;
+    this._idleActive = true;
 
     // WLC radio heartbeat — RADIO LED flickers every 6-10s
     const wlcLed = this._container.querySelector('.rack-device-wlc [title="RADIO"]');
     if (wlcLed) {
       const wlcBeat = () => {
+        if (!this._idleActive) return; // guard against zombie timers
         wlcLed.classList.add('rack-wlc-radio-heartbeat');
         setTimeout(() => wlcLed.classList.remove('rack-wlc-radio-heartbeat'), 400);
         this._idleTimers.push(setTimeout(wlcBeat, 6000 + Math.random() * 4000));
@@ -3117,6 +3106,7 @@ window.RackRenderer = {
     const vpnLabel = this._container.querySelector('.rack-vpn-tunnel-label');
     if (vpnLabel) {
       const vpnPulse = () => {
+        if (!this._idleActive) return; // guard against zombie timers
         vpnLabel.classList.add('rack-vpn-keepalive');
         setTimeout(() => vpnLabel.classList.remove('rack-vpn-keepalive'), 600);
         this._idleTimers.push(setTimeout(vpnPulse, 8000 + Math.random() * 4000));
@@ -3129,6 +3119,7 @@ window.RackRenderer = {
   },
 
   _stopIdleAnimations() {
+    this._idleActive = false;
     this._idleTimers.forEach(t => clearTimeout(t));
     this._idleTimers = [];
     this._stopIdleTraffic();
@@ -3569,11 +3560,14 @@ window.RackRenderer = {
         case 'brs-render': {
           const brsId = step.brsId || 'brs-01';
           const brsPause = step.pause || 1500;
-          // Wait for BRS to become free (timeout = 1 full render cycle)
-          const brsMaxWait = brsPause + 500;
-          const brsStart = Date.now();
-          while (this._brsBusy[brsId] && Date.now() - brsStart < brsMaxWait) {
-            await this._delay(100);
+          // Wait for BRS to become free (promise-based, woken when render completes)
+          if (this._brsBusy[brsId]) {
+            if (!this._brsWaiters) this._brsWaiters = {};
+            await Promise.race([
+              new Promise(resolve => { this._brsWaiters[brsId] = resolve; }),
+              this._delay(brsPause + 500),
+            ]);
+            delete this._brsWaiters?.[brsId];
           }
           if (this._brsBusy[brsId]) break; // still busy after timeout — skip
           try {
@@ -3582,6 +3576,8 @@ window.RackRenderer = {
             await this._delay(brsPause);
           } finally {
             this._brsBusy[brsId] = false;
+            // Wake any packet waiting for this BRS
+            if (this._brsWaiters?.[brsId]) { this._brsWaiters[brsId](); delete this._brsWaiters[brsId]; }
           }
           break;
         }
