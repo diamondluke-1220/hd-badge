@@ -2044,14 +2044,32 @@ window.RackRenderer = {
     // Current position after entry cables
     let currentCore = isWifi ? 'core-a' : entryCore;
 
-    // Step 3: BRS side trip — each rack has its own BRS
-    // BRS renders at entry side's BRS — badge is already at entry core, no extra cross-rack
+    // Step 3: BRS side trip — load-balance across both BRS units
+    // Prefer the entry side's BRS, but cross-rack to the other if ours is busy
     if (brs) {
-      const brsCore = currentCore; // wherever we are after entry
-      const brsNode = brsCore === 'core-a' ? 'brs' : 'brs-02';
-      const brsId = brsCore === 'core-a' ? 'brs-01' : 'brs-02';
+      const localBrsCore = currentCore;
+      const remoteBrsCore = currentCore === 'core-a' ? 'core-b' : 'core-a';
+      const localBrsId = localBrsCore === 'core-a' ? 'brs-01' : 'brs-02';
+      const remoteBrsId = remoteBrsCore === 'core-a' ? 'brs-01' : 'brs-02';
 
-      // Cross-rack to BRS core if needed (WiFi B-side badges are already at Core A)
+      // Pick BRS: prefer local, cross-rack if local is busy
+      let brsCore, brsNode, brsId;
+      if (!this._brsBusy[localBrsId]) {
+        brsCore = localBrsCore;
+        brsNode = localBrsCore === 'core-a' ? 'brs' : 'brs-02';
+        brsId = localBrsId;
+      } else if (!this._brsBusy[remoteBrsId]) {
+        brsCore = remoteBrsCore;
+        brsNode = remoteBrsCore === 'core-a' ? 'brs' : 'brs-02';
+        brsId = remoteBrsId;
+      } else {
+        // Both busy — use local, will wait at BRS render step
+        brsCore = localBrsCore;
+        brsNode = localBrsCore === 'core-a' ? 'brs' : 'brs-02';
+        brsId = localBrsId;
+      }
+
+      // Cross-rack to BRS core if needed
       if (currentCore !== brsCore) {
         const xStep = { type: 'cable', cable: this._getCable(currentCore, brsCore), from: currentCore };
         if (cliRoll) xStep.coreTrigger = 'core-cli';
@@ -2277,8 +2295,12 @@ window.RackRenderer = {
       panelSnapshot[div] = this._getPanelContents(div);
     }
 
+    // Prefer the opposite rack side from last dispatch (load-balance across racks)
+    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
+
     // Find next badge that isn't already displayed
-    for (let attempt = 0; attempt < 8; attempt++) {
+    let skippedForSide = null; // first eligible badge on the non-preferred side
+    for (let attempt = 0; attempt < 12; attempt++) {
       const poolEntry = this._advancePool();
       if (!poolEntry) return;
 
@@ -2294,26 +2316,32 @@ window.RackRenderer = {
       // Skip if division has ingress in flight
       if (this._divRotationInFlight[poolEntry.divTheme]) continue;
 
-      // Dispatch ingress (fire-and-forget — animation runs in background)
-      this._divRotationInFlight[poolEntry.divTheme] = true;
-      this._inFlightCount++;
-      this._drainNoOpCount = 0;
-      this._executeCoreDownloadCli(poolEntry.divTheme).then(() => {
-        poolEntry.lastDisplayedAt = Date.now();
-        poolEntry.displayCount++;
-        return this._playIngress(poolEntry.badge);
-      }).finally(() => {
-        this._inFlightCount--;
-        this._divRotationInFlight[poolEntry.divTheme] = false;
-      });
+      // Prefer opposite rack side — save first non-preferred match as fallback
+      const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
+      if (topo?.rackSide !== preferSide && !skippedForSide) {
+        skippedForSide = poolEntry;
+        continue;
+      }
+
+      this._dispatchDrainIngress(poolEntry);
       return;
     }
 
-    // All 8 attempts failed — no eligible badge found this tick
-    this._drainNoOpCount++;
+    // No preferred-side badge found — dispatch the skipped fallback if we have one
+    if (skippedForSide) {
+      this._dispatchDrainIngress(skippedForSide);
+      return;
+    }
 
-    // After 3 consecutive no-op ticks, transition filling → settling (or idle)
-    if (this._drainNoOpCount >= 3) {
+    // All attempts failed — but only count as a real no-op if nothing is in flight.
+    // When animations are running, divisions are temporarily locked — that's expected,
+    // not a signal that drain is complete.
+    if (this._inFlightCount === 0) {
+      this._drainNoOpCount++;
+    }
+
+    // After 3 consecutive idle no-op ticks, transition filling → settling (or idle)
+    if (this._drainNoOpCount >= 3 && this._inFlightCount === 0) {
       this._verifyPanelIntegrity();
       if (this._anyPanelFull()) {
         this._schedulerState = 'settling';
@@ -2326,6 +2354,23 @@ window.RackRenderer = {
         this._schedulerState = 'idle';
       }
     }
+  },
+
+  // Fire-and-forget ingress dispatch for pool drain
+  _dispatchDrainIngress(poolEntry) {
+    const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
+    this._lastLaunchRack = topo?.rackSide;
+    this._divRotationInFlight[poolEntry.divTheme] = true;
+    this._inFlightCount++;
+    this._drainNoOpCount = 0;
+    this._executeCoreDownloadCli(poolEntry.divTheme).then(() => {
+      poolEntry.lastDisplayedAt = Date.now();
+      poolEntry.displayCount++;
+      return this._playIngress(poolEntry.badge);
+    }).finally(() => {
+      this._inFlightCount--;
+      this._divRotationInFlight[poolEntry.divTheme] = false;
+    });
   },
 
   // ─── Rotation (rotating state) ──────────────────────────
@@ -3626,7 +3671,13 @@ window.RackRenderer = {
 
         case 'brs-render': {
           const brsId = step.brsId || 'brs-01';
-          if (this._brsBusy[brsId]) break; // skip if busy
+          // Wait for BRS to become free (with timeout to prevent deadlock)
+          const brsMaxWait = 5000;
+          const brsStart = Date.now();
+          while (this._brsBusy[brsId] && Date.now() - brsStart < brsMaxWait) {
+            await this._delay(100);
+          }
+          if (this._brsBusy[brsId]) break; // still busy after timeout — skip
           try {
             this._brsBusy[brsId] = true;
             this.triggerBRSRender(badge, step.pause || 2500, brsId);
