@@ -800,14 +800,14 @@ window.RackRenderer = {
     }
 
     // Port assignments per core switch side (8 ports each, 16 total — Crisco 9500-24Y4C)
-    // Trunks at inner edges (Core A right 7-8, Core B left 1-2) for clean cross-rack cabling
+    // Trunks at inner edges (Core A right 6-8, Core B left 1-3) for clean cross-rack cabling
     // Core A left:  WLC(1), BRS-out(2), BRS-in(3), FW-A(4), spare(5-8)
-    // Core A right: spare(1-4), IT(5), Punk(6), trunk-BA(7), trunk-AB(8)
-    // Core B left:  trunk-AB(1), trunk-BA(2), VPN(3), FW-B(4), BRS02-out(5), BRS02-in(6), spare(7-8)
+    // Core A right: spare(1-3), IT(4), Punk(5), trunk-3(6), trunk-BA(7), trunk-AB(8)
+    // Core B left:  trunk-AB(1), trunk-BA(2), trunk-3(3), VPN(4), FW-B(5), BRS02-in(6), BRS02-out(7), spare(8)
     // Core B right: spare(1-6), Office(7), Corporate(8)
     const portMap = side === 'A'
-      ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink', 'spare', 'spare', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'it-uplink', 'punk-uplink', 'trunk-ba', 'trunk-ab'] }
-      : { left: ['trunk-ab', 'trunk-ba', 'vpn-uplink', 'fw-b-uplink', 'brs02-inbound', 'brs02-outbound', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'spare', 'spare', 'office-uplink', 'corporate-uplink'] };
+      ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink', 'spare', 'spare', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'it-uplink', 'punk-uplink', 'trunk-3', 'trunk-ba', 'trunk-ab'] }
+      : { left: ['trunk-ab', 'trunk-ba', 'trunk-3', 'vpn-uplink', 'fw-b-uplink', 'brs02-inbound', 'brs02-outbound', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'spare', 'spare', 'office-uplink', 'corporate-uplink'] };
 
     // Left trunk ports (8) — connected ports get dual LEDs with animation
     let leftPortsHtml = '<div class="rack-switch-ports rack-core-ports-left">';
@@ -1343,11 +1343,13 @@ window.RackRenderer = {
   //   'arc-right' (swing outside right edge), 'arc-left' (swing outside left edge),
   //   'margin-right' (right gutter routing), 'margin-right-stagger' (staggered vertical entry)
   _CABLE_DEFS: [
-    // Cross-rack trunks — directional, dual gold cables in the inter-rack gap
-    // A→B: Core A right port 4 → Core B left port 1
+    // Cross-rack trunks — 3 gold cables in the inter-rack gap, staggered by lane
+    // A→B: Core A right trunk-AB → Core B left trunk-AB
     ['core-a-trunk-ab', 'core-b-trunk-ab', '#D4A843', 3, 'cross-rack'],
-    // B→A: Core B left port 2 → Core A right port 3
+    // B→A: Core B left trunk-BA → Core A right trunk-BA
     ['core-b-trunk-ba', 'core-a-trunk-ba', '#D4A843', 3, 'cross-rack'],
+    // Trunk 3 (bidirectional): Core A right trunk-3 → Core B left trunk-3
+    ['core-a-trunk-3', 'core-b-trunk-3', '#D4A843', 3, 'cross-rack'],
     // FW → Core: short vertical drop, nudged left to avoid CRISCO silkscreen
     ['fw-a-core', 'core-a-fw-a-uplink', '#3B82F6', 2.5, 'drop-left'],
     ['fw-b-core', 'core-b-fw-b-uplink', '#3B82F6', 2.5, 'drop-left'],
@@ -1395,11 +1397,11 @@ window.RackRenderer = {
     'core-a-wlc-uplink': 'core-a', 'core-a-brs-outbound': 'core-a',
     'core-a-brs-inbound': 'core-a', 'core-a-fw-a-uplink': 'core-a',
     'core-a-it-uplink': 'core-a', 'core-a-punk-uplink': 'core-a',
-    'core-a-trunk-ab': 'core-a', 'core-a-trunk-ba': 'core-a',
+    'core-a-trunk-ab': 'core-a', 'core-a-trunk-ba': 'core-a', 'core-a-trunk-3': 'core-a',
     'core-b-brs02-outbound': 'core-b', 'core-b-brs02-inbound': 'core-b',
     'core-b-vpn-uplink': 'core-b', 'core-b-fw-b-uplink': 'core-b',
     'core-b-office-uplink': 'core-b', 'core-b-corporate-uplink': 'core-b',
-    'core-b-trunk-ab': 'core-b', 'core-b-trunk-ba': 'core-b',
+    'core-b-trunk-ab': 'core-b', 'core-b-trunk-ba': 'core-b', 'core-b-trunk-3': 'core-b',
     'sw-IT-core-uplink': 'sw-IT', 'sw-IT-spare': 'sw-IT',
     'sw-Punk-core-uplink': 'sw-Punk', 'sw-Punk-spare': 'sw-Punk',
     'sw-Office-core-uplink': 'sw-Office', 'sw-Office-spare': 'sw-Office',
@@ -1415,25 +1417,26 @@ window.RackRenderer = {
   },
 
   // Cable indices that are strictly one-way (cross-rack trunks + BRS in/out)
-  _DIRECTIONAL_CABLES: new Set([0, 1, 4, 5, 16, 17]),
+  _DIRECTIONAL_CABLES: new Set([0, 1, 5, 6, 17, 18]),
 
   // Per-cable speed overrides for dramatic pacing (display piece, not throughput)
   // Default is 0.4 (150px/sec). Lower = slower crawl.
   _CABLE_SPEEDS: {
     0: 0.2,   // cross-rack A→B — slow dramatic crawl
     1: 0.2,   // cross-rack B→A
-    2: 0.3,   // FW-A → Core A — let FW inspect sink in
-    3: 0.3,   // FW-B → Core B
-    4: 0.35,  // Core A → BRS inbound — slight linger
-    5: 0.35,  // BRS → Core A outbound
-    8: 0.25,  // Core A → IT switch — let routing breathe
-    9: 0.25,  // Core A → Punk switch
-    10: 0.3,  // VPN → Core B
-    11: 0.25, // Core B → Office switch
-    12: 0.25, // Core B → Corporate switch
-    13: 0.2,  // VPN → Contractors — long scenic under-and-up
-    16: 0.35, // Core B → BRS-02 inbound
-    17: 0.35, // BRS-02 → Core B outbound
+    2: 0.2,   // cross-rack trunk 3 — same pacing as other trunks
+    3: 0.3,   // FW-A → Core A — let FW inspect sink in
+    4: 0.3,   // FW-B → Core B
+    5: 0.35,  // Core A → BRS inbound — slight linger
+    6: 0.35,  // BRS → Core A outbound
+    9: 0.25,  // Core A → IT switch — let routing breathe
+    10: 0.25, // Core A → Punk switch
+    11: 0.3,  // VPN → Core B
+    12: 0.25, // Core B → Office switch
+    13: 0.25, // Core B → Corporate switch
+    14: 0.2,  // VPN → Contractors — long scenic under-and-up
+    17: 0.35, // Core B → BRS-02 inbound
+    18: 0.35, // BRS-02 → Core B outbound
   },
 
   // Virtual edges: no physical cable, animated as short drops or invisible paths
@@ -1844,13 +1847,13 @@ window.RackRenderer = {
     // Core A left (Te1/0/1-8): WLC, BRS-out, BRS-in, FW-A, spare(5-8)
     'core-a-wlc-uplink': 'Te1/0/1', 'core-a-brs-outbound': 'Te1/0/2',
     'core-a-brs-inbound': 'Te1/0/3', 'core-a-fw-a-uplink': 'Te1/0/4',
-    // Core A right (Te2/0/1-8): spare(1-4), IT(5), Punk(6), trunk-BA(7), trunk-AB(8)
-    'core-a-it-uplink': 'Te2/0/5', 'core-a-punk-uplink': 'Te2/0/6',
-    'core-a-trunk-ba': 'Te2/0/7', 'core-a-trunk-ab': 'Te2/0/8',
-    // Core B left (Te1/0/1-8): trunk-AB(1), trunk-BA(2), VPN(3), FW-B(4), BRS02-out(5), BRS02-in(6), spare(7-8)
-    'core-b-trunk-ab': 'Te1/0/1', 'core-b-trunk-ba': 'Te1/0/2',
-    'core-b-vpn-uplink': 'Te1/0/3', 'core-b-fw-b-uplink': 'Te1/0/4',
-    'core-b-brs02-inbound': 'Te1/0/5', 'core-b-brs02-outbound': 'Te1/0/6',
+    // Core A right (Te2/0/1-8): spare(1-3), IT(4), Punk(5), trunk-3(6), trunk-BA(7), trunk-AB(8)
+    'core-a-it-uplink': 'Te2/0/4', 'core-a-punk-uplink': 'Te2/0/5',
+    'core-a-trunk-3': 'Te2/0/6', 'core-a-trunk-ba': 'Te2/0/7', 'core-a-trunk-ab': 'Te2/0/8',
+    // Core B left (Te1/0/1-8): trunk-AB(1), trunk-BA(2), trunk-3(3), VPN(4), FW-B(5), BRS02-in(6), BRS02-out(7), spare(8)
+    'core-b-trunk-ab': 'Te1/0/1', 'core-b-trunk-ba': 'Te1/0/2', 'core-b-trunk-3': 'Te1/0/3',
+    'core-b-vpn-uplink': 'Te1/0/4', 'core-b-fw-b-uplink': 'Te1/0/5',
+    'core-b-brs02-inbound': 'Te1/0/6', 'core-b-brs02-outbound': 'Te1/0/7',
     // Core B right (Te2/0/1-8): spare(1-6), Office(7), Corporate(8)
     'core-b-office-uplink': 'Te2/0/7', 'core-b-corporate-uplink': 'Te2/0/8',
   },
@@ -1871,31 +1874,32 @@ window.RackRenderer = {
 
   // Division → network topology mapping
   _DIV_TOPOLOGY: {
-    'IT':         { fw: 'fw-a', core: 'core-a', switchCable: 8, rackSide: 'A' },
-    'Punk':       { fw: 'fw-a', core: 'core-a', switchCable: 9, rackSide: 'A' },
-    'Office':     { fw: 'fw-b', core: 'core-b', switchCable: 11, rackSide: 'B' },
-    'Corporate':  { fw: 'fw-b', core: 'core-b', switchCable: 12, rackSide: 'B' },
-    '_custom':    { fw: 'fw-b', core: 'core-b', switchCable: 13, rackSide: 'B', viaVpn: true },
+    'IT':         { fw: 'fw-a', core: 'core-a', switchCable: 9, rackSide: 'A' },
+    'Punk':       { fw: 'fw-a', core: 'core-a', switchCable: 10, rackSide: 'A' },
+    'Office':     { fw: 'fw-b', core: 'core-b', switchCable: 12, rackSide: 'B' },
+    'Corporate':  { fw: 'fw-b', core: 'core-b', switchCable: 13, rackSide: 'B' },
+    '_custom':    { fw: 'fw-b', core: 'core-b', switchCable: 14, rackSide: 'B', viaVpn: true },
   },
 
   // Cable lookup: which cable connects two adjacent nodes?
   _ADJACENCY_CABLES: {
-    'cloud-a→fw-a': 14, 'cloud-b→fw-b': 15,
-    'fw-a→core-a': 2, 'fw-b→core-b': 3,
-    'wifi-ap→wlc': 7, 'wlc→core-a': 6,
+    'cloud-a→fw-a': 15, 'cloud-b→fw-b': 16,
+    'fw-a→core-a': 3, 'fw-b→core-b': 4,
+    'wifi-ap→wlc': 8, 'wlc→core-a': 7,
     'core-a→core-b': 0, 'core-b→core-a': 1,
-    'core-a→brs': 4, 'brs→core-a': 5,
-    'core-b→brs-02': 16, 'brs-02→core-b': 17,
-    'core-b→vpn': 10, 'vpn→sw-custom': 13,
-    'core-a→sw-IT': 8, 'core-a→sw-Punk': 9,
-    'core-b→sw-Office': 11, 'core-b→sw-Corporate': 12,
+    'core-a→brs': 5, 'brs→core-a': 6,
+    'core-b→brs-02': 17, 'brs-02→core-b': 18,
+    'core-b→vpn': 11, 'vpn→sw-custom': 14,
+    'core-a→sw-IT': 9, 'core-a→sw-Punk': 10,
+    'core-b→sw-Office': 12, 'core-b→sw-Corporate': 13,
   },
 
   _getCable(fromNode, toNode) {
-    // Port-channel: cross-rack hops randomly pick one of two trunk cables
+    // Port-channel: cross-rack hops randomly pick one of three trunk cables (LACP)
     if ((fromNode === 'core-a' && toNode === 'core-b') ||
         (fromNode === 'core-b' && toNode === 'core-a')) {
-      return Math.random() < 0.5 ? 0 : 1;
+      const r = Math.random();
+      return r < 0.33 ? 0 : r < 0.66 ? 1 : 2;
     }
     return this._ADJACENCY_CABLES[`${fromNode}→${toNode}`] ?? null;
   },
@@ -2015,19 +2019,20 @@ window.RackRenderer = {
 
   // Resolve a probe route (idle traffic): random short hop, no triggers
   _resolveProbeRoute() {
+    const adj = this._ADJACENCY_CABLES;
     const hops = [
       // Short intra-rack hops
-      { cables: [{ cable: 8, from: 'core-a' }] },
-      { cables: [{ cable: 9, from: 'core-a' }] },
-      { cables: [{ cable: 11, from: 'core-b' }] },
-      { cables: [{ cable: 12, from: 'core-b' }] },
-      { cables: [{ cable: 2, from: 'fw-a' }] },
-      { cables: [{ cable: 3, from: 'fw-b' }] },
-      // Cross-rack
-      { cables: [{ cable: 0, from: 'core-a' }] },
-      { cables: [{ cable: 1, from: 'core-b' }] },
+      { cables: [{ cable: adj['core-a→sw-IT'], from: 'core-a' }] },
+      { cables: [{ cable: adj['core-a→sw-Punk'], from: 'core-a' }] },
+      { cables: [{ cable: adj['core-b→sw-Office'], from: 'core-b' }] },
+      { cables: [{ cable: adj['core-b→sw-Corporate'], from: 'core-b' }] },
+      { cables: [{ cable: adj['fw-a→core-a'], from: 'fw-a' }] },
+      { cables: [{ cable: adj['fw-b→core-b'], from: 'fw-b' }] },
+      // Cross-rack (use _getCable for port-channel distribution)
+      { cables: [{ cable: this._getCable('core-a', 'core-b'), from: 'core-a' }] },
+      { cables: [{ cable: this._getCable('core-b', 'core-a'), from: 'core-b' }] },
       // BRS ping
-      { cables: [{ cable: 4, from: 'core-a' }, { cable: 5, from: 'brs' }] },
+      { cables: [{ cable: adj['core-a→brs'], from: 'core-a' }, { cable: adj['brs→core-a'], from: 'brs' }] },
     ];
     return hops[Math.floor(Math.random() * hops.length)];
   },
@@ -3564,11 +3569,13 @@ window.RackRenderer = {
   _debugActive: false,
 
   _CABLE_NAMES: {
-    0: 'Trunk A→B', 1: 'Trunk B→A', 2: 'FW-A → Core A', 3: 'FW-B → Core B',
-    4: 'Core A → BRS (in)', 5: 'BRS → Core A (out)', 6: 'WLC → Core A', 7: 'WLC ↔ WiFi AP',
-    8: 'Core A → IT Switch', 9: 'Core A → Punk Switch', 10: 'VPN ↔ Core B',
-    11: 'Core B → Office Switch', 12: 'Core B → Corporate Switch', 13: 'VPN → Contractors',
-    14: 'Cloud-A → FW-A', 15: 'Cloud-B → FW-B',
+    0: 'Trunk A→B', 1: 'Trunk B→A', 2: 'Trunk 3',
+    3: 'FW-A → Core A', 4: 'FW-B → Core B',
+    5: 'Core A → BRS (in)', 6: 'BRS → Core A (out)', 7: 'WLC → Core A', 8: 'WLC ↔ WiFi AP',
+    9: 'Core A → IT Switch', 10: 'Core A → Punk Switch', 11: 'VPN ↔ Core B',
+    12: 'Core B → Office Switch', 13: 'Core B → Corporate Switch', 14: 'VPN → Contractors',
+    15: 'Cloud-A → FW-A', 16: 'Cloud-B → FW-B',
+    17: 'Core B → BRS-02 (in)', 18: 'BRS-02 → Core B (out)',
   },
 
   _toggleDebug() {
