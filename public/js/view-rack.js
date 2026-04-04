@@ -2518,8 +2518,8 @@ window.RackRenderer = {
     for (let i = 0; i < this._ingressQueue.length; i++) {
       const b = this._ingressQueue[i];
       const theme = getDivisionForDept(b.department, b.isBandMember);
-      const route = this._INGRESS_ROUTES[theme];
-      if (route && route.rackSide === preferSide) {
+      const topo = this._DIV_TOPOLOGY[theme];
+      if (topo && topo.rackSide === preferSide) {
         badge = this._ingressQueue.splice(i, 1)[0];
         break;
       }
@@ -2533,8 +2533,8 @@ window.RackRenderer = {
     if (!badge) return;
 
     const theme = getDivisionForDept(badge.department, badge.isBandMember);
-    const route = this._INGRESS_ROUTES[theme];
-    this._lastLaunchRack = route ? route.rackSide : null;
+    const topo = this._DIV_TOPOLOGY[theme];
+    this._lastLaunchRack = topo ? topo.rackSide : null;
 
     this._inFlightCount++;
     this._playIngress(badge).finally(() => {
