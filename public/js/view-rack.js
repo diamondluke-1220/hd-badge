@@ -2645,22 +2645,22 @@ window.RackRenderer = {
     coreEl.appendChild(popup);
     this._coreCliPopup[coreSide] = popup;
 
-    // Animate: 3.5s total — pop-in (0-10%), hold (10-75%), fade-out (75-100%)
-    const duration = 3500;
+    // Animate: 4.5s total — pop-in (0-8%), hold (8-65%), fade-out (65-100%)
+    const duration = 4500;
     const start = performance.now();
     const animate = (now) => {
-      if (!popup.parentNode) return; // removed by replacement
+      if (!popup.parentNode) return;
       const t = (now - start) / duration;
       if (t >= 1) { popup.remove(); if (this._coreCliPopup[coreSide] === popup) this._coreCliPopup[coreSide] = null; return; }
-      if (t < 0.1) {
-        const s = t / 0.1;
+      if (t < 0.08) {
+        const s = t / 0.08;
         popup.style.opacity = String(s);
-        popup.style.transform = `translateX(-50%) scale(${0.9 + 0.1 * s})`;
-      } else if (t < 0.75) {
+        popup.style.transform = `translate(-50%, -50%) scale(${0.9 + 0.1 * s})`;
+      } else if (t < 0.65) {
         popup.style.opacity = '1';
-        popup.style.transform = 'translateX(-50%) scale(1)';
+        popup.style.transform = 'translate(-50%, -50%) scale(1)';
       } else {
-        popup.style.opacity = String(1 - (t - 0.75) / 0.25);
+        popup.style.opacity = String(1 - (t - 0.65) / 0.35);
       }
       requestAnimationFrame(animate);
     };
