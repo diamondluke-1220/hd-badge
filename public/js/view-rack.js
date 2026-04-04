@@ -2259,11 +2259,12 @@ window.RackRenderer = {
     if (this._drainQueue.length === 0 && this._inFlightCount === 0 && dispatched === 0) {
       this._verifyPanelIntegrity();
       // Always transition to rotation — panels cycle for visual interest
-      // even if all badges currently fit (rotation swaps displayed faces)
+      console.log(`[rack-drain] ✓ DRAIN COMPLETE — settling for ${this._SETTLE_PERIOD_MS / 1000}s`);
       this._schedulerState = 'settling';
       this._settleTimer = setTimeout(() => {
         this._settleTimer = null;
         this._schedulerState = 'rotating';
+        console.log(`[rack-drain] ✓ SETTLE DONE — state=${this._schedulerState}, starting rotation`);
         this._startRotation();
       }, this._SETTLE_PERIOD_MS);
     }
@@ -2273,8 +2274,10 @@ window.RackRenderer = {
   // Panel-driven: round-robin through divisions, remove oldest, replace with pool badge.
 
   _startRotation() {
+    console.log(`[rack-rotation] _startRotation: state=${this._schedulerState} pool=${this._badgePool.length}`);
     if (this._schedulerState !== 'rotating') return;
     if (this._badgePool.length === 0) return;
+    console.log(`[rack-rotation] ✓ ROTATION LOOP STARTING`);
     this._runRotationLoop();
   },
 
@@ -2295,27 +2298,42 @@ window.RackRenderer = {
 
   // Rotation tick — panel-driven: pick a division, swap a badge
   _rotationTick() {
-    if (this._schedulerState !== 'rotating') return;
-    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
+    if (this._schedulerState !== 'rotating') {
+      console.log(`[rack-rotation] tick: wrong state ${this._schedulerState}`);
+      return;
+    }
+    if (this._inFlightCount >= this._MAX_IN_FLIGHT) {
+      console.log(`[rack-rotation] tick: at max in-flight (${this._inFlightCount})`);
+      return;
+    }
 
     const divs = Object.keys(this._DIV_TOPOLOGY);
+    const skipReasons = [];
 
     // Round-robin through divisions to find one that can rotate
     for (let i = 0; i < divs.length; i++) {
       const div = divs[(this._rotationDiv + i) % divs.length];
-      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
+      if (this._divInFlight[div] >= this._MAX_PER_DIV) {
+        skipReasons.push(`${div}:divBusy`);
+        continue;
+      }
 
       const panelContents = this._getPanelContents(div);
       const divPool = this._badgePool.filter(e => e.divTheme === div);
 
       // Need at least 1 badge NOT currently displayed to swap in
       const replacement = divPool.find(e => !panelContents.includes(e.badge.employeeId));
-      if (!replacement) continue;
+      if (!replacement) {
+        skipReasons.push(`${div}:allDisplayed(${divPool.length}pool/${panelContents.length}panel)`);
+        continue;
+      }
 
       // If panel is full, remove oldest to make room. If not full, just fill the empty slot.
       const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
       const panelFull = panelContents.length >= cap;
       const removeId = panelFull ? panelContents[0] : null;
+
+      console.log(`[rack-rotation] ► DISPATCHING: ${div} — remove=${removeId || 'none'} replace=${replacement.badge.employeeId} (${divPool.length}pool/${panelContents.length}panel/${cap}cap)`);
 
       // Advance round-robin past this division
       this._rotationDiv = (this._rotationDiv + i + 1) % divs.length;
@@ -2331,6 +2349,9 @@ window.RackRenderer = {
           }
           await this._executeCoreDownloadCli(div);
           await this._playIngress(replacement.badge);
+          console.log(`[rack-rotation] ✓ COMPLETE: ${div} — ${replacement.badge.employeeId}`);
+        } catch (err) {
+          console.error(`[rack-rotation] ✗ FAILED: ${div}`, err);
         } finally {
           this._inFlightCount--;
           this._divInFlight[div]--;
@@ -2339,6 +2360,8 @@ window.RackRenderer = {
 
       return; // one rotation per tick
     }
+
+    console.log(`[rack-rotation] tick: no division eligible — ${skipReasons.join(', ')}`);
   },
 
   // Phase A: Port shutdown + degauss removal
