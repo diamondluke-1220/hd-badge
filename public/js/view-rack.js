@@ -2294,15 +2294,18 @@ window.RackRenderer = {
       panelSnapshot[div] = this._getPanelContents(div);
     }
 
-    // Check if drain is complete: every remaining pool badge is either displayed
-    // or its panel is at capacity (accounting for in-flight badges)
-    const drainComplete = this._inFlightCount === 0 && this._badgePool.every(entry => {
-      const contents = panelSnapshot[entry.divTheme] || [];
-      const cap = this._DIV_TOPOLOGY[entry.divTheme]?.panelCap || 12;
-      return contents.includes(entry.badge.employeeId) || (contents.length + this._divInFlight[entry.divTheme]) >= cap;
-    });
+    // Multi-dispatch: fill all available in-flight slots this tick
+    let dispatched = 0;
+    while (this._inFlightCount < this._MAX_IN_FLIGHT) {
+      const entry = this._findEligibleBadge(panelSnapshot);
+      if (!entry) break;
+      this._dispatchDrainIngress(entry);
+      dispatched++;
+    }
 
-    if (drainComplete) {
+    // If nothing was dispatched this tick, check if drain is complete
+    if (dispatched === 0 && this._inFlightCount === 0) {
+      // No badges to dispatch and no animations running → drain done
       this._verifyPanelIntegrity();
       if (this._anyPanelFull()) {
         this._schedulerState = 'settling';
@@ -2314,17 +2317,9 @@ window.RackRenderer = {
       } else {
         this._schedulerState = 'idle';
       }
-      return;
     }
-
-    // Multi-dispatch: fill all available in-flight slots this tick
-    let dispatched = 0;
-    while (this._inFlightCount < this._MAX_IN_FLIGHT && dispatched < this._MAX_IN_FLIGHT) {
-      const entry = this._findEligibleBadge(panelSnapshot);
-      if (!entry) break;
-      this._dispatchDrainIngress(entry);
-      dispatched++;
-    }
+    // If nothing dispatched but animations still running, just wait —
+    // slots will free up and next tick will either dispatch or complete
   },
 
   // Find next eligible badge for drain dispatch (with rack alternation)
