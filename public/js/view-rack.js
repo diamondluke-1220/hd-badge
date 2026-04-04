@@ -66,10 +66,10 @@ window.RackRenderer = {
     this._allBadges = allBadges;
     allBadges.forEach(b => { this._badgeIndex[b.employeeId] = b; });
 
-    // First load in session → empty panels, badges animate in
-    // View switch back → instant fill, skip to rotation
-    const poolDrained = sessionStorage.getItem('rack-pool-drained');
-    const animateFromEmpty = !poolDrained;
+    // First rack init in this page load → empty panels, badges animate in
+    // View switch back (same page load) → instant fill, skip to rotation
+    const animateFromEmpty = !this._hasInitialized;
+    this._hasInitialized = true;
 
     this._rackData = this._computeLayout(allBadges, { emptyPanels: animateFromEmpty });
     this._render();
@@ -134,6 +134,11 @@ window.RackRenderer = {
   _placeBadgePort(badge) {
     if (!this._container) return null;
     const scrollY = window.scrollY;
+
+    // Dedup — skip if this badge is already rendered in a panel
+    if (this._container.querySelector(`.rack-port[data-employee-id="${CSS.escape(badge.employeeId)}"]`)) {
+      return null;
+    }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
 
@@ -322,16 +327,16 @@ window.RackRenderer = {
 
     // Rack B: Contractors + VPN above UPS
     const customDepts = byDiv['_custom'];
-    if (customDepts) {
+    {
       const customEmployees = [];
-      Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
+      if (customDepts) Object.values(customDepts).forEach(emps => customEmployees.push(...emps));
 
       rackB.push({
         type: 'switch',
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
         color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
-        portCount: Math.min(customEmployees.length, 24),
+        portCount: emptyPanels ? 0 : Math.min(customEmployees.length, 24),
         totalPorts: 24,
       });
 
@@ -340,7 +345,7 @@ window.RackRenderer = {
         name: 'INDEPENDENT CONTRACTORS',
         theme: '_custom',
         color: DIVISION_ACCENT_COLORS['_custom'] || '#ffd700',
-        employees: customEmployees,
+        employees: emptyPanels ? [] : customEmployees,
         uSize: 2,
         panelKey: '_custom',
       });
@@ -567,8 +572,7 @@ window.RackRenderer = {
             this._startThreatTraffic();
             this._startIdleAnimations();
             if (this._badgePool.length > 0) {
-              const poolDrained = sessionStorage.getItem('rack-pool-drained');
-              if (poolDrained) {
+              if (this._poolDrained) {
                 // Returning from view switch — panels filled, check if rotation should run
                 const anyFull = Object.entries(this._panelContents).some(([div, panel]) => {
                   const cap = div === '_custom' ? 24 : 12;
@@ -2217,8 +2221,8 @@ window.RackRenderer = {
     // Find next badge that isn't already displayed
     for (let attempt = 0; attempt < 8; attempt++) {
       if (this._poolCursor >= this._badgePool.length && attempt === 0) {
-        // Pool fully drained — mark session so view switches skip to instant fill
-        sessionStorage.setItem('rack-pool-drained', '1');
+        // Pool fully drained — view switches will instant-fill via _hasInitialized flag
+        this._poolDrained = true;
         this._stopRotation();
         const anyFull = Object.entries(this._panelContents).some(([div, panel]) => {
           const cap = div === '_custom' ? 24 : 12;
@@ -2250,10 +2254,11 @@ window.RackRenderer = {
       // Skip if division has ingress in flight
       if (this._divRotationInFlight[poolEntry.divTheme]) continue;
 
-      // Animate ingress (no removal — panel has room)
+      // Core download CLI → then animated ingress
       this._divRotationInFlight[poolEntry.divTheme] = true;
       this._inFlightCount++;
       try {
+        await this._executeCoreDownloadCli(poolEntry.divTheme);
         poolEntry.lastDisplayedAt = Date.now();
         poolEntry.displayCount++;
         await this._playIngress(poolEntry.badge);
