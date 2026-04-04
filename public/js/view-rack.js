@@ -180,6 +180,11 @@ window.RackRenderer = {
     const portEl = this._createPort(badge);
     emptyPort.replaceWith(portEl);
 
+    // Track in panel contents for rotation system
+    if (this._panelContents[divTheme] && !this._panelContents[divTheme].includes(badge.employeeId)) {
+      this._panelContents[divTheme].push(badge.employeeId);
+    }
+
     // Update port count
     const countEl = panel.querySelector('.rack-port-count');
     if (countEl) {
