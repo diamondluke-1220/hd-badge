@@ -2,12 +2,24 @@
 // ─── Rack Packet Stress Test Simulator ─────────────────────
 // Headless timing simulation of the rack view packet scheduling engine.
 // Mirrors topology, routing, scheduling from view-rack.js without DOM/SVG.
+//
 // Usage: bun run scripts/rack-sim.ts [count]
 //   count = number of badges to simulate (default: runs 50, 100, 200, 500)
+//
+// Dual-cloud model: each rack has its own internet cloud. Badges randomly
+// enter from either cloud. If they land on the "wrong" side, they cross
+// the trunk links to reach their destination rack.
+//
+// Tests multiple SAME_SIDE_BIAS ratios to find the sweet spot.
 
 const BADGE_COUNTS = process.argv[2]
   ? [parseInt(process.argv[2])]
   : [50, 100, 200, 500];
+
+// SAME_SIDE_BIAS: probability that a badge enters from its "home" cloud.
+// 0.5 = pure random (50/50), 1.0 = always home side (current behavior).
+// We test multiple ratios to find where congestion becomes a problem.
+const BIAS_RATIOS = [1.0, 0.8, 0.7, 0.6, 0.5];
 
 // ─── Topology (mirrored from view-rack.js) ─────────────────
 
@@ -28,7 +40,7 @@ const DIV_TOPOLOGY: Record<string, DivTopo> = {
 };
 
 const ADJACENCY_CABLES: Record<string, number> = {
-  'cloud→fw-a': 14, 'cloud→fw-b': 15,
+  'cloud-a→fw-a': 14, 'cloud-b→fw-b': 15,
   'fw-a→core-a': 2, 'fw-b→core-b': 3,
   'wifi-ap→wlc': 7, 'wlc→core-a': 6,
   'core-a→core-b': 0, 'core-b→core-a': 1,
@@ -56,8 +68,8 @@ const CABLE_DURATIONS: Record<number, number> = {
   11: 3200, // Core B → Office switch (speed 0.25)
   12: 3500, // Core B → Corporate switch
   13: 5600, // VPN → Contractors (speed 0.2, longest)
-  14: 1000, // Cloud → FW-A
-  15: 1000, // Cloud → FW-B
+  14: 1000, // Cloud-A → FW-A
+  15: 1000, // Cloud-B → FW-B
   16: 2300, // Core B → BRS-02 inbound (speed 0.35)
   17: 2500, // BRS-02 → Core B outbound
 };
@@ -71,13 +83,14 @@ const BEAM_DOWN_MS = 2000;
 const LAUNCH_INTERVAL_MS = 3000;
 const MAX_IN_FLIGHT = 5;
 
-// ─── Route Resolution (mirrors _resolveRoute) ─────────────
+// ─── Route Resolution (dual-cloud model) ──────────────────
 
 interface RouteStep {
   type: 'materialize' | 'cable' | 'brs-render' | 'beam-down' | 'place-badge';
   cable?: number;
   from?: string;
   durationMs: number;
+  brsId?: string;
 }
 
 function getCable(from: string, to: string): number {
@@ -88,15 +101,37 @@ function getCable(from: string, to: string): number {
   return ADJACENCY_CABLES[`${from}→${to}`] ?? -1;
 }
 
-function resolveRoute(divTheme: string): { steps: RouteStep[]; rackSide: 'A' | 'B' } | null {
+function resolveRoute(
+  divTheme: string,
+  sameSideBias: number
+): { steps: RouteStep[]; rackSide: 'A' | 'B'; crossedTrunk: boolean; entrySide: 'A' | 'B' } | null {
   const topo = DIV_TOPOLOGY[divTheme];
   if (!topo) return null;
 
   const isWifi = Math.random() < 0.20;
-  const brs = true; // always attempt BRS
   const steps: RouteStep[] = [];
+  let crossedTrunk = false;
 
-  // Step 1: Materialize
+  // Determine entry side: biased toward home side, but can enter from either cloud
+  let entrySide: 'A' | 'B';
+  if (isWifi) {
+    // WiFi always enters via AP on Rack A side
+    entrySide = 'A';
+  } else {
+    // Dual-cloud random entry with configurable bias
+    const homeSide = topo.rackSide;
+    if (Math.random() < sameSideBias) {
+      entrySide = homeSide;
+    } else {
+      entrySide = homeSide === 'A' ? 'B' : 'A';
+    }
+  }
+
+  const entryFw = entrySide === 'A' ? 'fw-a' : 'fw-b';
+  const entryCore = entrySide === 'A' ? 'core-a' : 'core-b';
+  const entryCloud = entrySide === 'A' ? 'cloud-a' : 'cloud-b';
+
+  // Step 1: Materialize at entry cloud
   steps.push({ type: 'materialize', durationMs: MATERIALIZE_MS });
 
   // Step 2: Entry cables
@@ -106,43 +141,35 @@ function resolveRoute(divTheme: string): { steps: RouteStep[]; rackSide: 'A' | '
     const c2 = getCable('wlc', 'core-a');
     steps.push({ type: 'cable', cable: c2, from: 'wlc', durationMs: CABLE_DURATIONS[c2] || 2000 });
   } else {
-    const fwNode = topo.fw;
-    const c1 = getCable('cloud', fwNode);
-    steps.push({ type: 'cable', cable: c1, from: 'cloud', durationMs: CABLE_DURATIONS[c1] || 1000 });
+    const c1 = getCable(entryCloud, entryFw);
+    steps.push({ type: 'cable', cable: c1, from: entryCloud, durationMs: CABLE_DURATIONS[c1] || 1000 });
     // FW inspect pause
-    steps.push({ type: 'cable', cable: -1, from: fwNode, durationMs: FW_INSPECT_MS });
-    const c2 = getCable(fwNode, topo.core);
-    steps.push({ type: 'cable', cable: c2, from: fwNode, durationMs: CABLE_DURATIONS[c2] || 1300 });
+    steps.push({ type: 'cable', cable: -1, from: entryFw, durationMs: FW_INSPECT_MS });
+    const c2 = getCable(entryFw, entryCore);
+    steps.push({ type: 'cable', cable: c2, from: entryFw, durationMs: CABLE_DURATIONS[c2] || 1300 });
   }
 
-  let currentCore = isWifi ? 'core-a' : topo.core;
+  let currentCore = isWifi ? 'core-a' : entryCore;
 
-  // Step 3: BRS side trip — each rack has its own BRS
-  // WiFi always renders at BRS-01 (Core A). FW badges use their rack's BRS.
-  if (brs) {
-    const brsCore = isWifi ? 'core-a' : topo.core;
-    const brsNode = brsCore === 'core-a' ? 'brs' : 'brs-02';
-    const brsId = brsCore === 'core-a' ? 'brs-01' : 'brs-02';
+  // Step 3: BRS side trip — render at the entry side's BRS (badge is already there)
+  const brsNode = currentCore === 'core-a' ? 'brs' : 'brs-02';
+  const brsId = currentCore === 'core-a' ? 'brs-01' : 'brs-02';
 
-    if (currentCore !== brsCore) {
-      const xc = getCable(currentCore, brsCore);
-      steps.push({ type: 'cable', cable: xc, from: currentCore, durationMs: CABLE_DURATIONS[xc] || 5000 });
-      currentCore = brsCore;
-    }
-    const c1 = getCable(brsCore, brsNode);
-    steps.push({ type: 'cable', cable: c1, from: brsCore, durationMs: CABLE_DURATIONS[c1] || 2300 });
-    steps.push({ type: 'brs-render', durationMs: BRS_RENDER_MS, brsId } as any);
-    const c2 = getCable(brsNode, brsCore);
-    steps.push({ type: 'cable', cable: c2, from: brsNode, durationMs: CABLE_DURATIONS[c2] || 2500 });
-    currentCore = brsCore;
-  }
+  const c1brs = getCable(currentCore, brsNode);
+  steps.push({ type: 'cable', cable: c1brs, from: currentCore, durationMs: CABLE_DURATIONS[c1brs] || 2300 });
+  steps.push({ type: 'brs-render', durationMs: BRS_RENDER_MS, brsId });
+  const c2brs = getCable(brsNode, currentCore);
+  steps.push({ type: 'cable', cable: c2brs, from: brsNode, durationMs: CABLE_DURATIONS[c2brs] || 2500 });
 
-  // Step 4: Route to destination switch
+  // Step 4: Cross trunk if entry side ≠ destination side
   if (currentCore !== topo.core) {
     const xc = getCable(currentCore, topo.core);
-    steps.push({ type: 'cable', cable: xc, from: currentCore, durationMs: CABLE_DURATIONS[xc] || 2500 });
+    steps.push({ type: 'cable', cable: xc, from: currentCore, durationMs: CABLE_DURATIONS[xc] || 5000 });
+    currentCore = topo.core;
+    crossedTrunk = true;
   }
 
+  // Step 5: Route to destination switch
   if (topo.viaVpn) {
     const c1 = getCable('core-b', 'vpn');
     steps.push({ type: 'cable', cable: c1, from: 'core-b', durationMs: CABLE_DURATIONS[c1] || 2000 });
@@ -152,53 +179,53 @@ function resolveRoute(divTheme: string): { steps: RouteStep[]; rackSide: 'A' | '
     steps.push({ type: 'cable', cable: topo.switchCable, from: topo.core, durationMs: CABLE_DURATIONS[topo.switchCable] || 2000 });
   }
 
-  // Step 5: Beam down
+  // Step 6: Beam down
   steps.push({ type: 'beam-down', durationMs: BEAM_DOWN_MS });
 
-  // Step 6: Place badge
+  // Step 7: Place badge
   steps.push({ type: 'place-badge', durationMs: 0 });
 
-  return { steps, rackSide: topo.rackSide };
+  return { steps, rackSide: topo.rackSide, crossedTrunk, entrySide };
 }
 
 // ─── Simulation Engine ─────────────────────────────────────
 
-interface SimEvent {
-  time: number;
-  badgeId: number;
-  cable: number;
-  action: 'occupy' | 'release';
-}
-
 interface SimResult {
   badgeCount: number;
+  sameSideBias: number;
   totalTimeMs: number;
-  cableWaits: number;           // times a packet waited for a busy cable
-  maxCableWaitMs: number;       // longest cable wait in ms
+  cableWaits: number;
+  maxCableWaitMs: number;
   perCableWaits: Record<number, { count: number; totalMs: number; maxMs: number }>;
-  brsSkips: number;             // times BRS was busy, badge skipped side trip
-  brsRenders: Record<string, number>; // renders per BRS unit
-  maxBrsQueue: number;          // peak simultaneous BRS renders (max 2 with dual BRS)
-  maxInFlight: number;          // peak simultaneous in-flight packets
-  maxWaitMs: number;            // longest time a badge waited in scheduler queue
-  avgTransitMs: number;         // average badge transit time (launch to placed)
+  brsSkips: number;
+  brsRenders: Record<string, number>;
+  maxBrsQueue: number;
+  maxInFlight: number;
+  maxWaitMs: number;
+  avgTransitMs: number;
   minTransitMs: number;
   maxTransitMs: number;
   patchPanelCounts: Record<string, number>;
   throughputPerSec: number;
+  // Dual-cloud specific
+  trunkCrossings: number;       // badges that crossed the trunk
+  trunkCrossPct: number;        // % of badges that crossed trunk
+  entryDistribution: { A: number; B: number };  // how many entered each cloud
+  crossRackWaits: number;       // waits specifically on trunk cables (0, 1)
+  maxCrossRackWaitMs: number;   // longest trunk cable wait
 }
 
-function simulate(badgeCount: number): SimResult {
+function simulate(badgeCount: number, sameSideBias: number): SimResult {
   // Generate synthetic badges with random divisions
   const badges: { id: number; divTheme: string }[] = [];
   for (let i = 0; i < badgeCount; i++) {
     badges.push({ id: i, divTheme: DIVISIONS[Math.floor(Math.random() * DIVISIONS.length)] });
   }
 
-  // Simulation state — models real engine's busy-flag blocking
-  const cableFreeAt = new Map<number, number>(); // cable → time when cable becomes free
-  let cableWaits = 0;         // times a packet had to wait for a busy cable
-  let maxCableWaitMs = 0;     // longest cable wait
+  // Simulation state
+  const cableFreeAt = new Map<number, number>();
+  let cableWaits = 0;
+  let maxCableWaitMs = 0;
   const brsFreeAt: Record<string, number> = { 'brs-01': 0, 'brs-02': 0 };
   const brsRenders: Record<string, number> = { 'brs-01': 0, 'brs-02': 0 };
   let brsSkips = 0;
@@ -211,6 +238,12 @@ function simulate(badgeCount: number): SimResult {
   let totalTransitMs = 0;
   const patchCounts: Record<string, number> = {};
 
+  // Dual-cloud metrics
+  let trunkCrossings = 0;
+  const entryDist = { A: 0, B: 0 };
+  let crossRackWaits = 0;
+  let maxCrossRackWaitMs = 0;
+
   // Discrete event simulation
   let simTime = 0;
   let inFlight = 0;
@@ -218,7 +251,6 @@ function simulate(badgeCount: number): SimResult {
   const queue = [...badges];
   const completionEvents: { time: number; action: () => void }[] = [];
 
-  // Process queue in scheduler ticks
   let tick = 0;
   while (queue.length > 0 || completionEvents.length > 0) {
     // Process all completion events at or before current time
@@ -245,8 +277,7 @@ function simulate(badgeCount: number): SimResult {
       const badge = queue.splice(badgeIdx, 1)[0];
       if (simTime > maxWaitMs) maxWaitMs = simTime;
 
-      // Resolve route
-      const route = resolveRoute(badge.divTheme);
+      const route = resolveRoute(badge.divTheme, sameSideBias);
       if (!route) continue;
 
       const topo = DIV_TOPOLOGY[badge.divTheme];
@@ -254,21 +285,22 @@ function simulate(badgeCount: number): SimResult {
       inFlight++;
       if (inFlight > maxInFlight) maxInFlight = inFlight;
 
-      // Walk through route steps — model cable busy-flag blocking
-      // Each step starts after the previous completes, and may be delayed by cable busy
-      let cursor = simTime; // absolute time cursor for this badge
+      // Track dual-cloud metrics
+      entryDist[route.entrySide]++;
+      if (route.crossedTrunk) trunkCrossings++;
+
+      // Walk through route steps
+      let cursor = simTime;
       let skipBrs = false;
 
       for (const step of route.steps) {
         if (step.type === 'brs-render') {
-          const brsId = (step as any).brsId || 'brs-01';
-          // Check if BRS is free at cursor time
+          const brsId = step.brsId || 'brs-01';
           if (brsFreeAt[brsId] > cursor) {
             brsSkips++;
             skipBrs = true;
             continue;
           }
-          // Track concurrent BRS renders (both units can be rendering simultaneously)
           const concurrent = Object.values(brsFreeAt).filter(t => t > cursor).length + 1;
           if (concurrent > maxBrsConcurrent) maxBrsConcurrent = concurrent;
           brsFreeAt[brsId] = cursor + step.durationMs;
@@ -276,14 +308,12 @@ function simulate(badgeCount: number): SimResult {
           cursor += step.durationMs;
         } else if (step.type === 'cable') {
           if (step.cable == null || step.cable < 0) {
-            // Virtual step (FW inspect pause) — just add duration
             cursor += step.durationMs;
             continue;
           }
           if (skipBrs && (step.cable === 4 || step.cable === 5 || step.cable === 16 || step.cable === 17)) continue;
           skipBrs = false;
 
-          // Wait for cable to be free (models busy-flag blocking)
           const freeAt = cableFreeAt.get(step.cable) || 0;
           if (freeAt > cursor) {
             const waitMs = freeAt - cursor;
@@ -293,10 +323,15 @@ function simulate(badgeCount: number): SimResult {
             perCableWaits[step.cable].count++;
             perCableWaits[step.cable].totalMs += waitMs;
             if (waitMs > perCableWaits[step.cable].maxMs) perCableWaits[step.cable].maxMs = waitMs;
-            cursor = freeAt; // wait until cable is free
+            cursor = freeAt;
+
+            // Track trunk-specific waits
+            if (step.cable === 0 || step.cable === 1) {
+              crossRackWaits++;
+              if (waitMs > maxCrossRackWaitMs) maxCrossRackWaitMs = waitMs;
+            }
           }
 
-          // Occupy cable for duration
           cableFreeAt.set(step.cable, cursor + step.durationMs);
           cursor += step.durationMs;
         } else {
@@ -329,7 +364,6 @@ function simulate(badgeCount: number): SimResult {
       break;
     }
 
-    // Safety: prevent infinite loops
     if (simTime > badgeCount * 60_000) break;
   }
 
@@ -342,6 +376,7 @@ function simulate(badgeCount: number): SimResult {
 
   return {
     badgeCount,
+    sameSideBias,
     totalTimeMs: simTime,
     cableWaits,
     maxCableWaitMs,
@@ -356,6 +391,11 @@ function simulate(badgeCount: number): SimResult {
     maxTransitMs: Math.round(maxTransit),
     patchPanelCounts: patchCounts,
     throughputPerSec: Math.round((badgeCount / (simTime / 1000)) * 100) / 100,
+    trunkCrossings,
+    trunkCrossPct: Math.round((trunkCrossings / badgeCount) * 100),
+    entryDistribution: entryDist,
+    crossRackWaits,
+    maxCrossRackWaitMs,
   };
 }
 
@@ -369,7 +409,7 @@ const CABLE_NAMES: Record<number, string> = {
   8: 'Core A→IT', 9: 'Core A→Punk',
   10: 'VPN→Core B', 11: 'Core B→Office',
   12: 'Core B→Corp', 13: 'VPN→Contractors',
-  14: 'Cloud→FW-A', 15: 'Cloud→FW-B',
+  14: 'Cloud-A→FW-A', 15: 'Cloud-B→FW-B',
   16: 'Core B→BRS-02 in', 17: 'BRS-02→Core B out',
 };
 
@@ -382,20 +422,31 @@ function printReport(r: SimResult) {
     return '█'.repeat(filled) + '░'.repeat(width - filled);
   };
 
-  console.log(`\n── ${r.badgeCount} BADGES ─────────────────────────────────`);
+  const biasLabel = r.sameSideBias === 1.0 ? 'home-only (baseline)'
+    : r.sameSideBias === 0.5 ? 'pure random (50/50)'
+    : `${Math.round(r.sameSideBias * 100)}% home-side`;
+
+  console.log(`\n── ${r.badgeCount} BADGES | ${biasLabel} ──────────────────`);
   console.log(`  Total time:      ${sec(r.totalTimeMs)}`);
   console.log(`  Throughput:      ${r.throughputPerSec} badges/sec`);
   console.log(`  Transit:         ${sec(r.avgTransitMs)} avg | ${sec(r.minTransitMs)} min | ${sec(r.maxTransitMs)} max`);
   console.log(`  Max queue wait:  ${sec(r.maxWaitMs)}`);
   console.log(`  Max in-flight:   ${r.maxInFlight} / ${MAX_IN_FLIGHT}`);
 
+  console.log(`\n  Cloud entry:     A: ${r.entryDistribution.A} | B: ${r.entryDistribution.B}`);
+  console.log(`  Trunk crossings: ${r.trunkCrossings} (${r.trunkCrossPct}% of badges)`);
+
   console.log(`\n  Cable congestion:  ${r.cableWaits} waits | max ${sec(r.maxCableWaitMs)} wait`);
+  if (r.crossRackWaits > 0) {
+    console.log(`  Trunk congestion:  ${r.crossRackWaits} waits | max ${sec(r.maxCrossRackWaitMs)} wait  ⚠ TRUNK`);
+  }
   if (Object.keys(r.perCableWaits).length > 0) {
     const sorted = Object.entries(r.perCableWaits).sort((a, b) => b[1].count - a[1].count);
-    for (const [cable, stats] of sorted.slice(0, 5)) {
+    for (const [cable, stats] of sorted.slice(0, 8)) {
       const name = (CABLE_NAMES[Number(cable)] || `Cable ${cable}`).padEnd(20);
       const avg = Math.round(stats.totalMs / stats.count);
-      console.log(`    ${name} ${String(stats.count).padStart(3)}× wait | avg ${sec(avg)} | max ${sec(stats.maxMs)}`);
+      const isTrunk = Number(cable) === 0 || Number(cable) === 1;
+      console.log(`    ${name} ${String(stats.count).padStart(3)}× wait | avg ${sec(avg)} | max ${sec(stats.maxMs)}${isTrunk ? ' ⚠' : ''}`);
     }
   }
 
@@ -422,23 +473,72 @@ function printIntegrity(r: SimResult) {
     `${r.maxInFlight}/${MAX_IN_FLIGHT}`);
   pass('Dual BRS concurrent renders ≤ 2', r.maxBrsQueue <= 2,
     `max ${r.maxBrsQueue} concurrent`);
+  pass('Trunk wait under 10s', r.maxCrossRackWaitMs < 10000,
+    `max ${(r.maxCrossRackWaitMs / 1000).toFixed(1)}s`);
   pass('All badges placed', true);
+}
+
+// ─── Comparison Table ─────────────────────────────────────
+
+function printComparison(results: SimResult[]) {
+  // Group by badge count, compare bias ratios
+  const byCounts = new Map<number, SimResult[]>();
+  for (const r of results) {
+    if (!byCounts.has(r.badgeCount)) byCounts.set(r.badgeCount, []);
+    byCounts.get(r.badgeCount)!.push(r);
+  }
+
+  const sec = (ms: number) => (ms / 1000).toFixed(1) + 's';
+
+  console.log(`\n══ COMPARISON TABLE ═══════════════════════════════════════════════════════════════`);
+  console.log(`  Bias     Badges  AvgTransit  MaxTransit  TrunkX%  CableWaits  TrunkWaits  MaxTrunkWait  BRS-Skip%  Throughput`);
+  console.log(`  ─────    ──────  ──────────  ──────────  ───────  ──────────  ──────────  ────────────  ─────────  ──────────`);
+
+  for (const [count, runs] of byCounts) {
+    for (const r of runs) {
+      const biasStr = r.sameSideBias === 1.0 ? '100%' : r.sameSideBias === 0.5 ? ' 50%' : ` ${Math.round(r.sameSideBias * 100)}%`;
+      console.log(
+        `  ${biasStr}   ` +
+        `${String(r.badgeCount).padStart(6)}  ` +
+        `${sec(r.avgTransitMs).padStart(10)}  ` +
+        `${sec(r.maxTransitMs).padStart(10)}  ` +
+        `${String(r.trunkCrossPct + '%').padStart(7)}  ` +
+        `${String(r.cableWaits).padStart(10)}  ` +
+        `${String(r.crossRackWaits).padStart(10)}  ` +
+        `${sec(r.maxCrossRackWaitMs).padStart(12)}  ` +
+        `${(Math.round(r.brsSkips / r.badgeCount * 100) + '%').padStart(9)}  ` +
+        `${String(r.throughputPerSec).padStart(10)}`
+      );
+    }
+    if ([...byCounts.keys()].indexOf(count) < byCounts.size - 1) {
+      console.log(`  ─────    ──────  ──────────  ──────────  ───────  ──────────  ──────────  ────────────  ─────────  ──────────`);
+    }
+  }
 }
 
 // ─── Run ───────────────────────────────────────────────────
 
 console.log(`\n══════════════════════════════════════════════`);
 console.log(`  RACK PACKET STRESS TEST SIMULATOR`);
+console.log(`  Dual-Cloud Model — Bias Sweep`);
 console.log(`══════════════════════════════════════════════`);
 
+const allResults: SimResult[] = [];
+
 for (const count of BADGE_COUNTS) {
-  const result = simulate(count);
-  printReport(result);
+  for (const bias of BIAS_RATIOS) {
+    const result = simulate(count, bias);
+    allResults.push(result);
+    printReport(result);
+  }
 }
 
-console.log(`\n── INTEGRITY CHECKS ──────────────────────────`);
-// Run final integrity on largest count
-const finalResult = simulate(BADGE_COUNTS[BADGE_COUNTS.length - 1]);
-printIntegrity(finalResult);
+// Print comparison table
+printComparison(allResults);
+
+// Integrity checks at 200 badges, 50% bias (worst case)
+console.log(`\n── INTEGRITY CHECKS (200 badges, 50% bias — worst case) ──`);
+const worstCase = simulate(200, 0.5);
+printIntegrity(worstCase);
 
 console.log(`\n══════════════════════════════════════════════\n`);

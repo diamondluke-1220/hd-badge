@@ -385,10 +385,17 @@ window.RackRenderer = {
       this._zoomScale = scale;
       // Lock the container — no scrollbar
       wrapper.style.overflow = 'hidden';
-      // Tighten padding when zoomed to maximize space
+      // Strip padding to maximize viewport for content
       if (scale < 0.95) {
         wrapper.style.paddingTop = '4px';
-        wrapper.style.paddingBottom = '4px';
+        wrapper.style.paddingBottom = '0';
+      }
+      // Recalculate with reduced padding to use reclaimed space
+      const newViewportH = wrapper.clientHeight - (parseFloat(wrapper.style.paddingTop) || 0);
+      const finalScale = Math.min(1, newViewportH / contentH, scaleW);
+      if (finalScale !== scale) {
+        inner.style.transform = `scale(${finalScale.toFixed(4)})`;
+        this._zoomScale = finalScale;
       }
     });
   },
@@ -402,10 +409,24 @@ window.RackRenderer = {
     const wrapper = document.createElement('div');
     wrapper.className = 'rack-container';
 
-    // Single centered internet cloud
+    // Dual internet clouds — one per rack, aligned with rack columns
     const cloudsRow = document.createElement('div');
     cloudsRow.className = 'rack-clouds-row';
-    cloudsRow.appendChild(this._renderInternetCloud('A'));
+    if (this._dualMode) {
+      const colA = document.createElement('div');
+      colA.className = 'rack-cloud-col';
+      colA.setAttribute('data-cloud-col', 'A');
+      colA.appendChild(this._renderInternetCloud('A'));
+      cloudsRow.appendChild(colA);
+
+      const colB = document.createElement('div');
+      colB.className = 'rack-cloud-col';
+      colB.setAttribute('data-cloud-col', 'B');
+      colB.appendChild(this._renderInternetCloud('B'));
+      cloudsRow.appendChild(colB);
+    } else {
+      cloudsRow.appendChild(this._renderInternetCloud('A'));
+    }
     wrapper.appendChild(cloudsRow);
 
     // Rack columns with above-rack devices
@@ -644,7 +665,7 @@ window.RackRenderer = {
         <path class="rack-cloud-fill" d="M30,50 Q10,50 10,38 Q10,28 20,25 Q18,15 28,12 Q38,5 50,10 Q55,3 68,6 Q78,2 88,10 Q100,8 105,20 Q115,22 112,35 Q115,48 100,50 Z"/>
         <text x="60" y="36" text-anchor="middle" class="rack-cloud-text">INTERNET</text>
       </svg>
-      <div class="rack-cloud-anchor" data-port-id="cloud-out"></div>
+      <div class="rack-cloud-anchor" data-port-id="cloud-${side.toLowerCase()}-out"></div>
     `;
     return el;
   },
@@ -1349,9 +1370,9 @@ window.RackRenderer = {
     ['core-b-corporate-uplink', 'sw-Corporate-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     // VPN → Contractors: down from VPN, right gutter between UPS/switch, curve up to SFP
     ['vpn-contractor-downlink', 'sw-custom-spare', '#3B82F6', 2.5, 'under-and-up'],
-    // Cloud → Firewalls: visible WAN uplinks from the internet
-    ['cloud-out', 'fw-a-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
-    ['cloud-out', 'fw-b-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
+    // Cloud → Firewalls: each rack has its own internet cloud
+    ['cloud-a-out', 'fw-a-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
+    ['cloud-b-out', 'fw-b-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
     // BRS-02 on Rack B — short straight drops (BRS-02 sits directly below Core B)
     ['core-b-brs02-inbound', 'brs-02-core-uplink', '#3B82F6', 2.5, 'drop-straight'],
     ['brs-02-core-outbound', 'core-b-brs02-outbound', '#3B82F6', 2.5, 'drop-straight'],
@@ -1362,7 +1383,7 @@ window.RackRenderer = {
   // Nodes = devices, edges = cables (or virtual links for cloud/switch→patch).
 
   _TOPOLOGY_NODES: [
-    'cloud', 'fw-a', 'fw-b', 'core-a', 'core-b', 'brs', 'brs-02', 'wlc', 'wifi-ap', 'vpn',
+    'cloud-a', 'cloud-b', 'fw-a', 'fw-b', 'core-a', 'core-b', 'brs', 'brs-02', 'wlc', 'wifi-ap', 'vpn',
     'sw-IT', 'sw-Punk', 'sw-Office', 'sw-Corporate', 'sw-custom',
     'patch-IT', 'patch-Punk', 'patch-Office', 'patch-Corporate', 'patch-custom',
   ],
@@ -1390,7 +1411,7 @@ window.RackRenderer = {
     'core-b-brs02-inbound': 'core-b', 'core-b-brs02-outbound': 'core-b',
     'vpn-core-uplink': 'vpn', 'vpn-contractor-downlink': 'vpn',
     'wifi-ap-eth': 'wifi-ap',
-    'cloud-out': 'cloud',
+    'cloud-a-out': 'cloud-a', 'cloud-b-out': 'cloud-b',
   },
 
   // Cable indices that are strictly one-way (cross-rack trunks + BRS in/out)
@@ -1734,26 +1755,28 @@ window.RackRenderer = {
   // Cached positions for cloud drops and switch→patch drops, relative to framesRow.
   // Recalculated on render and resize.
 
-  _virtualCoords: null, // { cloud: {x,y}, fwWan: {a:{x,y}, b:{x,y}}, wifiAp: {x,y}, switchBottom: {theme:{x,y}} }
+  _virtualCoords: null, // { cloudA: {x,y}, cloudB: {x,y}, fwWan: {a:{x,y}, b:{x,y}}, wifiAp: {x,y}, switchBottom: {theme:{x,y}} }
 
   _computeVirtualCoords(container) {
     const framesRow = container.querySelector('.rack-frames-row');
     if (!framesRow) return;
     const ref = framesRow.getBoundingClientRect();
 
-    const coords = { cloud: null, fwWan: {}, wifiAp: null, switchBottom: {} };
+    const coords = { cloudA: null, cloudB: null, fwWan: {}, wifiAp: null, switchBottom: {} };
 
     const s = this._zoomScale || 1;
 
-    // Cloud bottom-center (cloud is above framesRow, so y will be negative)
-    const cloud = container.querySelector('[data-device-type="cloud"]');
-    if (cloud) {
-      const cr = cloud.getBoundingClientRect();
-      coords.cloud = {
-        x: (cr.left + cr.width / 2 - ref.left) / s,
-        y: (cr.bottom - ref.top) / s,
-      };
-    }
+    // Per-cloud bottom-center coords (clouds are above framesRow, so y will be negative)
+    ['A', 'B'].forEach(side => {
+      const cloud = container.querySelector(`[data-cloud-side="${side}"]`);
+      if (cloud) {
+        const cr = cloud.getBoundingClientRect();
+        coords[`cloud${side}`] = {
+          x: (cr.left + cr.width / 2 - ref.left) / s,
+          y: (cr.bottom - ref.top) / s,
+        };
+      }
+    });
 
     // Firewall WAN ports
     ['a', 'b'].forEach(side => {
@@ -1857,7 +1880,7 @@ window.RackRenderer = {
 
   // Cable lookup: which cable connects two adjacent nodes?
   _ADJACENCY_CABLES: {
-    'cloud→fw-a': 14, 'cloud→fw-b': 15,
+    'cloud-a→fw-a': 14, 'cloud-b→fw-b': 15,
     'fw-a→core-a': 2, 'fw-b→core-b': 3,
     'wifi-ap→wlc': 7, 'wlc→core-a': 6,
     'core-a→core-b': 0, 'core-b→core-a': 1,
@@ -1886,11 +1909,24 @@ window.RackRenderer = {
     const steps = [];
     const isWifi = (entryType === 'wifi');
 
+    // Determine entry side: dual-cloud model with 70% home-side bias
+    // WiFi always enters via AP on Rack A. Internet badges randomly pick a cloud.
+    let entrySide;
+    if (isWifi) {
+      entrySide = 'A';
+    } else {
+      const homeSide = topo.rackSide;
+      entrySide = Math.random() < this._ENTRY_HOMESIDE_BIAS ? homeSide : (homeSide === 'A' ? 'B' : 'A');
+    }
+    const entryCloud = entrySide === 'A' ? 'cloud-a' : 'cloud-b';
+    const entryFw = entrySide === 'A' ? 'fw-a' : 'fw-b';
+    const entryCore = entrySide === 'A' ? 'core-a' : 'core-b';
+
     // Step 1: Materialize at entry point
     steps.push({
       type: 'materialize',
       mode: isWifi ? 'wifi' : 'cloud',
-      node: isWifi ? 'wifi-ap' : 'cloud',
+      node: isWifi ? 'wifi-ap' : entryCloud,
     });
 
     // Step 2: Entry cables to first core
@@ -1900,23 +1936,21 @@ window.RackRenderer = {
       steps.push({ type: 'cable', cable: this._getCable('wifi-ap', 'wlc'), from: 'wifi-ap', trigger: 'wlc-bump' });
       steps.push({ type: 'cable', cable: this._getCable('wlc', 'core-a'), from: 'wlc' });
     } else {
-      // Internet: Cloud → FW → Core
-      const fwNode = topo.fw; // 'fw-a' or 'fw-b'
-      // FW inspect fires when packet arrives at FW (not when it leaves for core)
+      // Internet: Cloud → FW → Core (entry side, may differ from destination)
       steps.push({
-        type: 'cable', cable: this._getCable('cloud', fwNode), from: 'cloud',
-        trigger: 'fw-inspect', triggerNode: fwNode, pause: 1200,
+        type: 'cable', cable: this._getCable(entryCloud, entryFw), from: entryCloud,
+        trigger: 'fw-inspect', triggerNode: entryFw, pause: 1200,
       });
-      steps.push({ type: 'cable', cable: this._getCable(fwNode, topo.core), from: fwNode });
+      steps.push({ type: 'cable', cable: this._getCable(entryFw, entryCore), from: entryFw });
     }
 
     // Current position after entry cables
-    let currentCore = isWifi ? 'core-a' : topo.core;
+    let currentCore = isWifi ? 'core-a' : entryCore;
 
     // Step 3: BRS side trip — each rack has its own BRS
-    // WiFi always renders at BRS-01 (already at Core A). FW badges use their rack's BRS.
+    // BRS renders at entry side's BRS — badge is already at entry core, no extra cross-rack
     if (brs) {
-      const brsCore = isWifi ? 'core-a' : topo.core;
+      const brsCore = currentCore; // wherever we are after entry
       const brsNode = brsCore === 'core-a' ? 'brs' : 'brs-02';
       const brsId = brsCore === 'core-a' ? 'brs-01' : 'brs-02';
 
@@ -1972,9 +2006,10 @@ window.RackRenderer = {
     return {
       steps,
       entry: entryType,
+      entrySide,
       divTheme,
       rackSide: topo.rackSide,
-      fw: topo.fw,
+      fw: isWifi ? topo.fw : entryFw,
     };
   },
 
@@ -2001,6 +2036,7 @@ window.RackRenderer = {
   _ingressQueue: [],
   _inFlightCount: 0,
   _MAX_IN_FLIGHT: 5,
+  _ENTRY_HOMESIDE_BIAS: 0.7, // probability badge enters from its destination rack's cloud
   _LAUNCH_INTERVAL: 3000, // ms between launches
   _schedulerTimer: null,
   _brsBusy: { 'brs-01': false, 'brs-02': false },
@@ -2192,23 +2228,32 @@ window.RackRenderer = {
 
   _startCloudRain() {
     if (this._cloudRainFrame) return;
-    if (!this._cableSvg || !this._virtualCoords?.cloud) return;
+    if (!this._cableSvg) return;
+    const cloudA = this._virtualCoords?.cloudA;
+    const cloudB = this._virtualCoords?.cloudB;
+    if (!cloudA && !cloudB) return;
 
     const svg = this._cableSvg;
-    const cloud = this._virtualCoords.cloud;
+    const clouds = [];
+    if (cloudA) clouds.push(cloudA);
+    if (cloudB) clouds.push(cloudB);
     const colors = ['#5B8DEF', '#93C5FD', '#B4D4FF', '#FFFFFF', '#3B6FCF'];
-    const maxDrops = 48;
+    const maxDrops = 24; // per cloud (48 total for dual, same density as before)
 
-    // Cloud bounds — cloud SVG is ~200x100, centered. cloud.x/y is bottom-center.
-    // Approximate the cloud interior as an ellipse
     const cloudW = 75; // half-width of rain zone
     const cloudH = 70; // height of cloud above bottom edge
-    const cloudTop = cloud.y - cloudH;
-    const cloudBot = cloud.y - 5; // stop just inside bottom edge
 
-    // Spawn a new digit every 200-400ms
+    // Spawn a new digit every 200-400ms, alternating between clouds
+    let spawnIdx = 0;
     this._cloudRainTimer = setInterval(() => {
-      if (this._cloudRainDrops.length >= maxDrops) return;
+      if (this._cloudRainDrops.length >= maxDrops * clouds.length) return;
+
+      // Alternate spawn between clouds
+      const cloud = clouds[spawnIdx % clouds.length];
+      spawnIdx++;
+
+      const cloudTop = cloud.y - cloudH;
+      const cloudBot = cloud.y - 5;
 
       const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       txt.textContent = Math.random() < 0.5 ? '0' : '1';
@@ -2218,7 +2263,6 @@ window.RackRenderer = {
       txt.setAttribute('text-anchor', 'middle');
       txt.classList.add('rack-cloud-rain-digit');
 
-      // Start near top of cloud, random x within cloud width
       const startX = cloud.x + (Math.random() - 0.5) * cloudW * 1.4;
       const startY = cloudTop + Math.random() * 10;
       txt.setAttribute('x', startX);
@@ -2232,7 +2276,7 @@ window.RackRenderer = {
         y: startY,
         speed: 12 + Math.random() * 20,
         fadeInY: startY + 5,
-        maxY: cloudBot, // stop inside the cloud
+        maxY: cloudBot,
         opacity: 0.3 + Math.random() * 0.4,
       });
     }, 200 + Math.random() * 200);
@@ -2294,9 +2338,9 @@ window.RackRenderer = {
   },
 
   // Red rain precursor — briefly contaminate the cloud rain with red digits before a threat drops
-  _spawnThreatRain() {
+  _spawnThreatRain(side = 'A') {
     const svg = this._cableSvg;
-    const cloud = this._virtualCoords?.cloud;
+    const cloud = side === 'A' ? this._virtualCoords?.cloudA : this._virtualCoords?.cloudB;
     if (!svg || !cloud) return Promise.resolve();
 
     const cloudW = 75;
@@ -2372,14 +2416,15 @@ window.RackRenderer = {
   async _fireThreatPacket() {
     if (!this._container || !this._cableSvg || !this._virtualCoords) return;
 
-    // Pick random firewall
+    // Pick random firewall — threat comes from that side's cloud
     const side = Math.random() < 0.5 ? 'A' : 'B';
     const fwNode = side === 'A' ? 'fw-a' : 'fw-b';
-    const cableIndex = this._getCable('cloud', fwNode);
+    const cloudNode = side === 'A' ? 'cloud-a' : 'cloud-b';
+    const cableIndex = this._getCable(cloudNode, fwNode);
     if (cableIndex == null) return;
 
-    // Red rain precursor — inject red binary digits into cloud rain before threat drops
-    await this._spawnThreatRain();
+    // Red rain precursor — inject red binary digits into the correct cloud
+    await this._spawnThreatRain(side);
 
     // Create red threat dot (small, no portrait)
     const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -2399,15 +2444,16 @@ window.RackRenderer = {
     g.appendChild(ring);
     this._cableSvg.appendChild(g);
 
-    // Position at cloud
-    const cloud = this._virtualCoords.cloud;
+    // Position at correct cloud
+    const cloud = side === 'A' ? this._virtualCoords.cloudA : this._virtualCoords.cloudB;
+    if (!cloud) return;
     g.setAttribute('transform', `translate(${cloud.x},${cloud.y})`);
     g.setAttribute('opacity', '1');
 
     const pkt = { el: g };
 
     // Animate along cloud→FW cable
-    await this._movePacketAlongCable(pkt, cableIndex, 'cloud', 0.5);
+    await this._movePacketAlongCable(pkt, cableIndex, cloudNode, 0.5);
 
     // Reject at firewall
     const fwEl = this._container.querySelector(`[data-fw-side="${side}"]`);
@@ -2722,6 +2768,23 @@ window.RackRenderer = {
     this._idleTrafficTimers = [];
   },
 
+  // Resolve materialize step coords and fire visual trigger
+  _getMaterializeCoords(node) {
+    if (node === 'wifi-ap') return this._virtualCoords?.wifiAp;
+    if (node === 'cloud-a') return this._virtualCoords?.cloudA;
+    if (node === 'cloud-b') return this._virtualCoords?.cloudB;
+    return null;
+  },
+
+  _fireMaterializeTrigger(node) {
+    if (node === 'wifi-ap') {
+      this._triggerFlash(this._container.querySelector('.rack-device-wifi'), 'rack-trigger-wifi-burst', 1200);
+    } else {
+      const cloudSide = node === 'cloud-a' ? 'A' : 'B';
+      this._triggerFlash(this._container.querySelector(`[data-cloud-side="${cloudSide}"]`), 'rack-trigger-cloud-pulse', 1200);
+    }
+  },
+
   // Badge materialization — two modes:
   //   'cloud': blue/white binary rain from cloud, assembles portrait top-down
   //   'wifi':  green signal fragments radiate from antennas, get captured, assemble portrait top-down
@@ -3030,13 +3093,9 @@ window.RackRenderer = {
 
       switch (step.type) {
         case 'materialize': {
-          const coords = step.node === 'wifi-ap' ? this._virtualCoords?.wifiAp : this._virtualCoords?.cloud;
+          const coords = this._getMaterializeCoords(step.node);
           if (coords) {
-            if (step.node === 'wifi-ap') {
-              this._triggerFlash(this._container.querySelector('.rack-device-wifi'), 'rack-trigger-wifi-burst', 1200);
-            } else {
-              this._triggerFlash(this._container.querySelector('[data-device-type="cloud"]'), 'rack-trigger-cloud-pulse', 1200);
-            }
+            this._fireMaterializeTrigger(step.node);
             await this._materializeBadge(pkt, coords.x, coords.y, 1200, step.mode);
           }
           break;
@@ -3509,7 +3568,7 @@ window.RackRenderer = {
     4: 'Core A → BRS (in)', 5: 'BRS → Core A (out)', 6: 'WLC → Core A', 7: 'WLC ↔ WiFi AP',
     8: 'Core A → IT Switch', 9: 'Core A → Punk Switch', 10: 'VPN ↔ Core B',
     11: 'Core B → Office Switch', 12: 'Core B → Corporate Switch', 13: 'VPN → Contractors',
-    14: 'Cloud → FW-A', 15: 'Cloud → FW-B',
+    14: 'Cloud-A → FW-A', 15: 'Cloud-B → FW-B',
   },
 
   _toggleDebug() {
@@ -3695,7 +3754,7 @@ window.RackRenderer = {
 
     // Log the full resolved route
     this._debugLog(`Badge: ${name} | Dept: ${dept} | Theme: ${divTheme}`);
-    this._debugLog(`Entry: ${route.entry} | Rack: ${route.rackSide} | Steps: ${route.steps.length}`);
+    this._debugLog(`Entry: ${route.entry}${route.entrySide ? ` (${route.entrySide})` : ''} | Rack: ${route.rackSide} | Steps: ${route.steps.length}`);
     const stepSummary = route.steps
       .filter(s => s.type === 'cable')
       .map(s => this._CABLE_NAMES[s.cable] || `C${s.cable}`)
@@ -3717,16 +3776,11 @@ window.RackRenderer = {
 
         switch (step.type) {
           case 'materialize': {
-            const label = step.mode === 'wifi' ? 'WiFi AP' : 'Cloud';
-            await this._debugWaitStep(`Materialize on ${label}`);
-            // Delegate to _executeRoute for single step
-            const coords = step.node === 'wifi-ap' ? this._virtualCoords?.wifiAp : this._virtualCoords?.cloud;
+            const cloudLabel = step.node === 'cloud-a' ? 'Cloud-A' : step.node === 'cloud-b' ? 'Cloud-B' : step.node === 'wifi-ap' ? 'WiFi AP' : 'Cloud';
+            await this._debugWaitStep(`Materialize on ${cloudLabel}`);
+            const coords = this._getMaterializeCoords(step.node);
             if (coords) {
-              if (step.node === 'wifi-ap') {
-                this._triggerFlash(this._container.querySelector('.rack-device-wifi'), 'rack-trigger-wifi-burst', 1200);
-              } else {
-                this._triggerFlash(this._container.querySelector('[data-device-type="cloud"]'), 'rack-trigger-cloud-pulse', 1200);
-              }
+              this._fireMaterializeTrigger(step.node);
               await this._materializeBadge(pkt, coords.x, coords.y, 1200, step.mode);
             }
             this._debugLog('✓ Materialized');

@@ -316,18 +316,37 @@ body.view-rack .public-orgchart {
 
 /* ─── Internet Cloud ─────────────────────────────────────── */
 
-/* Clouds row — spans full width, pushes clouds to outer edges */
+/* Clouds row — flex container matching rack-frames-row alignment */
 .rack-clouds-row {
   display: flex;
   justify-content: center;
   width: 100%;
   max-width: 1280px;
+  gap: 60px; /* match .rack-frames-row gap */
   margin-bottom: 8px;
+}
+
+/* Each cloud sits in a wrapper sized to its rack column */
+.rack-cloud-col {
+  width: 580px; /* match .rack-frame width */
+  min-width: 420px;
+  display: flex;
+  justify-content: center;
 }
 
 .rack-internet-cloud {
   display: flex;
   position: relative;
+}
+
+/* Cloud-A: nudge right to clear WiFi AP on left */
+.rack-cloud-col[data-cloud-col="A"] .rack-internet-cloud {
+  margin-left: 60px;
+}
+
+/* Cloud-B: nudge left by same amount (mirrored) */
+.rack-cloud-col[data-cloud-col="B"] .rack-internet-cloud {
+  margin-right: 60px;
 }
 
 .rack-cloud-anchor {
