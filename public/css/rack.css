@@ -838,7 +838,7 @@ body.view-rack .public-orgchart {
 }
 
 .rack-brs-throughput {
-  font-size: 8px;
+  font-size: 10px;
   font-family: 'JetBrains Mono', monospace;
   color: var(--text-muted);
   letter-spacing: 0.5px;
@@ -886,7 +886,7 @@ body.view-rack .public-orgchart {
 }
 
 .rack-brs-lcd-header {
-  font-size: 7px;
+  font-size: 9px;
   font-family: 'JetBrains Mono', monospace;
   color: rgba(0, 0, 0, 0.6);
   letter-spacing: 0.5px;
@@ -1632,8 +1632,8 @@ body.view-rack .public-orgchart {
 
 /* LCD with cycling pages + glow pulse */
 .rack-ups-lcd {
-  width: 100px;
-  height: 28px;
+  width: 110px;
+  height: 32px;
   background: #38BDF8;
   border: 1px solid rgba(56, 189, 248, 0.6);
   border-radius: 3px;
@@ -1673,7 +1673,7 @@ body.view-rack .public-orgchart {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 8px;
+  font-size: 10px;
   font-family: 'JetBrains Mono', monospace;
   color: #0A1520;
   font-weight: 700;
