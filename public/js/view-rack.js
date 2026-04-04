@@ -2290,8 +2290,12 @@ window.RackRenderer = {
 
     // Snapshot panel state once per tick
     const panelSnapshot = {};
+    let totalDisplayed = 0;
+    let totalCapacity = 0;
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
       panelSnapshot[div] = this._getPanelContents(div);
+      totalDisplayed += panelSnapshot[div].length;
+      totalCapacity += this._DIV_TOPOLOGY[div]?.panelCap || 12;
     }
 
     // Multi-dispatch: fill all available in-flight slots this tick
@@ -2303,29 +2307,37 @@ window.RackRenderer = {
       dispatched++;
     }
 
+    if (dispatched > 0) {
+      console.log(`[rack-drain] dispatched=${dispatched} inFlight=${this._inFlightCount} displayed=${totalDisplayed}/${totalCapacity}`);
+    }
+
     // If nothing was dispatched this tick, check if drain is complete
-    if (dispatched === 0 && this._inFlightCount === 0) {
-      // No badges to dispatch and no animations running → drain done
-      this._verifyPanelIntegrity();
-      if (this._anyPanelFull()) {
-        this._schedulerState = 'settling';
-        this._settleTimer = setTimeout(() => {
-          this._settleTimer = null;
-          this._schedulerState = 'rotating';
-          this._startRotation();
-        }, this._SETTLE_PERIOD_MS);
-      } else {
-        this._schedulerState = 'idle';
+    if (dispatched === 0) {
+      console.log(`[rack-drain] no dispatch: inFlight=${this._inFlightCount} displayed=${totalDisplayed}/${totalCapacity} pool=${this._badgePool.length}`);
+      if (this._inFlightCount === 0) {
+        // No badges to dispatch and no animations running → drain done
+        console.log(`[rack-drain] ✓ DRAIN COMPLETE — transitioning to ${this._anyPanelFull() ? 'settling (30s)' : 'idle'}`);
+        this._verifyPanelIntegrity();
+        if (this._anyPanelFull()) {
+          this._schedulerState = 'settling';
+          this._settleTimer = setTimeout(() => {
+            this._settleTimer = null;
+            this._schedulerState = 'rotating';
+            console.log('[rack-drain] ✓ SETTLE COMPLETE — starting rotation');
+            this._startRotation();
+          }, this._SETTLE_PERIOD_MS);
+        } else {
+          this._schedulerState = 'idle';
+        }
       }
     }
-    // If nothing dispatched but animations still running, just wait —
-    // slots will free up and next tick will either dispatch or complete
   },
 
   // Find next eligible badge for drain dispatch (with rack alternation)
   _findEligibleBadge(panelSnapshot) {
     const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
     let fallback = null;
+    let skipReasons = { full: 0, displayed: 0, divBusy: 0, wrongSide: 0 };
 
     for (let attempt = 0; attempt < 12; attempt++) {
       const poolEntry = this._advancePool();
@@ -2334,19 +2346,23 @@ window.RackRenderer = {
       const panelContents = panelSnapshot[poolEntry.divTheme] || [];
       const cap = this._DIV_TOPOLOGY[poolEntry.divTheme]?.panelCap || 12;
 
-      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) continue;
-      if (panelContents.includes(poolEntry.badge.employeeId)) continue;
-      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) continue;
+      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) { skipReasons.full++; continue; }
+      if (panelContents.includes(poolEntry.badge.employeeId)) { skipReasons.displayed++; continue; }
+      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) { skipReasons.divBusy++; continue; }
 
       const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
       if (topo?.rackSide !== preferSide && !fallback) {
         fallback = poolEntry;
+        skipReasons.wrongSide++;
         continue;
       }
 
       return poolEntry;
     }
 
+    if (!fallback) {
+      console.log(`[rack-drain] _findEligible: no match in 12 attempts — full:${skipReasons.full} displayed:${skipReasons.displayed} divBusy:${skipReasons.divBusy} wrongSide:${skipReasons.wrongSide}`);
+    }
     return fallback;
   },
 
@@ -2373,6 +2389,7 @@ window.RackRenderer = {
   _startRotation() {
     if (this._schedulerState !== 'rotating') return;
     if (this._badgePool.length === 0) return;
+    console.log(`[rack-rotation] ✓ ROTATION STARTED — pool: ${this._badgePool.length} badges`);
     this._runRotationLoop();
   },
 
