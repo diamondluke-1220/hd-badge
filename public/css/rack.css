@@ -1339,6 +1339,7 @@ body.view-rack .public-orgchart {
 }
 
 .rack-patch-label {
+  display: none; /* redundant with switch label above */
   position: absolute;
   left: 4px;
   top: 2px;
@@ -1363,8 +1364,8 @@ body.view-rack .public-orgchart {
 }
 
 .rack-port {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 3px;
   overflow: hidden;
   border: 2px solid var(--border);

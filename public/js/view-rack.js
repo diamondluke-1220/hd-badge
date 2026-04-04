@@ -111,14 +111,26 @@ window.RackRenderer = {
     if (this._poolCursor > 0) this._poolCursor++;
 
     // If rotation is active, the rotation scheduler will pick this badge up
-    // (it's at the front of the pool so it gets priority via cursor position)
     if (this._rotationMode) {
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
       return null;
     }
 
-    // Queue for animated ingress when cable animation is available (pre-rotation)
+    // Check if this badge's target panel is full — if so, start rotation
     if (this._dualMode && this._cableSvg) {
+      const panel = this._panelContents[divTheme];
+      const cap = divTheme === '_custom' ? 24 : 12;
+      if (panel && panel.length >= cap) {
+        // Panel full — kick into rotation mode
+        this._stopRotation();
+        this._stopScheduler();
+        this._rotationMode = true;
+        this._startRotation();
+        requestAnimationFrame(() => window.scrollTo(0, scrollY));
+        return null;
+      }
+
+      // Panel has room — queue for animated ingress
       this._ingressQueue.push(badge);
       this._startScheduler();
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
@@ -1572,7 +1584,7 @@ window.RackRenderer = {
 
   _packetClipId: 0, // incrementing ID for unique clip-path references
 
-  _createBadgePacket(badge, radius = 16) {
+  _createBadgePacket(badge, radius = 20) {
     // Round portrait photo with division-colored ring — travels along cables
     if (!this._cableSvg) return null;
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
@@ -2239,8 +2251,24 @@ window.RackRenderer = {
       const panel = this._panelContents[poolEntry.divTheme];
       const cap = poolEntry.divTheme === '_custom' ? 24 : 12;
 
-      // Skip if panel is full (badge will be picked up by rotation later)
-      if (panel.length >= cap) continue;
+      // Panel full — check if all panels are full, transition to rotation
+      if (panel.length >= cap) {
+        const allFull = Object.entries(this._panelContents).every(([div, p]) => {
+          const c = div === '_custom' ? 24 : 12;
+          return p.length >= c;
+        });
+        if (allFull) {
+          this._poolDrained = true;
+          this._stopRotation();
+          this._settleTimer = setTimeout(() => {
+            this._settleTimer = null;
+            this._rotationMode = true;
+            this._startRotation();
+          }, this._SETTLE_PERIOD_MS);
+          return;
+        }
+        continue;
+      }
 
       // Skip if already displayed
       if (panel.includes(poolEntry.badge.employeeId)) continue;
@@ -3390,7 +3418,7 @@ window.RackRenderer = {
   async _beamDown(pkt, fromX, fromY, toX, toY, duration = 2000) {
     if (!this._cableSvg || !pkt.el) return;
     const svg = this._cableSvg;
-    const r = 16; // badge radius
+    const r = 20; // badge radius
 
     let beam = null;
     let scanline = null;
