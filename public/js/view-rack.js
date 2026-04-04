@@ -2476,9 +2476,9 @@ window.RackRenderer = {
     popup.textContent = text;
     coreEl.style.position = 'relative';
     coreEl.appendChild(popup);
-    setTimeout(() => popup.remove(), 3500);
+    setTimeout(() => popup.remove(), 4500);
 
-    await this._delay(1500);
+    await this._delay(2500);
   },
 
   // Scheduler state

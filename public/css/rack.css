@@ -2035,12 +2035,12 @@ body.view-rack .public-orgchart {
   animation: rack-cli-fade 3.5s ease-out forwards;
 }
 
-/* Core download CLI popup */
+/* Core download CLI popup — centered on core switch, overlaps portraits */
 .rack-core-download-popup {
   position: absolute;
-  top: -20px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px;
   color: #22C55E;
@@ -2051,11 +2051,11 @@ body.view-rack .public-orgchart {
   white-space: nowrap;
   z-index: 20;
   pointer-events: none;
-  animation: rack-cli-fade 3.5s ease-out forwards;
+  animation: rack-cli-fade 4.5s ease-out forwards;
 }
 
 @keyframes rack-cli-fade {
-  0%, 70% { opacity: 1; }
+  0%, 65% { opacity: 1; }
   100% { opacity: 0; }
 }
 
