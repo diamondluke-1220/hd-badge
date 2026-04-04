@@ -19,10 +19,11 @@ window.RackRenderer = {
   _poolCursor: 0,         // current position in pool (wraps with shuffle)
   _schedulerState: 'idle', // 'idle' | 'filling' | 'settling' | 'rotating'
   _settleTimer: null,     // 30s timer between filling→rotating
-  _divRotationInFlight: {},  // divTheme → boolean, max 1 rotation per division
-  _drainNoOpCount: 0,       // consecutive pool drain ticks with no placement
+  _divInFlight: {},       // divTheme → count of concurrent animations (max _MAX_PER_DIV)
+  _MAX_PER_DIV: 2,       // max concurrent ingress per division
   _SETTLE_PERIOD_MS: 30000,
-  _ROTATION_TICK_MS: 5000,
+  _DRAIN_TICK_MS: 2000,   // fast ticks during fill (boot-up show)
+  _ROTATION_TICK_MS: 8000, // leisurely ticks during rotation (more screen time)
   _RECENCY_WINDOW_MS: 120000, // don't re-show badge within 2 minutes
   _MAX_RECENCY_SKIPS: 10,
 
@@ -241,8 +242,8 @@ window.RackRenderer = {
     // State machine → idle (stops all async loops)
     this._stopSchedulerState();
     // Safe to reset in-flight flags on full destroy — everything is being torn down
-    for (const div of Object.keys(this._divRotationInFlight)) {
-      this._divRotationInFlight[div] = false;
+    for (const div of Object.keys(this._divInFlight)) {
+      this._divInFlight[div] = 0;
     }
     this._stopCloudRain();
     this._stopThreatTraffic();
@@ -2152,10 +2153,10 @@ window.RackRenderer = {
 
   _initPool(allBadges) {
     this._badgePool = [];
-    this._divRotationInFlight = {};
-    this._drainNoOpCount = 0;
+    this._divInFlight = {};
+
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
-      this._divRotationInFlight[div] = false;
+      this._divInFlight[div] = 0;
     }
 
     // Separate exec badges from pool — they live on core switch portraits
@@ -2274,91 +2275,34 @@ window.RackRenderer = {
   _startPoolDrain() {
     if (this._schedulerState !== 'idle') return;
     this._schedulerState = 'filling';
-    this._drainNoOpCount = 0;
     this._runPoolDrainLoop();
   },
 
   async _runPoolDrainLoop() {
     while (this._schedulerState === 'filling' && this._container && this._cableSvg) {
       this._poolDrainTick();
-      await this._delay(this._ROTATION_TICK_MS);
+      await this._delay(this._DRAIN_TICK_MS);
     }
   },
 
   _poolDrainTick() {
     if (this._schedulerState !== 'filling') return;
-    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
 
-    // Snapshot panel state once per tick (avoids repeated DOM queries in the loop)
+    // Snapshot panel state once per tick
     const panelSnapshot = {};
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
       panelSnapshot[div] = this._getPanelContents(div);
     }
 
-    // If any panel is at capacity, transition to rotation (after settle)
-    // Don't wait for ALL panels to fill — full panels need cycling now
-    const anyFull = Object.entries(panelSnapshot).some(([div, contents]) => {
-      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-      return contents.length >= cap;
+    // Check if drain is complete: every remaining pool badge is either displayed
+    // or its panel is at capacity (accounting for in-flight badges)
+    const drainComplete = this._inFlightCount === 0 && this._badgePool.every(entry => {
+      const contents = panelSnapshot[entry.divTheme] || [];
+      const cap = this._DIV_TOPOLOGY[entry.divTheme]?.panelCap || 12;
+      return contents.includes(entry.badge.employeeId) || (contents.length + this._divInFlight[entry.divTheme]) >= cap;
     });
-    if (anyFull) {
-      this._verifyPanelIntegrity();
-      this._schedulerState = 'settling';
-      this._settleTimer = setTimeout(() => {
-        this._settleTimer = null;
-        this._schedulerState = 'rotating';
-        this._startRotation();
-      }, this._SETTLE_PERIOD_MS);
-      return;
-    }
 
-    // Prefer the opposite rack side from last dispatch (load-balance across racks)
-    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
-
-    // Find next badge that isn't already displayed
-    let skippedForSide = null; // first eligible badge on the non-preferred side
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const poolEntry = this._advancePool();
-      if (!poolEntry) return;
-
-      const panelContents = panelSnapshot[poolEntry.divTheme] || [];
-      const cap = this._DIV_TOPOLOGY[poolEntry.divTheme]?.panelCap || 12;
-
-      // Panel full — skip to next badge
-      if (panelContents.length >= cap) continue;
-
-      // Skip if already displayed
-      if (panelContents.includes(poolEntry.badge.employeeId)) continue;
-
-      // Skip if division has ingress in flight
-      if (this._divRotationInFlight[poolEntry.divTheme]) continue;
-
-      // Prefer opposite rack side — save first non-preferred match as fallback
-      const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
-      if (topo?.rackSide !== preferSide && !skippedForSide) {
-        skippedForSide = poolEntry;
-        continue;
-      }
-
-      this._dispatchDrainIngress(poolEntry);
-      return;
-    }
-
-    // No preferred-side badge found — dispatch the skipped fallback if we have one
-    if (skippedForSide) {
-      this._dispatchDrainIngress(skippedForSide);
-      return;
-    }
-
-    // All attempts failed — but only count as a real no-op if nothing is in flight.
-    // When animations are running, divisions are temporarily locked — that's expected,
-    // not a signal that drain is complete.
-    if (this._inFlightCount === 0) {
-      this._drainNoOpCount++;
-    }
-
-    // After 3 consecutive idle no-op ticks, transition filling → settling (or idle)
-    if (this._drainNoOpCount >= 3 && this._inFlightCount === 0) {
+    if (drainComplete) {
       this._verifyPanelIntegrity();
       if (this._anyPanelFull()) {
         this._schedulerState = 'settling';
@@ -2370,23 +2314,61 @@ window.RackRenderer = {
       } else {
         this._schedulerState = 'idle';
       }
+      return;
     }
+
+    // Multi-dispatch: fill all available in-flight slots this tick
+    let dispatched = 0;
+    while (this._inFlightCount < this._MAX_IN_FLIGHT && dispatched < this._MAX_IN_FLIGHT) {
+      const entry = this._findEligibleBadge(panelSnapshot);
+      if (!entry) break;
+      this._dispatchDrainIngress(entry);
+      dispatched++;
+    }
+  },
+
+  // Find next eligible badge for drain dispatch (with rack alternation)
+  _findEligibleBadge(panelSnapshot) {
+    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
+    let fallback = null;
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const poolEntry = this._advancePool();
+      if (!poolEntry) return fallback;
+
+      const panelContents = panelSnapshot[poolEntry.divTheme] || [];
+      const cap = this._DIV_TOPOLOGY[poolEntry.divTheme]?.panelCap || 12;
+
+      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) continue;
+      if (panelContents.includes(poolEntry.badge.employeeId)) continue;
+      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) continue;
+
+      const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
+      if (topo?.rackSide !== preferSide && !fallback) {
+        fallback = poolEntry;
+        continue;
+      }
+
+      return poolEntry;
+    }
+
+    return fallback;
   },
 
   // Fire-and-forget ingress dispatch for pool drain
   _dispatchDrainIngress(poolEntry) {
     const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
     this._lastLaunchRack = topo?.rackSide;
-    this._divRotationInFlight[poolEntry.divTheme] = true;
+    this._divInFlight[poolEntry.divTheme]++;
     this._inFlightCount++;
-    this._drainNoOpCount = 0;
+
     this._executeCoreDownloadCli(poolEntry.divTheme).then(() => {
       poolEntry.lastDisplayedAt = Date.now();
       poolEntry.displayCount++;
       return this._playIngress(poolEntry.badge);
     }).finally(() => {
       this._inFlightCount--;
-      this._divRotationInFlight[poolEntry.divTheme] = false;
+      this._divInFlight[poolEntry.divTheme]--;
     });
   },
 
@@ -2420,7 +2402,7 @@ window.RackRenderer = {
     const { badge, divTheme } = poolEntry;
     const panelContents = panelSnapshot?.[divTheme] || this._getPanelContents(divTheme);
 
-    if (this._divRotationInFlight[divTheme]) return false;
+    if (this._divInFlight[divTheme] >= this._MAX_PER_DIV) return false;
     if (panelContents.includes(badge.employeeId)) return false;
 
     return true;
@@ -2463,13 +2445,13 @@ window.RackRenderer = {
 
     const panelFull = panelContents.length >= cap;
 
-    this._divRotationInFlight[divTheme] = true;
+    this._divInFlight[divTheme]++;
     this._inFlightCount++;
 
     this._runRotationCycle(poolEntry, divTheme, badge, panelFull, panelContents)
       .finally(() => {
         this._inFlightCount--;
-        this._divRotationInFlight[divTheme] = false;
+        this._divInFlight[divTheme]--;
       });
   },
 
@@ -3764,7 +3746,7 @@ window.RackRenderer = {
     }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const entryType = Math.random() < 0.2 ? 'wifi' : 'firewall';
+    const entryType = Math.random() < 0.3 ? 'wifi' : 'firewall';
     const route = this._resolveRoute(entryType, divTheme);
 
     if (!route) {

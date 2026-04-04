@@ -12,7 +12,7 @@
 //   rotation — Phase 3: perpetual rotation cycle (removal + ingress)
 
 const args = process.argv.slice(2);
-const MODE = args.includes('rotation') ? 'rotation' : 'ingress';
+const MODE = args.includes('rotation') ? 'rotation' : args.includes('drain') ? 'drain' : 'ingress';
 const countArg = args.find(a => /^\d+$/.test(a));
 
 const INGRESS_BADGE_COUNTS = countArg ? [parseInt(countArg)] : [50, 100, 200, 500];
@@ -83,7 +83,7 @@ const CABLE_DURATIONS: Record<number, number> = {
 
 const MATERIALIZE_MS = 1200;
 const FW_INSPECT_MS = 1200;
-const BRS_RENDER_MS = 2500;
+const BRS_RENDER_MS = 1500;
 const BEAM_DOWN_MS = 2000;
 const LAUNCH_INTERVAL_MS = 3000;
 const MAX_IN_FLIGHT = 5;
@@ -816,6 +816,357 @@ function printRotationIntegrity(r: RotationResult) {
     `max ${r.metrics.maxBrsQueue}`);
 }
 
+// ═══════════════════════════════════════════════════════════
+// DRAIN MODE — Full lifecycle: fill panels → settle → rotate
+// Tests proposed scheduler improvements
+// ═══════════════════════════════════════════════════════════
+
+interface DrainConfig {
+  label: string;
+  maxPerDiv: number;        // max concurrent per division (current: 1, proposed: 2)
+  dispatchPerTick: number;  // max dispatches per tick (current: 1, proposed: fill all slots)
+  drainTickMs: number;      // tick interval during drain (current: 5000, proposed: 2000)
+  rotationTickMs: number;   // tick interval during rotation (current: 5000, proposed: 8000)
+  wifiPct: number;          // WiFi entry percentage (current: 0.20, proposed: 0.30)
+  brsRenderMs: number;      // BRS render duration
+  brsLoadBalance: boolean;  // cross-rack BRS when local busy
+}
+
+interface DrainResult {
+  config: DrainConfig;
+  poolSize: number;
+  fillTimeMs: number;         // time to fill all panels
+  firstPanelFullMs: number;   // time first panel hits capacity
+  allPanelFullMs: number;     // time all panels full (or drain ends)
+  totalIngressDrain: number;  // badges placed during drain
+  rotationsAfterSettle: number;
+  brsSkips: number;
+  brsRenders: Record<string, number>;
+  maxInFlight: number;
+  cableWaits: number;
+  maxCableWaitMs: number;
+  trunkWaits: number;
+  maxTrunkWaitMs: number;
+  divFillTimes: Record<string, number>; // when each division filled
+}
+
+// Uneven distribution matching real-world department sizes
+const UNEVEN_DIST: Record<string, number> = {
+  'IT': 25,           // largest dept
+  'Office': 18,
+  'Corporate': 15,
+  '_custom': 12,      // contractors
+  'Punk': 10,         // smallest dept
+};
+
+function generateUnevenPool(totalBadges: number): { id: number; divTheme: string }[] {
+  const totalWeight = Object.values(UNEVEN_DIST).reduce((a, b) => a + b, 0);
+  const badges: { id: number; divTheme: string }[] = [];
+  let id = 0;
+  for (const [div, weight] of Object.entries(UNEVEN_DIST)) {
+    const count = Math.round((weight / totalWeight) * totalBadges);
+    for (let i = 0; i < count; i++) {
+      badges.push({ id: id++, divTheme: div });
+    }
+  }
+  // Shuffle so they don't arrive in department order
+  for (let i = badges.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [badges[i], badges[j]] = [badges[j], badges[i]];
+  }
+  return badges;
+}
+
+function simulateDrain(poolSize: number, config: DrainConfig, useUneven: boolean = false): DrainResult {
+  const badges = useUneven ? generateUnevenPool(poolSize) : (() => {
+    const b: { id: number; divTheme: string }[] = [];
+    for (let i = 0; i < poolSize; i++) {
+      b.push({ id: i, divTheme: DIVISIONS[Math.floor(Math.random() * DIVISIONS.length)] });
+    }
+    return b;
+  })();
+
+  const state: CableState = {
+    cableFreeAt: new Map(),
+    brsFreeAt: { 'brs-01': 0, 'brs-02': 0 },
+  };
+  const metrics = freshMetrics();
+
+  // Panel state
+  const panelContents: Record<string, number[]> = {};
+  for (const div of DIVISIONS) panelContents[div] = [];
+
+  // Scheduler state
+  let simTime = 0;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const divInFlightCount: Record<string, number> = {};
+  for (const div of DIVISIONS) divInFlightCount[div] = 0;
+
+  let poolCursor = 0;
+  let lastLaunchRack: string | null = null;
+  let firstPanelFullMs = -1;
+  let allPanelFullMs = -1;
+  let totalPlaced = 0;
+  const divFillTimes: Record<string, number> = {};
+
+  const completionEvents: { time: number; div: string; badgeId: number }[] = [];
+
+  // Drain phase
+  let draining = true;
+  let settleStart = -1;
+  let rotationStart = -1;
+  let rotationCount = 0;
+
+  const totalCapacity = Object.entries(DIV_TOPOLOGY).reduce((s, [, t]) => s + t.panelCapacity, 0);
+
+  while (simTime < 5 * 60 * 1000) { // 5 min max
+    // Process completions
+    completionEvents.sort((a, b) => a.time - b.time);
+    while (completionEvents.length > 0 && completionEvents[0].time <= simTime) {
+      const ev = completionEvents.shift()!;
+      inFlight--;
+      divInFlightCount[ev.div]--;
+      panelContents[ev.div].push(ev.badgeId);
+      totalPlaced++;
+
+      // Track fill milestones
+      const cap = DIV_TOPOLOGY[ev.div].panelCapacity;
+      if (panelContents[ev.div].length >= cap && !divFillTimes[ev.div]) {
+        divFillTimes[ev.div] = ev.time;
+        if (firstPanelFullMs < 0) firstPanelFullMs = ev.time;
+      }
+    }
+
+    // Check if all panels full
+    if (allPanelFullMs < 0) {
+      const allFull = DIVISIONS.every(d => panelContents[d].length >= DIV_TOPOLOGY[d].panelCapacity);
+      if (allFull) allPanelFullMs = simTime;
+    }
+
+    if (draining) {
+      // Check transition: any panel full → settle
+      const anyFull = DIVISIONS.some(d => panelContents[d].length >= DIV_TOPOLOGY[d].panelCapacity);
+
+      // Also check: all badges placed or all remaining badges target full panels
+      const allPlacedOrBlocked = poolCursor >= badges.length || badges.slice(poolCursor).every(b => {
+        const cap = DIV_TOPOLOGY[b.divTheme].panelCapacity;
+        return panelContents[b.divTheme].length >= cap;
+      });
+
+      if ((anyFull && inFlight === 0 && allPlacedOrBlocked) || totalPlaced >= totalCapacity) {
+        draining = false;
+        settleStart = simTime;
+        simTime += SETTLE_PERIOD_MS;
+        rotationStart = simTime;
+        continue;
+      }
+
+      // Dispatch badges
+      const tickMs = config.drainTickMs;
+      let dispatched = 0;
+
+      while (dispatched < config.dispatchPerTick && inFlight < MAX_IN_FLIGHT && poolCursor < badges.length) {
+        // Find eligible badge with rack alternation
+        const preferSide = lastLaunchRack === 'A' ? 'B' : 'A';
+        let found = false;
+
+        for (let attempt = 0; attempt < 12 && poolCursor < badges.length; attempt++) {
+          const badge = badges[poolCursor];
+          poolCursor++;
+
+          const div = badge.divTheme;
+          const cap = DIV_TOPOLOGY[div].panelCapacity;
+
+          // Skip if panel full
+          if (panelContents[div].length + divInFlightCount[div] >= cap) continue;
+
+          // Skip if div at max concurrent
+          if (divInFlightCount[div] >= config.maxPerDiv) continue;
+
+          // Resolve route
+          const isWifi = Math.random() < config.wifiPct;
+          const topo = DIV_TOPOLOGY[div];
+          const homeSide = topo.rackSide;
+          const entrySide = isWifi ? 'A' : (Math.random() < 0.7 ? homeSide : (homeSide === 'A' ? 'B' : 'A'));
+          const entryCore = entrySide === 'A' ? 'core-a' : 'core-b';
+
+          // BRS selection with load balancing
+          let brsId: string;
+          if (config.brsLoadBalance) {
+            const localBrs = entryCore === 'core-a' ? 'brs-01' : 'brs-02';
+            const remoteBrs = entryCore === 'core-a' ? 'brs-02' : 'brs-01';
+            if (state.brsFreeAt[localBrs] <= simTime) {
+              brsId = localBrs;
+            } else if (state.brsFreeAt[remoteBrs] <= simTime) {
+              brsId = remoteBrs;
+            } else {
+              brsId = localBrs; // both busy, wait on local
+            }
+          } else {
+            brsId = entryCore === 'core-a' ? 'brs-01' : 'brs-02';
+          }
+
+          // Simulate transit time
+          const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
+          const route = resolveRoute(div, 0.7, useStorage);
+          if (!route) continue;
+
+          // Override BRS in route
+          for (const step of route.steps) {
+            if (step.type === 'brs-render') {
+              step.brsId = brsId;
+              step.durationMs = config.brsRenderMs;
+            }
+          }
+
+          const cliMs = CORE_DOWNLOAD_CLI_MS;
+          let cursor = simTime + cliMs;
+          cursor = simulateTransit(route, cursor, state, metrics);
+
+          divInFlightCount[div]++;
+          inFlight++;
+          if (inFlight > maxInFlight) maxInFlight = inFlight;
+          lastLaunchRack = topo.rackSide;
+
+          completionEvents.push({ time: cursor, div, badgeId: badge.id });
+          dispatched++;
+          found = true;
+          break;
+        }
+
+        if (!found) break;
+      }
+
+      simTime += tickMs;
+
+    } else if (rotationStart > 0 && simTime >= rotationStart) {
+      // Rotation phase — count how many rotations in remaining time
+      // Simple model: each rotation takes removal + ingress
+      if (inFlight < MAX_IN_FLIGHT) {
+        const div = DIVISIONS[rotationCount % DIVISIONS.length];
+        const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
+        const route = resolveRoute(div, 0.7, useStorage);
+        if (route) {
+          for (const step of route.steps) {
+            if (step.type === 'brs-render') step.durationMs = config.brsRenderMs;
+          }
+          let cursor = simTime + REMOVAL_TOTAL_MS + CORE_DOWNLOAD_CLI_MS;
+          cursor = simulateTransit(route, cursor, state, metrics);
+          inFlight++;
+          completionEvents.push({ time: cursor, div, badgeId: -1 });
+          rotationCount++;
+        }
+      }
+      simTime += config.rotationTickMs;
+    } else {
+      simTime += 100;
+    }
+  }
+
+  // Drain completions
+  completionEvents.sort((a, b) => a.time - b.time);
+  for (const e of completionEvents) {
+    inFlight--;
+    divInFlightCount[e.div]--;
+    if (e.badgeId >= 0) {
+      panelContents[e.div].push(e.badgeId);
+      totalPlaced++;
+    }
+  }
+
+  return {
+    config,
+    poolSize,
+    fillTimeMs: settleStart > 0 ? settleStart : simTime,
+    firstPanelFullMs: firstPanelFullMs > 0 ? firstPanelFullMs : -1,
+    allPanelFullMs: allPanelFullMs > 0 ? allPanelFullMs : -1,
+    totalIngressDrain: totalPlaced,
+    rotationsAfterSettle: rotationCount,
+    brsSkips: metrics.brsSkips,
+    brsRenders: metrics.brsRenders,
+    maxInFlight,
+    cableWaits: metrics.cableWaits,
+    maxCableWaitMs: metrics.maxCableWaitMs,
+    trunkWaits: metrics.crossRackWaits,
+    maxTrunkWaitMs: metrics.maxCrossRackWaitMs,
+    divFillTimes,
+  };
+}
+
+function printDrainComparison(poolSize: number, useUneven: boolean) {
+  const configs: DrainConfig[] = [
+    {
+      label: 'CURRENT',
+      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
+      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+    {
+      label: '2/div',
+      maxPerDiv: 2, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
+      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+    {
+      label: 'Multi-dispatch',
+      maxPerDiv: 1, dispatchPerTick: 5, drainTickMs: 5000, rotationTickMs: 5000,
+      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+    {
+      label: 'Fast drain tick',
+      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 2000, rotationTickMs: 8000,
+      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+    {
+      label: '30% WiFi',
+      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
+      wifiPct: 0.30, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+    {
+      label: 'ALL PROPOSED',
+      maxPerDiv: 2, dispatchPerTick: 5, drainTickMs: 2000, rotationTickMs: 8000,
+      wifiPct: 0.30, brsRenderMs: 1500, brsLoadBalance: true,
+    },
+  ];
+
+  const distLabel = useUneven ? 'UNEVEN (IT:25 Off:18 Corp:15 Con:12 Punk:10)' : 'EVEN (random)';
+  console.log(`\n══ DRAIN SIM: ${poolSize} badges | ${distLabel} ══════════════`);
+  console.log(`  ${'Config'.padEnd(18)} FillTime  1stFull  AllFull  Placed  MaxFly  BRS-1  BRS-2  Skip  CbleW  TrnkW  Rots`);
+  console.log(`  ${'─'.repeat(18)} ────────  ───────  ───────  ──────  ──────  ─────  ─────  ────  ─────  ─────  ────`);
+
+  for (const cfg of configs) {
+    // Average over 3 runs for stability
+    const runs = [0, 1, 2].map(() => simulateDrain(poolSize, cfg, useUneven));
+    const avg = (fn: (r: DrainResult) => number) => Math.round(runs.reduce((s, r) => s + fn(r), 0) / runs.length);
+
+    console.log(
+      `  ${cfg.label.padEnd(18)} ` +
+      `${sec(avg(r => r.fillTimeMs)).padStart(8)}  ` +
+      `${sec(avg(r => r.firstPanelFullMs)).padStart(7)}  ` +
+      `${(avg(r => r.allPanelFullMs) > 0 ? sec(avg(r => r.allPanelFullMs)) : '  n/a').padStart(7)}  ` +
+      `${String(avg(r => r.totalIngressDrain)).padStart(6)}  ` +
+      `${String(avg(r => r.maxInFlight)).padStart(6)}  ` +
+      `${String(avg(r => r.brsRenders['brs-01'])).padStart(5)}  ` +
+      `${String(avg(r => r.brsRenders['brs-02'])).padStart(5)}  ` +
+      `${String(avg(r => r.brsSkips)).padStart(4)}  ` +
+      `${String(avg(r => r.cableWaits)).padStart(5)}  ` +
+      `${String(avg(r => r.trunkWaits)).padStart(5)}  ` +
+      `${String(avg(r => r.rotationsAfterSettle)).padStart(4)}`
+    );
+  }
+
+  // Show per-division fill times for ALL PROPOSED with uneven dist
+  if (useUneven) {
+    const proposed = simulateDrain(poolSize, configs[configs.length - 1], true);
+    console.log(`\n  Per-division fill times (ALL PROPOSED, uneven):`);
+    for (const div of DIVISIONS) {
+      const t = proposed.divFillTimes[div];
+      const cap = DIV_TOPOLOGY[div].panelCapacity;
+      const badge_count = generateUnevenPool(poolSize).filter(b => b.divTheme === div).length;
+      console.log(`    ${div.padEnd(12)} ${t > 0 ? sec(t) : 'never'} (${badge_count} badges, ${cap} cap)`);
+    }
+  }
+}
+
 // ─── Run ───────────────────────────────────────────────────
 
 if (MODE === 'ingress') {
@@ -839,7 +1190,7 @@ if (MODE === 'ingress') {
   pass('Dual BRS concurrent ≤ 2', r.metrics.maxBrsQueue <= 2, `max ${r.metrics.maxBrsQueue}`);
   pass('Trunk wait under 10s', r.metrics.maxCrossRackWaitMs < 10000, `max ${sec(r.metrics.maxCrossRackWaitMs)}`);
 
-} else {
+} else if (MODE === 'rotation') {
   console.log(`\n══════════════════════════════════════════════`);
   console.log(`  RACK ROTATION SIMULATOR`);
   console.log(`  Phase 3 — Pool Rotation Cycle`);
@@ -877,6 +1228,19 @@ if (MODE === 'ingress') {
 
   console.log(`\n── INTEGRITY CHECKS (200-badge pool) ────────`);
   printRotationIntegrity(simulateRotation(200));
+
+} else if (MODE === 'drain') {
+  console.log(`\n══════════════════════════════════════════════`);
+  console.log(`  DRAIN MODE — Fill Lifecycle Simulator`);
+  console.log(`  Tests: per-div concurrency, multi-dispatch,`);
+  console.log(`  tick speed, WiFi %, BRS load balancing`);
+  console.log(`══════════════════════════════════════════════`);
+
+  const poolSize = countArg ? parseInt(countArg) : 80;
+
+  printDrainComparison(poolSize, false);  // even distribution
+  printDrainComparison(poolSize, true);   // uneven distribution
+
 }
 
 console.log(`\n══════════════════════════════════════════════\n`);
