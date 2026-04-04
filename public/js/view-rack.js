@@ -2258,21 +2258,14 @@ window.RackRenderer = {
     // Drain complete: queue empty and no animations running
     if (this._drainQueue.length === 0 && this._inFlightCount === 0 && dispatched === 0) {
       this._verifyPanelIntegrity();
-      // Any division with more pool badges than panel capacity → rotation needed
-      const needsRotation = this._badgePool.some(entry => {
-        const contents = this._getPanelContents(entry.divTheme);
-        return !contents.includes(entry.badge.employeeId);
-      });
-      if (needsRotation) {
-        this._schedulerState = 'settling';
-        this._settleTimer = setTimeout(() => {
-          this._settleTimer = null;
-          this._schedulerState = 'rotating';
-          this._startRotation();
-        }, this._SETTLE_PERIOD_MS);
-      } else {
-        this._schedulerState = 'idle';
-      }
+      // Always transition to rotation — panels cycle for visual interest
+      // even if all badges currently fit (rotation swaps displayed faces)
+      this._schedulerState = 'settling';
+      this._settleTimer = setTimeout(() => {
+        this._settleTimer = null;
+        this._schedulerState = 'rotating';
+        this._startRotation();
+      }, this._SETTLE_PERIOD_MS);
     }
   },
 
@@ -2313,18 +2306,16 @@ window.RackRenderer = {
       if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
 
       const panelContents = this._getPanelContents(div);
-      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
       const divPool = this._badgePool.filter(e => e.divTheme === div);
 
-      // Only rotate if division has more badges than panel capacity
-      if (divPool.length <= cap) continue;
-
-      // Find a replacement: any pool badge for this division NOT currently displayed
+      // Need at least 1 badge NOT currently displayed to swap in
       const replacement = divPool.find(e => !panelContents.includes(e.badge.employeeId));
       if (!replacement) continue;
 
-      // Pick oldest displayed badge to remove (first in panel = FIFO)
-      const removeId = panelContents[0];
+      // If panel is full, remove oldest to make room. If not full, just fill the empty slot.
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      const panelFull = panelContents.length >= cap;
+      const removeId = panelFull ? panelContents[0] : null;
 
       // Advance round-robin past this division
       this._rotationDiv = (this._rotationDiv + i + 1) % divs.length;
@@ -2335,7 +2326,7 @@ window.RackRenderer = {
 
       (async () => {
         try {
-          if (panelContents.length >= cap) {
+          if (removeId) {
             await this._executeRemoval(div, removeId);
           }
           await this._executeCoreDownloadCli(div);
