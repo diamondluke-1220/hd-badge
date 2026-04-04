@@ -2333,37 +2333,34 @@ window.RackRenderer = {
     }
   },
 
-  // Find next eligible badge for drain dispatch (with rack alternation)
+  // Find next eligible badge for dispatch (scans full pool, prefers opposite rack side)
   _findEligibleBadge(panelSnapshot) {
     const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
+    let preferred = null;
     let fallback = null;
-    let skipReasons = { full: 0, displayed: 0, divBusy: 0, wrongSide: 0 };
 
-    for (let attempt = 0; attempt < 12; attempt++) {
-      const poolEntry = this._advancePool();
-      if (!poolEntry) return fallback;
-
+    for (const poolEntry of this._badgePool) {
       const panelContents = panelSnapshot[poolEntry.divTheme] || [];
       const cap = this._DIV_TOPOLOGY[poolEntry.divTheme]?.panelCap || 12;
 
-      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) { skipReasons.full++; continue; }
-      if (panelContents.includes(poolEntry.badge.employeeId)) { skipReasons.displayed++; continue; }
-      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) { skipReasons.divBusy++; continue; }
+      // Skip if panel full (accounting for in-flight)
+      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) continue;
+      // Skip if already displayed
+      if (panelContents.includes(poolEntry.badge.employeeId)) continue;
+      // Skip if division at max concurrent
+      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) continue;
+      // Skip if displayed too recently (recency suppression)
+      if (poolEntry.lastDisplayedAt > 0 && (Date.now() - poolEntry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) continue;
 
       const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
-      if (topo?.rackSide !== preferSide && !fallback) {
-        fallback = poolEntry;
-        skipReasons.wrongSide++;
-        continue;
+      if (topo?.rackSide === preferSide) {
+        preferred = poolEntry;
+        break; // preferred side found — use it
       }
-
-      return poolEntry;
+      if (!fallback) fallback = poolEntry;
     }
 
-    if (!fallback) {
-      console.log(`[rack-drain] _findEligible: no match in 12 attempts — full:${skipReasons.full} displayed:${skipReasons.displayed} divBusy:${skipReasons.divBusy} wrongSide:${skipReasons.wrongSide}`);
-    }
-    return fallback;
+    return preferred || fallback;
   },
 
   // Fire-and-forget ingress dispatch for pool drain
@@ -2408,19 +2405,7 @@ window.RackRenderer = {
     this._schedulerState = 'idle';
   },
 
-  // Check if a pool entry is eligible for rotation (panelSnapshot avoids repeated DOM queries)
-  _isRotationCandidate(poolEntry, panelSnapshot) {
-    if (!poolEntry) return false;
-    const { badge, divTheme } = poolEntry;
-    const panelContents = panelSnapshot?.[divTheme] || this._getPanelContents(divTheme);
-
-    if (this._divInFlight[divTheme] >= this._MAX_PER_DIV) return false;
-    if (panelContents.includes(badge.employeeId)) return false;
-
-    return true;
-  },
-
-  // Rotation tick — find an eligible badge and dispatch rotation cycle
+  // Rotation tick — find eligible badges and dispatch rotation cycles
   _rotationTick() {
     if (this._schedulerState !== 'rotating') return;
     if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
@@ -2432,14 +2417,20 @@ window.RackRenderer = {
       panelSnapshot[div] = this._getPanelContents(div);
     }
 
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const poolEntry = this._advancePool();
-      if (!poolEntry) return;
+    // Scan full pool for eligible badges (not displayed in their panel)
+    for (const poolEntry of this._badgePool) {
+      if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
 
-      if (this._isRotationCandidate(poolEntry, panelSnapshot)) {
-        this._dispatchRotation(poolEntry);
-        return;
-      }
+      const { badge, divTheme } = poolEntry;
+      const panelContents = panelSnapshot[divTheme] || [];
+
+      if (this._divInFlight[divTheme] >= this._MAX_PER_DIV) continue;
+      if (panelContents.includes(badge.employeeId)) continue;
+      // Recency: don't rotate a badge that was just displayed
+      if (poolEntry.lastDisplayedAt > 0 && (Date.now() - poolEntry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) continue;
+
+      this._dispatchRotation(poolEntry);
+      return; // one dispatch per tick — let it animate before next
     }
   },
 
