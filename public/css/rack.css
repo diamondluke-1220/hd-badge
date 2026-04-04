@@ -539,12 +539,12 @@ body.view-rack .public-orgchart {
 }
 
 .rack-fw-threat-icon {
-  font-size: 12px;
+  font-size: 14px;
   color: #d97706;
 }
 
 .rack-fw-threat-count {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: #d97706;
   font-family: 'JetBrains Mono', monospace;
@@ -2517,7 +2517,7 @@ body.view-rack .public-orgchart {
   position: absolute;
   z-index: 10;
   font-family: monospace;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 700;
   color: #22C55E;
   letter-spacing: 2px;

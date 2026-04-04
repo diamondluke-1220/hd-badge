@@ -2572,7 +2572,7 @@ window.RackRenderer = {
     text.setAttribute('y', cy + 4); // slight baseline adjust
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('font-family', 'monospace');
-    text.setAttribute('font-size', '11');
+    text.setAttribute('font-size', '14');
     text.setAttribute('font-weight', '700');
     text.setAttribute('fill', '#22C55E');
     text.setAttribute('filter', 'url(#packet-glow)');
@@ -2589,7 +2589,7 @@ window.RackRenderer = {
         // Pop in
         const s = t / 0.2;
         text.setAttribute('opacity', String(s));
-        text.setAttribute('font-size', String(8 + s * 5));
+        text.setAttribute('font-size', String(10 + s * 4));
       } else if (t < 0.7) {
         // Hold
         text.setAttribute('opacity', '1');
@@ -2932,7 +2932,7 @@ window.RackRenderer = {
     text.setAttribute('y', pt.y + 4);
     text.setAttribute('text-anchor', 'middle');
     text.setAttribute('font-family', 'monospace');
-    text.setAttribute('font-size', '11');
+    text.setAttribute('font-size', '14');
     text.setAttribute('font-weight', '700');
     text.setAttribute('fill', '#EF4444');
     text.setAttribute('filter', 'url(#packet-glow)');
@@ -2948,7 +2948,7 @@ window.RackRenderer = {
       if (t < 0.1) {
         const s = t / 0.1;
         text.setAttribute('opacity', String(s));
-        text.setAttribute('font-size', String(8 + s * 5));
+        text.setAttribute('font-size', String(10 + s * 4));
       } else if (t < 0.7) {
         text.setAttribute('opacity', '1');
         text.setAttribute('font-size', '13');
