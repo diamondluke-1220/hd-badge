@@ -15,17 +15,16 @@ window.RackRenderer = {
   _reducedMotion: false, // true when prefers-reduced-motion: reduce
 
   // ─── Phase 3: Pool Rotation State ─────────────────────────
-  _badgePool: [],         // all non-exec badges available for rotation
-  _poolCursor: 0,         // current position in pool (wraps with shuffle)
+  _badgePool: [],         // all non-exec badges, grouped by divTheme
+  _drainQueue: [],        // badges waiting to be placed during initial fill
   _schedulerState: 'idle', // 'idle' | 'filling' | 'settling' | 'rotating'
   _settleTimer: null,     // 30s timer between filling→rotating
   _divInFlight: {},       // divTheme → count of concurrent animations (max _MAX_PER_DIV)
+  _rotationDiv: 0,        // round-robin index for rotation division selection
   _MAX_PER_DIV: 2,       // max concurrent ingress per division
   _SETTLE_PERIOD_MS: 30000,
   _DRAIN_TICK_MS: 2000,   // fast ticks during fill (boot-up show)
   _ROTATION_TICK_MS: 8000, // leisurely ticks during rotation (more screen time)
-  _RECENCY_WINDOW_MS: 120000, // don't re-show badge within 2 minutes
-  _MAX_RECENCY_SKIPS: 10,
 
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
@@ -77,18 +76,9 @@ window.RackRenderer = {
     // Initialize badge pool
     this._initPool(allBadges);
 
+    // View switch return: panels already populated from DOM, drain queue empty
     if (!this._animateFromEmpty) {
-      // Returning from view switch — mark pool entries as displayed based on DOM
-      for (const div of Object.keys(this._DIV_TOPOLOGY)) {
-        const displayed = this._getPanelContents(div);
-        for (const eid of displayed) {
-          const poolEntry = this._badgePool.find(p => p.badge.employeeId === eid);
-          if (poolEntry) {
-            poolEntry.lastDisplayedAt = 0;
-            poolEntry.displayCount = 1;
-          }
-        }
-      }
+      this._drainQueue = [];
     }
   },
 
@@ -109,15 +99,10 @@ window.RackRenderer = {
     // Exec/band members go directly to core portraits, no animation
     if (divTheme === '_exec') return null;
 
-    // Add to badge pool (SSE badges prepend to front for priority)
-    this._badgePool.unshift({
-      badge,
-      divTheme,
-      lastDisplayedAt: -Infinity,
-      displayCount: 0,
-    });
-    // Adjust cursor for the prepend
-    if (this._poolCursor > 0) this._poolCursor++;
+    // Add to badge pool and drain queue
+    const entry = { badge, divTheme };
+    this._badgePool.push(entry);
+    this._drainQueue.push(entry);
 
     // If rotating or settling, the rotation scheduler will pick this badge up
     if (this._schedulerState === 'rotating' || this._schedulerState === 'settling') {
@@ -596,8 +581,12 @@ window.RackRenderer = {
                 // First load — animate badges in from empty panels
                 this._startPoolDrain();
               } else {
-                // Returning from view switch — check if rotation should run
-                if (this._anyPanelFull()) {
+                // Returning from view switch — check if any division needs rotation
+                const needsRotation = this._badgePool.some(entry => {
+                  const contents = this._getPanelContents(entry.divTheme);
+                  return !contents.includes(entry.badge.employeeId);
+                });
+                if (needsRotation) {
                   this._schedulerState = 'rotating';
                   this._startRotation();
                 }
@@ -2153,7 +2142,9 @@ window.RackRenderer = {
 
   _initPool(allBadges) {
     this._badgePool = [];
+    this._drainQueue = [];
     this._divInFlight = {};
+    this._rotationDiv = 0;
 
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
       this._divInFlight[div] = 0;
@@ -2167,16 +2158,11 @@ window.RackRenderer = {
 
     for (const badge of nonExec) {
       const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-      this._badgePool.push({
-        badge,
-        divTheme,
-        lastDisplayedAt: -Infinity,
-        displayCount: 0,
-      });
+      this._badgePool.push({ badge, divTheme });
     }
 
-    this._poolCursor = 0;
-    // Panels start empty — badges will animate in via ingress scheduler
+    // Drain queue = copy for initial fill (consumed as badges are dispatched)
+    this._drainQueue = [...this._badgePool];
   },
 
   // Verify panel integrity: check for duplicates and orphaned badges
@@ -2209,68 +2195,18 @@ window.RackRenderer = {
       .map(el => el.getAttribute('data-employee-id'));
   },
 
-  _shufflePool() {
-    for (let i = this._badgePool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [this._badgePool[i], this._badgePool[j]] = [this._badgePool[j], this._badgePool[i]];
-    }
-  },
-
-  // Advance pool cursor with recency suppression
-  _advancePool() {
-    let skips = 0;
-    while (skips < this._MAX_RECENCY_SKIPS && this._badgePool.length > 0) {
-      const entry = this._badgePool[this._poolCursor];
-      this._poolCursor++;
-      if (this._poolCursor >= this._badgePool.length) {
-        this._shufflePool();
-        this._poolCursor = 0;
-      }
-      // Skip if displayed too recently
-      if (entry.lastDisplayedAt > 0 && (Date.now() - entry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) {
-        skips++;
-        continue;
-      }
-      return entry;
-    }
-    // Fallback: just take current cursor position
-    const entry = this._badgePool[this._poolCursor];
-    this._poolCursor++;
-    if (this._poolCursor >= this._badgePool.length) {
-      this._shufflePool();
-      this._poolCursor = 0;
-    }
-    return entry;
-  },
-
   // Remove a badge from pool entirely (badge-deleted SSE)
   _removeFromPool(employeeId) {
-    const idx = this._badgePool.findIndex(p => p.badge.employeeId === employeeId);
-    if (idx !== -1) {
-      this._badgePool.splice(idx, 1);
-      if (this._poolCursor > idx) this._poolCursor--;
-      if (this._poolCursor >= this._badgePool.length) this._poolCursor = 0;
-    }
-    // Panel contents derived from DOM — removal handled by _executeRemoval DOM ops
+    this._badgePool = this._badgePool.filter(p => p.badge.employeeId !== employeeId);
+    this._drainQueue = this._drainQueue.filter(p => p.badge.employeeId !== employeeId);
   },
 
   // ─── Scheduler State Machine ──────────────────────────────
   // States: idle → filling → settling → rotating → idle (on destroy)
   // Transitions are explicit — no implicit state from timer/flag combos.
 
-  // Helper: check if any division panel is at capacity
-  _anyPanelFull() {
-    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
-      const contents = this._getPanelContents(div);
-      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-      if (contents.length >= cap) return true;
-    }
-    return false;
-  },
-
   // ─── Pool Drain (filling state) ─────────────────────────
-  // Sequential async loop — each tick completes before the next starts.
-  // Ticks dispatch ingress (fire-and-forget) so multiple divisions animate concurrently.
+  // Consumes _drainQueue sequentially. Multi-dispatch fills all in-flight slots per tick.
 
   _startPoolDrain() {
     if (this._schedulerState !== 'idle') return;
@@ -2288,105 +2224,64 @@ window.RackRenderer = {
   _poolDrainTick() {
     if (this._schedulerState !== 'filling') return;
 
-    // Snapshot panel state once per tick
-    const panelSnapshot = {};
-    let totalDisplayed = 0;
-    let totalCapacity = 0;
-    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
-      panelSnapshot[div] = this._getPanelContents(div);
-      totalDisplayed += panelSnapshot[div].length;
-      totalCapacity += this._DIV_TOPOLOGY[div]?.panelCap || 12;
-    }
-
-    // Multi-dispatch: fill all available in-flight slots this tick
+    // Dispatch from drain queue — fill all available slots
     let dispatched = 0;
-    while (this._inFlightCount < this._MAX_IN_FLIGHT) {
-      const entry = this._findEligibleBadge(panelSnapshot);
-      if (!entry) break;
-      this._dispatchDrainIngress(entry);
-      dispatched++;
+    while (this._inFlightCount < this._MAX_IN_FLIGHT && this._drainQueue.length > 0) {
+      // Find next badge whose panel has room
+      let found = false;
+      for (let i = 0; i < this._drainQueue.length; i++) {
+        const entry = this._drainQueue[i];
+        const panelContents = this._getPanelContents(entry.divTheme);
+        const cap = this._DIV_TOPOLOGY[entry.divTheme]?.panelCap || 12;
+
+        if (panelContents.length + this._divInFlight[entry.divTheme] >= cap) continue;
+        if (panelContents.includes(entry.badge.employeeId)) continue;
+        if (this._divInFlight[entry.divTheme] >= this._MAX_PER_DIV) continue;
+
+        // Remove from drain queue and dispatch
+        this._drainQueue.splice(i, 1);
+        this._divInFlight[entry.divTheme]++;
+        this._inFlightCount++;
+        this._executeCoreDownloadCli(entry.divTheme).then(() => {
+          return this._playIngress(entry.badge);
+        }).finally(() => {
+          this._inFlightCount--;
+          this._divInFlight[entry.divTheme]--;
+        });
+        dispatched++;
+        found = true;
+        break;
+      }
+      if (!found) break; // no eligible badge in drain queue
     }
 
-    if (dispatched > 0) {
-      console.log(`[rack-drain] dispatched=${dispatched} inFlight=${this._inFlightCount} displayed=${totalDisplayed}/${totalCapacity}`);
-    }
-
-    // If nothing was dispatched this tick, check if drain is complete
-    if (dispatched === 0) {
-      console.log(`[rack-drain] no dispatch: inFlight=${this._inFlightCount} displayed=${totalDisplayed}/${totalCapacity} pool=${this._badgePool.length}`);
-      if (this._inFlightCount === 0) {
-        // No badges to dispatch and no animations running → drain done
-        console.log(`[rack-drain] ✓ DRAIN COMPLETE — transitioning to ${this._anyPanelFull() ? 'settling (30s)' : 'idle'}`);
-        this._verifyPanelIntegrity();
-        if (this._anyPanelFull()) {
-          this._schedulerState = 'settling';
-          this._settleTimer = setTimeout(() => {
-            this._settleTimer = null;
-            this._schedulerState = 'rotating';
-            console.log('[rack-drain] ✓ SETTLE COMPLETE — starting rotation');
-            this._startRotation();
-          }, this._SETTLE_PERIOD_MS);
-        } else {
-          this._schedulerState = 'idle';
-        }
+    // Drain complete: queue empty and no animations running
+    if (this._drainQueue.length === 0 && this._inFlightCount === 0 && dispatched === 0) {
+      this._verifyPanelIntegrity();
+      // Any division with more pool badges than panel capacity → rotation needed
+      const needsRotation = this._badgePool.some(entry => {
+        const contents = this._getPanelContents(entry.divTheme);
+        return !contents.includes(entry.badge.employeeId);
+      });
+      if (needsRotation) {
+        this._schedulerState = 'settling';
+        this._settleTimer = setTimeout(() => {
+          this._settleTimer = null;
+          this._schedulerState = 'rotating';
+          this._startRotation();
+        }, this._SETTLE_PERIOD_MS);
+      } else {
+        this._schedulerState = 'idle';
       }
     }
-  },
-
-  // Find next eligible badge for dispatch (scans full pool, prefers opposite rack side)
-  _findEligibleBadge(panelSnapshot) {
-    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
-    let preferred = null;
-    let fallback = null;
-
-    for (const poolEntry of this._badgePool) {
-      const panelContents = panelSnapshot[poolEntry.divTheme] || [];
-      const cap = this._DIV_TOPOLOGY[poolEntry.divTheme]?.panelCap || 12;
-
-      // Skip if panel full (accounting for in-flight)
-      if (panelContents.length + this._divInFlight[poolEntry.divTheme] >= cap) continue;
-      // Skip if already displayed
-      if (panelContents.includes(poolEntry.badge.employeeId)) continue;
-      // Skip if division at max concurrent
-      if (this._divInFlight[poolEntry.divTheme] >= this._MAX_PER_DIV) continue;
-      // Skip if displayed too recently (recency suppression)
-      if (poolEntry.lastDisplayedAt > 0 && (Date.now() - poolEntry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) continue;
-
-      const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
-      if (topo?.rackSide === preferSide) {
-        preferred = poolEntry;
-        break; // preferred side found — use it
-      }
-      if (!fallback) fallback = poolEntry;
-    }
-
-    return preferred || fallback;
-  },
-
-  // Fire-and-forget ingress dispatch for pool drain
-  _dispatchDrainIngress(poolEntry) {
-    const topo = this._DIV_TOPOLOGY[poolEntry.divTheme];
-    this._lastLaunchRack = topo?.rackSide;
-    this._divInFlight[poolEntry.divTheme]++;
-    this._inFlightCount++;
-
-    this._executeCoreDownloadCli(poolEntry.divTheme).then(() => {
-      poolEntry.lastDisplayedAt = Date.now();
-      poolEntry.displayCount++;
-      return this._playIngress(poolEntry.badge);
-    }).finally(() => {
-      this._inFlightCount--;
-      this._divInFlight[poolEntry.divTheme]--;
-    });
   },
 
   // ─── Rotation (rotating state) ──────────────────────────
-  // Sequential async loop — one tick at a time, dispatches rotation cycles.
+  // Panel-driven: round-robin through divisions, remove oldest, replace with pool badge.
 
   _startRotation() {
     if (this._schedulerState !== 'rotating') return;
     if (this._badgePool.length === 0) return;
-    console.log(`[rack-rotation] ✓ ROTATION STARTED — pool: ${this._badgePool.length} badges`);
     this._runRotationLoop();
   },
 
@@ -2405,68 +2300,54 @@ window.RackRenderer = {
     this._schedulerState = 'idle';
   },
 
-  // Rotation tick — find eligible badges and dispatch rotation cycles
+  // Rotation tick — panel-driven: pick a division, swap a badge
   _rotationTick() {
     if (this._schedulerState !== 'rotating') return;
     if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
-    if (this._badgePool.length === 0) return;
 
-    // Snapshot panel state once per tick
-    const panelSnapshot = {};
-    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
-      panelSnapshot[div] = this._getPanelContents(div);
+    const divs = Object.keys(this._DIV_TOPOLOGY);
+
+    // Round-robin through divisions to find one that can rotate
+    for (let i = 0; i < divs.length; i++) {
+      const div = divs[(this._rotationDiv + i) % divs.length];
+      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
+
+      const panelContents = this._getPanelContents(div);
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      const divPool = this._badgePool.filter(e => e.divTheme === div);
+
+      // Only rotate if division has more badges than panel capacity
+      if (divPool.length <= cap) continue;
+
+      // Find a replacement: any pool badge for this division NOT currently displayed
+      const replacement = divPool.find(e => !panelContents.includes(e.badge.employeeId));
+      if (!replacement) continue;
+
+      // Pick oldest displayed badge to remove (first in panel = FIFO)
+      const removeId = panelContents[0];
+
+      // Advance round-robin past this division
+      this._rotationDiv = (this._rotationDiv + i + 1) % divs.length;
+
+      // Dispatch rotation cycle
+      this._divInFlight[div]++;
+      this._inFlightCount++;
+
+      (async () => {
+        try {
+          if (panelContents.length >= cap) {
+            await this._executeRemoval(div, removeId);
+          }
+          await this._executeCoreDownloadCli(div);
+          await this._playIngress(replacement.badge);
+        } finally {
+          this._inFlightCount--;
+          this._divInFlight[div]--;
+        }
+      })();
+
+      return; // one rotation per tick
     }
-
-    // Scan full pool for eligible badges (not displayed in their panel)
-    for (const poolEntry of this._badgePool) {
-      if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
-
-      const { badge, divTheme } = poolEntry;
-      const panelContents = panelSnapshot[divTheme] || [];
-
-      if (this._divInFlight[divTheme] >= this._MAX_PER_DIV) continue;
-      if (panelContents.includes(badge.employeeId)) continue;
-      // Recency: don't rotate a badge that was just displayed
-      if (poolEntry.lastDisplayedAt > 0 && (Date.now() - poolEntry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) continue;
-
-      this._dispatchRotation(poolEntry);
-      return; // one dispatch per tick — let it animate before next
-    }
-  },
-
-  // Dispatch a full rotation cycle (fire-and-forget)
-  _dispatchRotation(poolEntry) {
-    const { badge, divTheme } = poolEntry;
-    const topo = this._DIV_TOPOLOGY[divTheme];
-    if (!topo) return;
-
-    const panelContents = this._getPanelContents(divTheme);
-    const cap = this._DIV_TOPOLOGY[divTheme]?.panelCap || 12;
-
-    // Skip if badge already in panel
-    if (panelContents.includes(badge.employeeId)) return;
-
-    const panelFull = panelContents.length >= cap;
-
-    this._divInFlight[divTheme]++;
-    this._inFlightCount++;
-
-    this._runRotationCycle(poolEntry, divTheme, badge, panelFull, panelContents)
-      .finally(() => {
-        this._inFlightCount--;
-        this._divInFlight[divTheme]--;
-      });
-  },
-
-  // Run a single rotation cycle: removal (if needed) → download CLI → ingress
-  async _runRotationCycle(poolEntry, divTheme, badge, panelFull, panelContents) {
-    if (panelFull) {
-      await this._executeRemoval(divTheme, panelContents[0]);
-    }
-    await this._executeCoreDownloadCli(divTheme);
-    poolEntry.lastDisplayedAt = Date.now();
-    poolEntry.displayCount++;
-    await this._playIngress(badge);
   },
 
   // Phase A: Port shutdown + degauss removal
