@@ -2363,6 +2363,7 @@ body.view-rack .public-orgchart {
 /* ─── Reduced Motion ──────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+  /* Persistent device animations */
   .rack-switch-led { animation: none; }
   .rack-conn-port-active::after { animation: none; }
   .rack-conn-port-dual::before { animation: none; }
@@ -2375,6 +2376,15 @@ body.view-rack .public-orgchart {
   .rack-ups-lcd-page-2, .rack-ups-lcd-page-3 { display: none; }
   .rack-brs-led-render, .rack-brs-led-queue { animation: none; }
   .rack-wlc-radio-heartbeat { animation: none; }
+  /* Door intro animations (JS also skips, this is defense-in-depth) */
+  .rack-door-text { animation: none; }
+  .rack-doors-opening .rack-door-left,
+  .rack-doors-opening .rack-door-right { animation: none; }
+  .rack-doors-opening .rack-door-text { animation: none; opacity: 0; }
+  .rack-doors-opening ~ .rack-container { animation: none; opacity: 1; }
+  /* Transient trigger effects (JS skips ingress, belt-and-suspenders) */
+  .rack-fw-pass-overlay { animation: none; opacity: 1; }
+  .rack-trigger-arrival-burst { animation: none; }
 }
 
 /* ─── FX Off ──────────────────────────────────────────────── */
@@ -2389,6 +2399,8 @@ body.view-rack .public-orgchart {
 .fx-off .rack-brs-lcd { animation: none; }
 .fx-off .rack-storage-led-activity.active { animation: none; }
 .fx-off .rack-wlc-radio-heartbeat { animation: none; }
+.fx-off .rack-fw-pass-overlay { animation: none; opacity: 1; }
+.fx-off .rack-trigger-arrival-burst { animation: none; }
 
 /* ─── Packet Trigger Effects ─────────────────────────────── */
 
