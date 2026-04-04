@@ -269,8 +269,8 @@ window.RackRenderer = {
     rackA.unshift({ type: 'brs' });
     rackA.unshift({ type: 'storage' });
 
-    // Rack B: Cable Mgmt at top of division block
-    rackB.unshift({ type: 'cable' });
+    // Rack B: BRS-02 at top of division block (replaces cable mgmt)
+    rackB.unshift({ type: 'brs', id: 'brs-02' });
 
     // Bottom-of-rack devices (before height matching)
     // Rack A: WLC above UPS
@@ -601,7 +601,7 @@ window.RackRenderer = {
           frame.appendChild(this._renderStorageArray());
           break;
         case 'brs':
-          frame.appendChild(this._renderBRS());
+          frame.appendChild(this._renderBRS(device.id || 'brs-01'));
           break;
         case 'vpn':
           frame.appendChild(this._renderVPN());
@@ -755,32 +755,40 @@ window.RackRenderer = {
 
     const coreLabel = side === 'A' ? 'CORE A' : 'CORE B';
 
-    // Band member portraits (right side, horizontal)
+    // Band member portraits (center, horizontal) — both cores get same slot count for alignment
     let membersHtml = '';
     if (execBadges && execBadges.length > 0) {
-      const half = Math.ceil(execBadges.length / 2);
-      const myMembers = side === 'A' ? execBadges.slice(0, half) : execBadges.slice(half);
+      const slotCount = Math.ceil(execBadges.length / 2); // 3 slots per core
+      const myMembers = side === 'A' ? execBadges.slice(0, slotCount) : execBadges.slice(slotCount);
 
       membersHtml = '<div class="rack-core-ports">';
-      myMembers.forEach(b => {
-        membersHtml += `
-          <div class="rack-core-port" data-employee-id="${esc(b.employeeId)}" title="${esc(b.name)}">
-            <img src="/api/badge/${esc(b.employeeId)}/headshot" alt="${esc(b.name)}" loading="lazy"
-              onerror="this.style.display='none'">
-          </div>
-        `;
-      });
+      for (let i = 0; i < slotCount; i++) {
+        if (i < myMembers.length) {
+          const b = myMembers[i];
+          membersHtml += `
+            <div class="rack-core-port" data-employee-id="${esc(b.employeeId)}" title="${esc(b.name)}">
+              <img src="/api/badge/${esc(b.employeeId)}/headshot" alt="${esc(b.name)}" loading="lazy"
+                onerror="this.style.display='none'">
+            </div>
+          `;
+        } else {
+          membersHtml += '<div class="rack-core-port rack-core-port-empty"></div>';
+        }
+      }
       membersHtml += '</div>';
     }
 
-    // Port assignments per core switch side
-    // Core A left: WLC(1), BRS-out(2), BRS-in(3), FW-A(4) | right: IT(1), Punk(2), trunk-B→A(3), trunk-A→B(4)
-    // Core B left: trunk-A→B(1), trunk-B→A(2), VPN(3), FW-B(4) | right: spare, Office(2), Corporate(3), spare
+    // Port assignments per core switch side (8 ports each, 16 total — Crisco 9500-24Y4C)
+    // Trunks at inner edges (Core A right 7-8, Core B left 1-2) for clean cross-rack cabling
+    // Core A left:  WLC(1), BRS-out(2), BRS-in(3), FW-A(4), spare(5-8)
+    // Core A right: spare(1-4), IT(5), Punk(6), trunk-BA(7), trunk-AB(8)
+    // Core B left:  trunk-AB(1), trunk-BA(2), VPN(3), FW-B(4), BRS02-out(5), BRS02-in(6), spare(7-8)
+    // Core B right: spare(1-6), Office(7), Corporate(8)
     const portMap = side === 'A'
-      ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink'], right: ['it-uplink', 'punk-uplink', 'trunk-ba', 'trunk-ab'] }
-      : { left: ['trunk-ab', 'trunk-ba', 'vpn-uplink', 'fw-b-uplink'], right: ['spare', 'office-uplink', 'corporate-uplink', 'spare'] };
+      ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink', 'spare', 'spare', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'it-uplink', 'punk-uplink', 'trunk-ba', 'trunk-ab'] }
+      : { left: ['trunk-ab', 'trunk-ba', 'vpn-uplink', 'fw-b-uplink', 'brs02-inbound', 'brs02-outbound', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'spare', 'spare', 'office-uplink', 'corporate-uplink'] };
 
-    // Left trunk ports (4) — connected ports get dual LEDs with animation
+    // Left trunk ports (8) — connected ports get dual LEDs with animation
     let leftPortsHtml = '<div class="rack-switch-ports rack-core-ports-left">';
     portMap.left.forEach(id => {
       const connected = id !== 'spare';
@@ -790,7 +798,7 @@ window.RackRenderer = {
     });
     leftPortsHtml += '</div>';
 
-    // Right trunk ports (4)
+    // Right trunk ports (8)
     let rightPortsHtml = '<div class="rack-switch-ports rack-core-ports-right">';
     portMap.right.forEach(id => {
       const connected = id !== 'spare';
@@ -806,7 +814,7 @@ window.RackRenderer = {
         <div class="rack-core-left">
           <div class="rack-device-header">
             <span class="rack-device-name">${coreLabel}</span>
-            <span class="rack-device-model">Crisco 9500-24Y4C</span>
+            <span class="rack-device-model">Crisco 9500-16X</span>
           </div>
           ${leftPortsHtml}
         </div>
@@ -994,10 +1002,17 @@ window.RackRenderer = {
     return el;
   },
 
-  _renderBRS() {
+  _brsDevices: new Map(),
+
+  _renderBRS(id = 'brs-01') {
     const el = document.createElement('div');
-    el.className = 'rack-device rack-device-brs rack-device-1u';
+    el.className = `rack-device rack-device-brs rack-device-${id} rack-device-1u`;
     el.setAttribute('data-device-type', 'brs');
+    el.setAttribute('data-brs-id', id);
+
+    const label = id.toUpperCase();
+    const uplinkId = id === 'brs-01' ? 'brs-core-uplink' : 'brs-02-core-uplink';
+    const outboundId = id === 'brs-01' ? 'brs-core-outbound' : 'brs-02-core-outbound';
 
     const barCount = 40;
     let barsHtml = '<div class="rack-brs-bars">';
@@ -1011,13 +1026,13 @@ window.RackRenderer = {
       <div class="rack-brs-layout">
         <div class="rack-brs-left">
           <div class="rack-device-header">
-            <span class="rack-device-name rack-brs-name">BRS-01</span>
+            <span class="rack-device-name rack-brs-name">${label}</span>
             <span class="rack-device-model">Mediocore RX-1000</span>
           </div>
           <div class="rack-brs-controls">
             <div class="rack-switch-ports">
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-uplink" title="Core Inbound" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="brs-core-outbound" title="Core Outbound" style="--port-delay:-8.1s;--port-speed:19.4s"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="${uplinkId}" title="Core Inbound" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="${outboundId}" title="Core Outbound" style="--port-delay:-8.1s;--port-speed:19.4s"></div>
             </div>
             <div class="rack-switch-leds rack-brs-leds">
               <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
@@ -1035,17 +1050,29 @@ window.RackRenderer = {
       </div>
     `;
 
-    // Store refs for trigger API
-    this._brsEl = el;
-    this._brsBars = el.querySelectorAll('.rack-brs-bar');
-    this._brsHeader = el.querySelector('.rack-brs-lcd-header');
-    this._brsThroughput = el.querySelector('.rack-brs-throughput');
-    this._brsRenderLed = el.querySelector('.rack-brs-led-render');
-    this._brsQueueLed = el.querySelector('.rack-brs-led-queue');
-    this._brsRendering = false;
-    this._brsJobCount = 0;
+    // Store refs per-device
+    this._brsDevices.set(id, {
+      el,
+      bars: el.querySelectorAll('.rack-brs-bar'),
+      header: el.querySelector('.rack-brs-lcd-header'),
+      throughput: el.querySelector('.rack-brs-throughput'),
+      renderLed: el.querySelector('.rack-brs-led-render'),
+      queueLed: el.querySelector('.rack-brs-led-queue'),
+      rendering: false,
+      jobCount: 0,
+    });
 
-    // BRS renders are triggered by ingress packets via _playIngress
+    // Backward compat — keep single-device refs for BRS-01
+    if (id === 'brs-01') {
+      this._brsEl = el;
+      this._brsBars = el.querySelectorAll('.rack-brs-bar');
+      this._brsHeader = el.querySelector('.rack-brs-lcd-header');
+      this._brsThroughput = el.querySelector('.rack-brs-throughput');
+      this._brsRenderLed = el.querySelector('.rack-brs-led-render');
+      this._brsQueueLed = el.querySelector('.rack-brs-led-queue');
+      this._brsRendering = false;
+      this._brsJobCount = 0;
+    }
 
     return el;
   },
@@ -1061,16 +1088,17 @@ window.RackRenderer = {
    * @param {object} badge - { employeeId, song }
    * @param {number} [duration=3000] - Render duration in ms (2000-5000)
    */
-  triggerBRSRender(badge, duration) {
-    if (!this._brsBars || this._brsRendering) return;
-    this._brsRendering = true;
-    this._brsJobCount++;
+  triggerBRSRender(badge, duration, brsId = 'brs-01') {
+    const dev = this._brsDevices.get(brsId);
+    if (!dev || !dev.bars || dev.rendering) return;
+    dev.rendering = true;
+    dev.jobCount++;
 
     const renderMs = duration || 3000;
     const song = badge.song || 'PLEASE HOLD';
-    const id = badge.employeeId || 'HD-00000';
+    const empId = badge.employeeId || 'HD-00000';
     const wf = (typeof WAVEFORMS !== 'undefined' && WAVEFORMS[song]) || null;
-    const barCount = this._brsBars.length;
+    const barCount = dev.bars.length;
 
     // Resample 60-bar waveform data to our bar count
     let targetHeights;
@@ -1092,17 +1120,17 @@ window.RackRenderer = {
     }
 
     // Update header + LEDs
-    this._brsHeader.textContent = `${id} ► ${song}`;
-    this._brsRenderLed.classList.add('rack-brs-led-active');
-    this._brsThroughput.textContent = `${this._brsJobCount} j/m`;
+    dev.header.textContent = `${empId} ► ${song}`;
+    dev.renderLed.classList.add('rack-brs-led-active');
+    dev.throughput.textContent = `${dev.jobCount} j/m`;
 
     // Show full waveform instantly
-    this._brsBars.forEach((bar, i) => {
+    dev.bars.forEach((bar, i) => {
       bar.style.height = `${targetHeights[i]}%`;
     });
 
     // Add playhead element
-    const lcd = this._brsEl.querySelector('.rack-brs-bars');
+    const lcd = dev.el.querySelector('.rack-brs-bars');
     let playhead = lcd.querySelector('.rack-brs-playhead');
     if (!playhead) {
       playhead = document.createElement('div');
@@ -1120,25 +1148,26 @@ window.RackRenderer = {
     playhead.style.left = '100%';
 
     // When sweep completes, fade to idle
-    setTimeout(() => this._brsToIdle(playhead), renderMs + 200);
+    setTimeout(() => this._brsToIdle(playhead, brsId), renderMs + 200);
   },
 
-  _brsToIdle(playhead) {
-    if (!this._brsBars) return;
+  _brsToIdle(playhead, brsId = 'brs-01') {
+    const dev = this._brsDevices.get(brsId);
+    if (!dev || !dev.bars) return;
 
     // Hide playhead
     if (playhead) playhead.classList.remove('rack-brs-playhead-active');
 
     // Fade bars down
-    this._brsBars.forEach((bar, i) => {
+    dev.bars.forEach((bar, i) => {
       setTimeout(() => { bar.style.height = '4%'; }, i * 15);
     });
 
     setTimeout(() => {
-      this._brsHeader.textContent = 'IDLE';
-      this._brsRenderLed.classList.remove('rack-brs-led-active');
-      this._brsRendering = false;
-    }, this._brsBars.length * 15 + 200);
+      dev.header.textContent = 'IDLE';
+      dev.renderLed.classList.remove('rack-brs-led-active');
+      dev.rendering = false;
+    }, dev.bars.length * 15 + 200);
   },
 
   _renderVPN() {
@@ -1311,10 +1340,10 @@ window.RackRenderer = {
     // WLC AP mgmt → WiFi AP: solid line, exit down first then up left gutter
     ['wlc-ap-uplink', 'wifi-ap-eth', '#22C55E', 2, 'margin-left-down'],
     // Rack A division switches → Core A right: nested routing (inner cable first, outer wraps around)
-    ['core-a-it-uplink', 'sw-IT-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
+    ['core-a-it-uplink', 'sw-IT-spare', '#3B82F6', 2.5, 'margin-right-stagger', null, 42],
     ['core-a-punk-uplink', 'sw-Punk-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     // VPN → Core B left port 3: route through inter-rack gap
-    ['vpn-core-uplink', 'core-b-vpn-uplink', '#3B82F6', 2.5, 'margin-left-42'],
+    ['vpn-core-uplink', 'core-b-vpn-uplink', '#3B82F6', 2.5, 'margin-left-24'],
     // Rack B division switches → Core B right: nested routing (inner first, outer wraps around)
     ['core-b-office-uplink', 'sw-Office-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
     ['core-b-corporate-uplink', 'sw-Corporate-spare', '#3B82F6', 2.5, 'margin-right-stagger'],
@@ -1323,6 +1352,9 @@ window.RackRenderer = {
     // Cloud → Firewalls: visible WAN uplinks from the internet
     ['cloud-out', 'fw-a-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
     ['cloud-out', 'fw-b-wan', '#5B8DEF', 1.5, 'cloud-drop', 'dashed'],
+    // BRS-02 on Rack B — short straight drops (BRS-02 sits directly below Core B)
+    ['core-b-brs02-inbound', 'brs-02-core-uplink', '#3B82F6', 2.5, 'drop-straight'],
+    ['brs-02-core-outbound', 'core-b-brs02-outbound', '#3B82F6', 2.5, 'drop-straight'],
   ],
 
   // ─── Topology Graph ─────────────────────────────────────
@@ -1330,7 +1362,7 @@ window.RackRenderer = {
   // Nodes = devices, edges = cables (or virtual links for cloud/switch→patch).
 
   _TOPOLOGY_NODES: [
-    'cloud', 'fw-a', 'fw-b', 'core-a', 'core-b', 'brs', 'wlc', 'wifi-ap', 'vpn',
+    'cloud', 'fw-a', 'fw-b', 'core-a', 'core-b', 'brs', 'brs-02', 'wlc', 'wifi-ap', 'vpn',
     'sw-IT', 'sw-Punk', 'sw-Office', 'sw-Corporate', 'sw-custom',
     'patch-IT', 'patch-Punk', 'patch-Office', 'patch-Corporate', 'patch-custom',
   ],
@@ -1342,10 +1374,11 @@ window.RackRenderer = {
     'core-a-wlc-uplink': 'core-a', 'core-a-brs-outbound': 'core-a',
     'core-a-brs-inbound': 'core-a', 'core-a-fw-a-uplink': 'core-a',
     'core-a-it-uplink': 'core-a', 'core-a-punk-uplink': 'core-a',
-    'core-a-trunk-ba': 'core-a', 'core-a-trunk-ab': 'core-a',
-    'core-b-trunk-ab': 'core-b', 'core-b-trunk-ba': 'core-b',
+    'core-a-trunk-ab': 'core-a', 'core-a-trunk-ba': 'core-a',
+    'core-b-brs02-outbound': 'core-b', 'core-b-brs02-inbound': 'core-b',
     'core-b-vpn-uplink': 'core-b', 'core-b-fw-b-uplink': 'core-b',
     'core-b-office-uplink': 'core-b', 'core-b-corporate-uplink': 'core-b',
+    'core-b-trunk-ab': 'core-b', 'core-b-trunk-ba': 'core-b',
     'sw-IT-core-uplink': 'sw-IT', 'sw-IT-spare': 'sw-IT',
     'sw-Punk-core-uplink': 'sw-Punk', 'sw-Punk-spare': 'sw-Punk',
     'sw-Office-core-uplink': 'sw-Office', 'sw-Office-spare': 'sw-Office',
@@ -1353,13 +1386,34 @@ window.RackRenderer = {
     'sw-custom-core-uplink': 'sw-custom', 'sw-custom-spare': 'sw-custom',
     'wlc-core-uplink': 'wlc', 'wlc-ap-uplink': 'wlc',
     'brs-core-uplink': 'brs', 'brs-core-outbound': 'brs',
+    'brs-02-core-uplink': 'brs-02', 'brs-02-core-outbound': 'brs-02',
+    'core-b-brs02-inbound': 'core-b', 'core-b-brs02-outbound': 'core-b',
     'vpn-core-uplink': 'vpn', 'vpn-contractor-downlink': 'vpn',
     'wifi-ap-eth': 'wifi-ap',
     'cloud-out': 'cloud',
   },
 
   // Cable indices that are strictly one-way (cross-rack trunks + BRS in/out)
-  _DIRECTIONAL_CABLES: new Set([0, 1, 4, 5]),
+  _DIRECTIONAL_CABLES: new Set([0, 1, 4, 5, 16, 17]),
+
+  // Per-cable speed overrides for dramatic pacing (display piece, not throughput)
+  // Default is 0.4 (150px/sec). Lower = slower crawl.
+  _CABLE_SPEEDS: {
+    0: 0.2,   // cross-rack A→B — slow dramatic crawl
+    1: 0.2,   // cross-rack B→A
+    2: 0.3,   // FW-A → Core A — let FW inspect sink in
+    3: 0.3,   // FW-B → Core B
+    4: 0.35,  // Core A → BRS inbound — slight linger
+    5: 0.35,  // BRS → Core A outbound
+    8: 0.25,  // Core A → IT switch — let routing breathe
+    9: 0.25,  // Core A → Punk switch
+    10: 0.3,  // VPN → Core B
+    11: 0.25, // Core B → Office switch
+    12: 0.25, // Core B → Corporate switch
+    13: 0.2,  // VPN → Contractors — long scenic under-and-up
+    16: 0.35, // Core B → BRS-02 inbound
+    17: 0.35, // BRS-02 → Core B outbound
+  },
 
   // Virtual edges: no physical cable, animated as short drops or invisible paths
   _VIRTUAL_EDGES: [
@@ -1764,13 +1818,18 @@ window.RackRenderer = {
 
   // Core CLI popup — Cisco interface name mapping from data-port-id
   _CLI_PORT_NAMES: {
-    'core-a-it-uplink': 'Te2/0/1', 'core-a-punk-uplink': 'Te2/0/2',
-    'core-a-trunk-ba': 'Te2/0/3', 'core-a-trunk-ab': 'Te2/0/4',
+    // Core A left (Te1/0/1-8): WLC, BRS-out, BRS-in, FW-A, spare(5-8)
     'core-a-wlc-uplink': 'Te1/0/1', 'core-a-brs-outbound': 'Te1/0/2',
     'core-a-brs-inbound': 'Te1/0/3', 'core-a-fw-a-uplink': 'Te1/0/4',
+    // Core A right (Te2/0/1-8): spare(1-4), IT(5), Punk(6), trunk-BA(7), trunk-AB(8)
+    'core-a-it-uplink': 'Te2/0/5', 'core-a-punk-uplink': 'Te2/0/6',
+    'core-a-trunk-ba': 'Te2/0/7', 'core-a-trunk-ab': 'Te2/0/8',
+    // Core B left (Te1/0/1-8): trunk-AB(1), trunk-BA(2), VPN(3), FW-B(4), BRS02-out(5), BRS02-in(6), spare(7-8)
     'core-b-trunk-ab': 'Te1/0/1', 'core-b-trunk-ba': 'Te1/0/2',
     'core-b-vpn-uplink': 'Te1/0/3', 'core-b-fw-b-uplink': 'Te1/0/4',
-    'core-b-office-uplink': 'Te2/0/2', 'core-b-corporate-uplink': 'Te2/0/3',
+    'core-b-brs02-inbound': 'Te1/0/5', 'core-b-brs02-outbound': 'Te1/0/6',
+    // Core B right (Te2/0/1-8): spare(1-6), Office(7), Corporate(8)
+    'core-b-office-uplink': 'Te2/0/7', 'core-b-corporate-uplink': 'Te2/0/8',
   },
   _CLI_VLANS: { IT: 10, Punk: 20, Office: 30, Corporate: 40, _custom: 99 },
   _CLI_TEMPLATES: [
@@ -1803,12 +1862,18 @@ window.RackRenderer = {
     'wifi-ap→wlc': 7, 'wlc→core-a': 6,
     'core-a→core-b': 0, 'core-b→core-a': 1,
     'core-a→brs': 4, 'brs→core-a': 5,
+    'core-b→brs-02': 16, 'brs-02→core-b': 17,
     'core-b→vpn': 10, 'vpn→sw-custom': 13,
     'core-a→sw-IT': 8, 'core-a→sw-Punk': 9,
     'core-b→sw-Office': 11, 'core-b→sw-Corporate': 12,
   },
 
   _getCable(fromNode, toNode) {
+    // Port-channel: cross-rack hops randomly pick one of two trunk cables
+    if ((fromNode === 'core-a' && toNode === 'core-b') ||
+        (fromNode === 'core-b' && toNode === 'core-a')) {
+      return Math.random() < 0.5 ? 0 : 1;
+    }
     return this._ADJACENCY_CABLES[`${fromNode}→${toNode}`] ?? null;
   },
 
@@ -1819,7 +1884,7 @@ window.RackRenderer = {
 
     const brs = options.brs !== false; // default: attempt BRS
     const steps = [];
-    const isWifi = entryType === 'wifi';
+    const isWifi = (entryType === 'wifi');
 
     // Step 1: Materialize at entry point
     steps.push({
@@ -1848,19 +1913,29 @@ window.RackRenderer = {
     // Current position after entry cables
     let currentCore = isWifi ? 'core-a' : topo.core;
 
-    // Step 3: BRS side trip (only from Core A)
+    // Step 3: BRS side trip — each rack has its own BRS
+    // WiFi always renders at BRS-01 (already at Core A). FW badges use their rack's BRS.
     if (brs) {
-      // If we're at Core B, cross-rack to Core A first — CLI on cross-rack
-      if (currentCore === 'core-b') {
-        const xStep = { type: 'cable', cable: this._getCable('core-b', 'core-a'), from: 'core-b' };
+      const brsCore = isWifi ? 'core-a' : topo.core;
+      const brsNode = brsCore === 'core-a' ? 'brs' : 'brs-02';
+      const brsId = brsCore === 'core-a' ? 'brs-01' : 'brs-02';
+
+      // Cross-rack to BRS core if needed (WiFi B-side badges are already at Core A)
+      if (currentCore !== brsCore) {
+        const xStep = { type: 'cable', cable: this._getCable(currentCore, brsCore), from: currentCore };
         if (cliRoll) xStep.coreTrigger = 'core-cli';
         steps.push(xStep);
-        currentCore = 'core-a';
+        currentCore = brsCore;
       }
-      steps.push({ type: 'cable', cable: this._getCable('core-a', 'brs'), from: 'core-a' });
-      steps.push({ type: 'brs-render', pause: 2500 });
-      steps.push({ type: 'cable', cable: this._getCable('brs', 'core-a'), from: 'brs' });
-      currentCore = 'core-a';
+
+      const inboundStep = { type: 'cable', cable: this._getCable(brsCore, brsNode), from: brsCore };
+      if (cliRoll) inboundStep.coreTrigger = 'core-cli';
+      steps.push(inboundStep);
+      steps.push({ type: 'brs-render', pause: 2500, brsId });
+      const outboundStep = { type: 'cable', cable: this._getCable(brsNode, brsCore), from: brsNode, cliCore: brsCore === 'core-a' ? 'A' : 'B' };
+      if (cliRoll) outboundStep.coreTrigger = 'core-cli';
+      steps.push(outboundStep);
+      currentCore = brsCore;
     }
 
     // Step 4: Route to destination switch
@@ -1925,10 +2000,10 @@ window.RackRenderer = {
   // Scheduler state
   _ingressQueue: [],
   _inFlightCount: 0,
-  _MAX_IN_FLIGHT: 3,
+  _MAX_IN_FLIGHT: 5,
   _LAUNCH_INTERVAL: 3000, // ms between launches
   _schedulerTimer: null,
-  _brsBusy: false,
+  _brsBusy: { 'brs-01': false, 'brs-02': false },
   _lastLaunchRack: null, // 'A' or 'B', for alternating
 
   _startScheduler() {
@@ -1944,7 +2019,7 @@ window.RackRenderer = {
     }
     this._ingressQueue = [];
     this._inFlightCount = 0;
-    this._brsBusy = false;
+    this._brsBusy = { 'brs-01': false, 'brs-02': false };
     this._lastLaunchRack = null;
   },
 
@@ -2596,6 +2671,8 @@ window.RackRenderer = {
       { cable: 11, from: 'core-b' },  // Core B → Office switch
       { cable: 12, from: 'core-b' },  // Core B → Corporate switch
       { cable: 13, from: 'vpn' },     // VPN → Contractors switch
+      { cable: 16, from: 'core-b' },  // Core B → BRS-02 inbound
+      { cable: 17, from: 'brs-02' },  // BRS-02 → Core B outbound
     ];
 
     const fireIntra = () => {
@@ -2608,7 +2685,7 @@ window.RackRenderer = {
         const dot = this._createDotPacket('#E2E8F0', 5, 0.6);
         if (dot) {
           const pkt = { el: dot, type: 'dot' };
-          this._movePacketAlongCable(pkt, hop.cable, hop.from, 0.3)
+          this._movePacketAlongCable(pkt, hop.cable, hop.from, 0.6)
             .then(() => { dot.remove(); })
             .catch(() => { dot.remove(); });
         }
@@ -2630,7 +2707,7 @@ window.RackRenderer = {
         const dot = this._createDotPacket('#E2E8F0', 5.5, 0.65);
         if (dot) {
           const pkt = { el: dot, type: 'dot' };
-          this._movePacketAlongCable(pkt, cableIdx, fromNode, 0.25)
+          this._movePacketAlongCable(pkt, cableIdx, fromNode, 0.5)
             .then(() => { dot.remove(); })
             .catch(() => { dot.remove(); });
         }
@@ -2804,7 +2881,7 @@ window.RackRenderer = {
 
   // Beam down transport — cone of light from switch port to patch panel port
   // Narrow at source (switch port), widens to frame the destination (patch port)
-  async _beamDown(pkt, fromX, fromY, toX, toY, duration = 1400) {
+  async _beamDown(pkt, fromX, fromY, toX, toY, duration = 2000) {
     if (!this._cableSvg || !pkt.el) return;
     const svg = this._cableSvg;
     const r = 16; // badge radius
@@ -2969,11 +3046,12 @@ window.RackRenderer = {
           if (step.cable == null) break;
           // Core CLI fires BEFORE cable movement — core "decides" route, then packet departs
           if (step.coreTrigger === 'core-cli') {
-            const coreSide = step.from === 'core-a' ? 'A'
-              : step.from === 'core-b' ? 'B' : null;
+            const coreSide = step.cliCore
+              || (step.from === 'core-a' ? 'A' : step.from === 'core-b' ? 'B' : null);
             if (coreSide) this._triggerCoreCli(coreSide, route);
           }
-          await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
+          const cableSpeed = this._CABLE_SPEEDS[step.cable] ?? 0.4;
+          await this._movePacketAlongCable(pkt, step.cable, step.from, cableSpeed);
           // Fire arrival triggers after cable movement
           if (step.trigger === 'fw-inspect') {
             const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
@@ -2989,13 +3067,14 @@ window.RackRenderer = {
         }
 
         case 'brs-render': {
-          if (this._brsBusy) break; // skip if busy
+          const brsId = step.brsId || 'brs-01';
+          if (this._brsBusy[brsId]) break; // skip if busy
           try {
-            this._brsBusy = true;
-            this.triggerBRSRender(badge, step.pause || 2500);
+            this._brsBusy[brsId] = true;
+            this.triggerBRSRender(badge, step.pause || 2500, brsId);
             await this._delay(step.pause || 2500);
           } finally {
-            this._brsBusy = false;
+            this._brsBusy[brsId] = false;
           }
           break;
         }
@@ -3034,7 +3113,7 @@ window.RackRenderer = {
           }
 
           if (srcCoords && destCoords) {
-            await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 1400);
+            await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 2000);
           }
           break;
         }
@@ -3058,8 +3137,8 @@ window.RackRenderer = {
     }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const entryType = Math.random() < 0.1 ? 'wifi' : 'firewall';
-    const route = this._resolveRoute(entryType, divTheme, { brs: !this._brsBusy });
+    const entryType = Math.random() < 0.2 ? 'wifi' : 'firewall';
+    const route = this._resolveRoute(entryType, divTheme);
 
     if (!route) {
       this._placeBadgePort(badge);
@@ -3162,7 +3241,8 @@ window.RackRenderer = {
     let crossRackLane = 0;
 
     // Draw each cable
-    this._CABLE_DEFS.forEach(([fromId, toId, color, width, routeType, style], cableIdx) => {
+    this._CABLE_DEFS.forEach((def, cableIdx) => {
+      const [fromId, toId, color, width, routeType, style] = def;
       const fromEl = container.querySelector(`[data-port-id="${fromId}"]`);
       const toEl = container.querySelector(`[data-port-id="${toId}"]`);
       if (!fromEl || !toEl) return;
@@ -3199,6 +3279,14 @@ window.RackRenderer = {
           // Vertical drop nudged left to avoid CRISCO silkscreen
           d = this._dropLeftPath(x1, y1, x2, y2);
           break;
+        case 'drop-straight': {
+          // Short vertical drop — slight rightward arc, parallel runs
+          // Arc amount based on horizontal distance between endpoints
+          const dxDrop = Math.abs(x2 - x1);
+          const dropArcX = Math.max(x1, x2) + 6 + dxDrop * 0.5;
+          d = `M ${x1} ${y1} Q ${dropArcX} ${(y1 + y2) / 2}, ${x2} ${y2}`;
+          break;
+        }
         case 'arc-left':
           // Left gutter routing — WLC uses this
           d = this._arcLeftPath(x1, y1, x2, y2, edges.left - 22 - (leftLanes[rackSide] * 10));
@@ -3221,7 +3309,8 @@ window.RackRenderer = {
         case 'margin-right-stagger': {
           // Right gutter with staggered vertical entry into core port
           const gutterX = edges.right + 8 + (rightLanes[rackSide] * 14);
-          d = this._marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdxByRack[rackSide]);
+          const staggerBase = def[6] != null ? def[6] : 30;
+          d = this._marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdxByRack[rackSide], staggerBase);
           rightLanes[rackSide]++;
           staggerIdxByRack[rackSide]++;
           break;
@@ -3355,10 +3444,10 @@ window.RackRenderer = {
       + `L ${topX} ${topY}`;
   },
 
-  _marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdx) {
+  _marginStaggerPath(x1, y1, x2, y2, gutterX, staggerIdx, baseOffset = 30) {
     // Right gutter with staggered entry into core ports
     // Each cable enters at a different height below the port, then goes straight up
-    // This creates clean, non-overlapping vertical connections into Core B
+    // This creates clean, non-overlapping vertical connections
     const r = 8;
     const staggerStep = 6; // vertical spacing between staggered cables
     const topY = Math.min(y1, y2);
@@ -3368,7 +3457,7 @@ window.RackRenderer = {
 
     // Entry point: outer cables (higher index) enter closer to port, inner cables enter lower
     // This nests cables cleanly — outer wraps around inner without crossing
-    const entryY = topY + 42 - (staggerIdx * staggerStep);
+    const entryY = topY + baseOffset - (staggerIdx * staggerStep);
 
     return `M ${botX} ${botY} `
       + `L ${gutterX - r} ${botY} `
@@ -3403,7 +3492,7 @@ window.RackRenderer = {
   _crossRackPath(x1, y1, x2, y2, lane) {
     // Arc across the gap between racks — stagger vertically for parallel trunks
     const laneOffset = (lane || 0) * 16;
-    const midY = Math.min(y1, y2) - 20 - laneOffset;
+    const midY = Math.min(y1, y2) - 8 - laneOffset;
     return `M ${x1} ${y1} C ${x1 + 30} ${midY}, ${x2 - 30} ${midY}, ${x2} ${y2}`;
   },
 
@@ -3558,7 +3647,7 @@ window.RackRenderer = {
       this._debugPkt = null;
     }
     this._cancelAllPackets();
-    this._brsBusy = false;
+    this._brsBusy = { 'brs-01': false, 'brs-02': false };
     const log = document.getElementById('rdbg-log');
     if (log) log.innerHTML = '';
     this._debugStatus('Ready');
@@ -3649,14 +3738,15 @@ window.RackRenderer = {
             await this._debugWaitStep(`Cable: ${cableName} (from ${step.from})`);
             // Core CLI fires BEFORE cable movement — core "decides" route, then packet departs
             if (step.coreTrigger === 'core-cli') {
-              const coreSide = step.from === 'core-a' ? 'A'
-                : step.from === 'core-b' ? 'B' : null;
+              const coreSide = step.cliCore
+                || (step.from === 'core-a' ? 'A' : step.from === 'core-b' ? 'B' : null);
               if (coreSide) {
                 this._triggerCoreCli(coreSide, route);
                 this._debugLog(`  ⚡ Core ${coreSide} CLI popup`);
               }
             }
-            await this._movePacketAlongCable(pkt, step.cable, step.from, 0.4);
+            const debugCableSpeed = this._CABLE_SPEEDS[step.cable] ?? 0.4;
+            await this._movePacketAlongCable(pkt, step.cable, step.from, debugCableSpeed);
             this._debugLog(`✓ ${cableName}`);
             if (step.trigger === 'fw-inspect') {
               const fwSide = step.triggerNode === 'fw-a' ? 'A' : 'B';
@@ -3677,15 +3767,16 @@ window.RackRenderer = {
           }
 
           case 'brs-render': {
-            await this._debugWaitStep('BRS: Render waveform');
+            const debugBrsId = step.brsId || 'brs-01';
+            await this._debugWaitStep(`${debugBrsId.toUpperCase()}: Render waveform`);
             try {
-              this._brsBusy = true;
-              this.triggerBRSRender(badge, step.pause || 2500);
+              this._brsBusy[debugBrsId] = true;
+              this.triggerBRSRender(badge, step.pause || 2500, debugBrsId);
               await this._delay(step.pause || 2500);
             } finally {
-              this._brsBusy = false;
+              this._brsBusy[debugBrsId] = false;
             }
-            this._debugLog('✓ BRS render');
+            this._debugLog(`✓ ${debugBrsId.toUpperCase()} render`);
             break;
           }
 
@@ -3723,7 +3814,7 @@ window.RackRenderer = {
 
             if (srcCoords && destCoords) {
               await this._debugWaitStep('Beam down: Switch Port → Patch Panel');
-              await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 1400);
+              await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 2000);
               this._debugLog('✓ Beam down');
             } else {
               this._debugLog(`⚠ No beam (src: ${!!srcCoords}, dest: ${!!destCoords})`);
