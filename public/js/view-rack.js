@@ -2080,7 +2080,7 @@ window.RackRenderer = {
       const inboundStep = { type: 'cable', cable: this._getCable(brsCore, brsNode), from: brsCore };
       if (cliRoll) inboundStep.coreTrigger = 'core-cli';
       steps.push(inboundStep);
-      steps.push({ type: 'brs-render', pause: 2500, brsId });
+      steps.push({ type: 'brs-render', pause: 1500, brsId });
       const outboundStep = { type: 'cable', cable: this._getCable(brsNode, brsCore), from: brsNode, cliCore: brsCore === 'core-a' ? 'A' : 'B' };
       if (cliRoll) outboundStep.coreTrigger = 'core-cli';
       steps.push(outboundStep);
@@ -2293,6 +2293,23 @@ window.RackRenderer = {
     const panelSnapshot = {};
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
       panelSnapshot[div] = this._getPanelContents(div);
+    }
+
+    // If any panel is at capacity, transition to rotation (after settle)
+    // Don't wait for ALL panels to fill — full panels need cycling now
+    const anyFull = Object.entries(panelSnapshot).some(([div, contents]) => {
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      return contents.length >= cap;
+    });
+    if (anyFull) {
+      this._verifyPanelIntegrity();
+      this._schedulerState = 'settling';
+      this._settleTimer = setTimeout(() => {
+        this._settleTimer = null;
+        this._schedulerState = 'rotating';
+        this._startRotation();
+      }, this._SETTLE_PERIOD_MS);
+      return;
     }
 
     // Prefer the opposite rack side from last dispatch (load-balance across racks)
@@ -3671,8 +3688,9 @@ window.RackRenderer = {
 
         case 'brs-render': {
           const brsId = step.brsId || 'brs-01';
-          // Wait for BRS to become free (with timeout to prevent deadlock)
-          const brsMaxWait = 5000;
+          const brsPause = step.pause || 1500;
+          // Wait for BRS to become free (timeout = 1 full render cycle)
+          const brsMaxWait = brsPause + 500;
           const brsStart = Date.now();
           while (this._brsBusy[brsId] && Date.now() - brsStart < brsMaxWait) {
             await this._delay(100);
@@ -3680,8 +3698,8 @@ window.RackRenderer = {
           if (this._brsBusy[brsId]) break; // still busy after timeout — skip
           try {
             this._brsBusy[brsId] = true;
-            this.triggerBRSRender(badge, step.pause || 2500, brsId);
-            await this._delay(step.pause || 2500);
+            this.triggerBRSRender(badge, brsPause, brsId);
+            await this._delay(brsPause);
           } finally {
             this._brsBusy[brsId] = false;
           }
