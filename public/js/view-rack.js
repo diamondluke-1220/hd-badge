@@ -14,6 +14,19 @@ window.RackRenderer = {
   _introPlayed: false,  // door open animation plays once per session
   _reducedMotion: false, // true when prefers-reduced-motion: reduce
 
+  // ─── Phase 3: Pool Rotation State ─────────────────────────
+  _badgePool: [],         // all non-exec badges available for rotation
+  _poolCursor: 0,         // current position in pool (wraps with shuffle)
+  _panelContents: {},     // divTheme → array of employeeIds currently displayed
+  _rotationMode: false,   // true after initial fill + settle period
+  _settleTimer: null,     // 30s timer after initial fill before rotation starts
+  _rotationTimer: null,   // perpetual rotation tick interval
+  _divRotationInFlight: {},  // divTheme → boolean, max 1 rotation per division
+  _SETTLE_PERIOD_MS: 30000,
+  _ROTATION_TICK_MS: 5000,
+  _RECENCY_WINDOW_MS: 120000, // don't re-show badge within 2 minutes
+  _MAX_RECENCY_SKIPS: 10,
+
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
   _RACK_B_THEMES: ['Office', 'Corporate'],
@@ -53,9 +66,21 @@ window.RackRenderer = {
     this._allBadges = allBadges;
     allBadges.forEach(b => { this._badgeIndex[b.employeeId] = b; });
 
-    // Build layout and render
-    this._rackData = this._computeLayout(allBadges);
+    // First load in session → empty panels, badges animate in
+    // View switch back → instant fill, skip to rotation
+    const poolDrained = sessionStorage.getItem('rack-pool-drained');
+    const animateFromEmpty = !poolDrained;
+
+    this._rackData = this._computeLayout(allBadges, { emptyPanels: animateFromEmpty });
     this._render();
+
+    // Initialize badge pool
+    this._initPool(allBadges);
+
+    if (!animateFromEmpty) {
+      // Returning from view switch — sync panel contents from DOM, jump to rotation
+      this._syncPanelContents();
+    }
   },
 
   addBadge(badge) {
@@ -75,8 +100,25 @@ window.RackRenderer = {
     // Exec/band members go directly to core portraits, no animation
     if (divTheme === '_exec') return null;
 
-    // Queue for animated ingress when cable animation is available
-    if (this._dualMode && this._cableSvg && this._INGRESS_ROUTES[divTheme]) {
+    // Add to badge pool (SSE badges prepend to front for priority)
+    this._badgePool.unshift({
+      badge,
+      divTheme,
+      lastDisplayedAt: -Infinity,
+      displayCount: 0,
+    });
+    // Adjust cursor for the prepend
+    if (this._poolCursor > 0) this._poolCursor++;
+
+    // If rotation is active, the rotation scheduler will pick this badge up
+    // (it's at the front of the pool so it gets priority via cursor position)
+    if (this._rotationMode) {
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
+      return null;
+    }
+
+    // Queue for animated ingress when cable animation is available (pre-rotation)
+    if (this._dualMode && this._cableSvg) {
       this._ingressQueue.push(badge);
       this._startScheduler();
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
@@ -177,6 +219,7 @@ window.RackRenderer = {
   },
 
   destroy() {
+    this._stopRotation();
     this._stopCloudRain();
     this._stopThreatTraffic();
     this._stopIdleAnimations();
@@ -204,7 +247,8 @@ window.RackRenderer = {
 
   // ─── Layout Computation ─────────────────────────────────
 
-  _computeLayout(badges) {
+  _computeLayout(badges, options = {}) {
+    const emptyPanels = options.emptyPanels || false;
     // Group badges by division theme
     const byDiv = {};
     const execBadges = [];
@@ -245,16 +289,16 @@ window.RackRenderer = {
         name: divInfo.name,
         theme: theme,
         color: color,
-        portCount: Math.min(allEmployees.length, 12),
+        portCount: emptyPanels ? 0 : Math.min(allEmployees.length, 12),
       });
 
-      // Division patch panel (1U, 12 ports, pool rotation handles overflow)
+      // Division patch panel (1U, 12 ports — empty on init, badges animate in)
       rack.push({
         type: 'patch',
         name: divInfo.name,
         theme: theme,
         color: color,
-        employees: allEmployees,
+        employees: emptyPanels ? [] : allEmployees,
         uSize: 1,
         panelKey: theme,
       });
@@ -522,6 +566,23 @@ window.RackRenderer = {
             this._startCloudRain();
             this._startThreatTraffic();
             this._startIdleAnimations();
+            if (this._badgePool.length > 0) {
+              const poolDrained = sessionStorage.getItem('rack-pool-drained');
+              if (poolDrained) {
+                // Returning from view switch — panels filled, check if rotation should run
+                const anyFull = Object.entries(this._panelContents).some(([div, panel]) => {
+                  const cap = div === '_custom' ? 24 : 12;
+                  return panel.length >= cap;
+                });
+                if (anyFull) {
+                  this._rotationMode = true;
+                  this._startRotation();
+                }
+              } else {
+                // First load — animate badges in from empty panels
+                this._startPoolDrain();
+              }
+            }
           }
         });
       });
@@ -2035,6 +2096,384 @@ window.RackRenderer = {
       { cables: [{ cable: adj['core-a→brs'], from: 'core-a' }, { cable: adj['brs→core-a'], from: 'brs' }] },
     ];
     return hops[Math.floor(Math.random() * hops.length)];
+  },
+
+  // ─── Phase 3: Pool Management ────────────────────────────
+
+  _initPool(allBadges) {
+    this._badgePool = [];
+    this._panelContents = {};
+    this._divRotationInFlight = {};
+    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
+      this._panelContents[div] = [];
+      this._divRotationInFlight[div] = false;
+    }
+
+    // Separate exec badges from pool — they live on core switch portraits
+    // Sort newest first (by created_at descending) so newest badges animate in first
+    const nonExec = allBadges
+      .filter(b => getDivisionForDept(b.department, b.isBandMember) !== '_exec')
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    for (const badge of nonExec) {
+      const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
+      this._badgePool.push({
+        badge,
+        divTheme,
+        lastDisplayedAt: -Infinity,
+        displayCount: 0,
+      });
+    }
+
+    this._poolCursor = 0;
+    // Panels start empty — badges will animate in via ingress scheduler
+  },
+
+  // Sync _panelContents from DOM — reads which badges are currently rendered in each panel
+  _syncPanelContents() {
+    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
+      this._panelContents[div] = [];
+      const panel = this._container?.querySelector(`[data-panel-key="${CSS.escape(div)}"]`);
+      if (!panel) continue;
+      const ports = panel.querySelectorAll('.rack-port[data-employee-id]');
+      ports.forEach(port => {
+        const eid = port.getAttribute('data-employee-id');
+        if (eid) {
+          this._panelContents[div].push(eid);
+          // Mark as displayed in pool
+          const poolEntry = this._badgePool.find(p => p.badge.employeeId === eid);
+          if (poolEntry) {
+            poolEntry.lastDisplayedAt = 0;
+            poolEntry.displayCount = 1;
+          }
+        }
+      });
+    }
+  },
+
+  _shufflePool() {
+    for (let i = this._badgePool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this._badgePool[i], this._badgePool[j]] = [this._badgePool[j], this._badgePool[i]];
+    }
+  },
+
+  // Advance pool cursor with recency suppression
+  _advancePool() {
+    let skips = 0;
+    while (skips < this._MAX_RECENCY_SKIPS && this._badgePool.length > 0) {
+      const entry = this._badgePool[this._poolCursor];
+      this._poolCursor++;
+      if (this._poolCursor >= this._badgePool.length) {
+        this._shufflePool();
+        this._poolCursor = 0;
+      }
+      // Skip if displayed too recently
+      if (entry.lastDisplayedAt > 0 && (Date.now() - entry.lastDisplayedAt) < this._RECENCY_WINDOW_MS) {
+        skips++;
+        continue;
+      }
+      return entry;
+    }
+    // Fallback: just take current cursor position
+    const entry = this._badgePool[this._poolCursor];
+    this._poolCursor++;
+    if (this._poolCursor >= this._badgePool.length) {
+      this._shufflePool();
+      this._poolCursor = 0;
+    }
+    return entry;
+  },
+
+  // Remove a badge from pool entirely (badge-deleted SSE)
+  _removeFromPool(employeeId) {
+    const idx = this._badgePool.findIndex(p => p.badge.employeeId === employeeId);
+    if (idx !== -1) {
+      this._badgePool.splice(idx, 1);
+      if (this._poolCursor > idx) this._poolCursor--;
+      if (this._poolCursor >= this._badgePool.length) this._poolCursor = 0;
+    }
+    // Remove from panel contents
+    for (const div of Object.keys(this._panelContents)) {
+      const panelIdx = this._panelContents[div].indexOf(employeeId);
+      if (panelIdx !== -1) {
+        this._panelContents[div].splice(panelIdx, 1);
+        break;
+      }
+    }
+  },
+
+  // Start draining the badge pool via animated ingress (initial fill)
+  // Once pool is exhausted, waits for settle period then starts rotation if any panel is full
+  _startPoolDrain() {
+    if (this._rotationTimer) return;
+    this._rotationTimer = setInterval(() => this._poolDrainTick(), this._ROTATION_TICK_MS);
+  },
+
+  async _poolDrainTick() {
+    if (!this._container || !this._cableSvg) return;
+    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
+
+    // Find next badge that isn't already displayed
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (this._poolCursor >= this._badgePool.length && attempt === 0) {
+        // Pool fully drained — mark session so view switches skip to instant fill
+        sessionStorage.setItem('rack-pool-drained', '1');
+        this._stopRotation();
+        const anyFull = Object.entries(this._panelContents).some(([div, panel]) => {
+          const cap = div === '_custom' ? 24 : 12;
+          return panel.length >= cap;
+        });
+        if (anyFull) {
+          // At least one panel full — start rotation after settle
+          this._settleTimer = setTimeout(() => {
+            this._settleTimer = null;
+            this._rotationMode = true;
+            this._startRotation();
+          }, this._SETTLE_PERIOD_MS);
+        }
+        return;
+      }
+
+      const poolEntry = this._advancePool();
+      if (!poolEntry) return;
+
+      const panel = this._panelContents[poolEntry.divTheme];
+      const cap = poolEntry.divTheme === '_custom' ? 24 : 12;
+
+      // Skip if panel is full (badge will be picked up by rotation later)
+      if (panel.length >= cap) continue;
+
+      // Skip if already displayed
+      if (panel.includes(poolEntry.badge.employeeId)) continue;
+
+      // Skip if division has ingress in flight
+      if (this._divRotationInFlight[poolEntry.divTheme]) continue;
+
+      // Animate ingress (no removal — panel has room)
+      this._divRotationInFlight[poolEntry.divTheme] = true;
+      this._inFlightCount++;
+      try {
+        poolEntry.lastDisplayedAt = Date.now();
+        poolEntry.displayCount++;
+        await this._playIngress(poolEntry.badge);
+        panel.push(poolEntry.badge.employeeId);
+      } finally {
+        this._inFlightCount--;
+        this._divRotationInFlight[poolEntry.divTheme] = false;
+      }
+      return;
+    }
+  },
+
+  _startRotation() {
+    if (this._rotationTimer) return;
+    if (!this._rotationMode || this._badgePool.length === 0) return;
+    this._rotationTimer = setInterval(() => this._rotationTick(), this._ROTATION_TICK_MS);
+  },
+
+  _stopRotation() {
+    if (this._rotationTimer) {
+      clearInterval(this._rotationTimer);
+      this._rotationTimer = null;
+    }
+    if (this._settleTimer) {
+      clearTimeout(this._settleTimer);
+      this._settleTimer = null;
+    }
+    this._rotationMode = false;
+    for (const div of Object.keys(this._divRotationInFlight)) {
+      this._divRotationInFlight[div] = false;
+    }
+  },
+
+  // Check if a pool entry is eligible for rotation
+  _isRotationCandidate(poolEntry) {
+    if (!poolEntry) return false;
+    const { badge, divTheme } = poolEntry;
+    const panel = this._panelContents[divTheme];
+    const cap = divTheme === '_custom' ? 24 : 12;
+
+    // Division already has a rotation in flight
+    if (this._divRotationInFlight[divTheme]) return false;
+
+    // Badge already in its target panel AND panel not full (nothing to swap)
+    if (panel.includes(badge.employeeId) && panel.length < cap) return false;
+
+    // Badge already in panel and panel is full — skip (same face leaving and entering looks odd)
+    if (panel.includes(badge.employeeId)) return false;
+
+    // Badge NOT in panel — eligible (will fill empty slot or swap oldest out)
+    return true;
+  },
+
+  // Rotation tick — try to launch a rotation cycle
+  async _rotationTick() {
+    if (!this._container || !this._cableSvg || !this._rotationMode) return;
+    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
+    if (this._badgePool.length === 0) return;
+
+    // Try to find an eligible badge (up to 8 attempts to cover pool variety)
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const poolEntry = this._advancePool();
+      if (!poolEntry) return;
+
+      if (this._isRotationCandidate(poolEntry)) {
+        this._executeRotation(poolEntry);
+        return;
+      }
+    }
+  },
+
+  // Execute a full rotation cycle: removal (if needed) → ingress
+  async _executeRotation(poolEntry) {
+    const { badge, divTheme } = poolEntry;
+    const topo = this._DIV_TOPOLOGY[divTheme];
+    if (!topo) return;
+
+    const panel = this._panelContents[divTheme];
+    const cap = divTheme === '_custom' ? 24 : 12;
+
+    // Skip if this badge is already in its target panel (would be a no-op swap)
+    if (panel.includes(badge.employeeId)) return;
+
+    const panelFull = panel.length >= cap;
+
+    this._divRotationInFlight[divTheme] = true;
+    this._inFlightCount++;
+
+    try {
+      // Phase A: Removal (if panel is full)
+      if (panelFull) {
+        const oldestEid = panel[0];
+        await this._executeRemoval(divTheme, oldestEid);
+        panel.shift(); // remove from tracking
+      }
+
+      // Phase B: Core download CLI + ingress
+      await this._executeCoreDownloadCli(divTheme);
+
+      // Run ingress animation
+      poolEntry.lastDisplayedAt = Date.now();
+      poolEntry.displayCount++;
+      await this._playIngress(badge);
+
+      // Track in panel
+      panel.push(badge.employeeId);
+
+    } finally {
+      this._inFlightCount--;
+      this._divRotationInFlight[divTheme] = false;
+    }
+  },
+
+  // Phase A: Port shutdown + degauss removal
+  async _executeRemoval(divTheme, employeeId) {
+    const topo = this._DIV_TOPOLOGY[divTheme];
+    if (!topo) return;
+
+    // Find the port element and its switch
+    const portEl = this._container?.querySelector(`.rack-port[data-employee-id="${CSS.escape(employeeId)}"]`);
+    const switchEl = this._container?.querySelector(`.rack-device-switch[data-theme="${CSS.escape(divTheme)}"]`);
+
+    // 1. Division switch CLI popup
+    if (switchEl) {
+      this._triggerSwitchCli(switchEl, divTheme, 'shutdown');
+    }
+    await this._delay(1500);
+
+    // 2. Switch port LED → amber → red
+    if (portEl) {
+      const portIdx = Array.from(portEl.parentNode.children).filter(c => !c.classList.contains('rack-port-empty')).indexOf(portEl);
+      const switchPort = switchEl?.querySelector(`[data-switch-port="${portIdx}"]`);
+      if (switchPort) {
+        switchPort.classList.add('rack-conn-port-shutdown');
+      }
+    }
+    await this._delay(800);
+
+    // 3. Degauss animation
+    if (portEl) {
+      portEl.classList.add('rack-degauss');
+    }
+    await this._delay(900);
+
+    // 4. Remove port, replace with empty
+    if (portEl) {
+      const emptyPort = document.createElement('div');
+      emptyPort.className = 'rack-port rack-port-empty';
+      portEl.replaceWith(emptyPort);
+    }
+
+    // 5. No shutdown CLI + LED dim
+    if (switchEl) {
+      this._triggerSwitchCli(switchEl, divTheme, 'noshutdown');
+      // Reset switch port LED
+      const switchPort = switchEl?.querySelector('.rack-conn-port-shutdown');
+      if (switchPort) {
+        switchPort.classList.remove('rack-conn-port-shutdown', 'rack-conn-port-active', 'rack-conn-port-dual');
+      }
+    }
+    await this._delay(1000);
+  },
+
+  // Division switch CLI popup — positioned above the switch
+  _SWITCH_CLI_SHUTDOWN: [
+    (sw, port) => `${sw}# conf t ; int ${port} shutdown`,
+    (sw, port) => `${sw}# clear mac address-table dynamic int ${port}`,
+    (sw, port) => `${sw}# clear nac session int ${port}`,
+    (sw, port) => `${sw}# clear authentication session int ${port}`,
+  ],
+
+  _triggerSwitchCli(switchEl, divTheme, action) {
+    const divInfo = typeof PUBLIC_DIVISIONS !== 'undefined'
+      ? PUBLIC_DIVISIONS.find(d => d.theme === divTheme)
+      : null;
+    const swName = `SW-${(divInfo?.label || divTheme).split(' ')[0].toUpperCase()}`;
+    const portName = `Gi1/0/${Math.floor(Math.random() * 12) + 1}`;
+
+    let text;
+    if (action === 'shutdown') {
+      const tmpl = this._SWITCH_CLI_SHUTDOWN[Math.floor(Math.random() * this._SWITCH_CLI_SHUTDOWN.length)];
+      text = tmpl(swName, portName);
+    } else {
+      text = `${swName}# no shutdown int ${portName}`;
+    }
+
+    const popup = document.createElement('div');
+    popup.className = 'rack-cli-popup rack-switch-cli-popup';
+    popup.textContent = text;
+    switchEl.style.position = 'relative';
+    switchEl.appendChild(popup);
+    setTimeout(() => popup.remove(), 3500);
+  },
+
+  // Core switch "download badge.pkg" CLI
+  async _executeCoreDownloadCli(divTheme) {
+    const topo = this._DIV_TOPOLOGY[divTheme];
+    if (!topo) return;
+
+    const coreSide = topo.core === 'core-a' ? 'A' : 'B';
+    const coreEl = this._container?.querySelector(`[data-core-side="${coreSide}"]`);
+    if (!coreEl) return;
+
+    // Pick band member name from core portraits
+    const portraits = coreEl.querySelectorAll('.rack-core-port[data-employee-id]');
+    const names = Array.from(portraits).map(p => p.getAttribute('title')).filter(Boolean);
+    const name = names.length > 0 ? names[Math.floor(Math.random() * names.length)].split(' ')[0] : 'Core';
+
+    const divLabel = divTheme.replace('_', '').toUpperCase();
+    const portName = `Te2/0/${Math.floor(Math.random() * 4) + 5}`;
+    const text = `${name}# download badge.pkg → ${portName} vlan ${divLabel}`;
+
+    const popup = document.createElement('div');
+    popup.className = 'rack-cli-popup rack-core-download-popup';
+    popup.textContent = text;
+    coreEl.style.position = 'relative';
+    coreEl.appendChild(popup);
+    setTimeout(() => popup.remove(), 3500);
+
+    await this._delay(1500);
   },
 
   // Scheduler state
