@@ -1750,7 +1750,6 @@ window.RackRenderer = {
         this._activePackets.push(packet);
       }
       this._startAnimLoop();
-      }, durationSec * 1000);
     });
   },
 
