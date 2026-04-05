@@ -14,17 +14,25 @@ window.RackRenderer = {
   _introPlayed: false,  // door open animation plays once per session
   _reducedMotion: false, // true when prefers-reduced-motion: reduce
 
-  // ─── Phase 3: Pool Rotation State ─────────────────────────
+  // ─── Phase 3: Pool State ───────────────────────────────────
   _badgePool: [],         // all non-exec badges, grouped by divTheme
-  _drainQueue: [],        // badges waiting to be placed during initial fill
-  _schedulerState: 'idle', // 'idle' | 'filling' | 'settling' | 'rotating'
-  _settleTimer: null,     // 30s timer between filling→rotating
   _divInFlight: {},       // divTheme → count of concurrent animations (max _MAX_PER_DIV)
-  _rotationDiv: 0,        // round-robin index for rotation division selection
   _MAX_PER_DIV: 2,       // max concurrent ingress per division
-  _SETTLE_PERIOD_MS: 30000,
-  _DRAIN_TICK_MS: 2000,   // fast ticks during fill (boot-up show)
-  _ROTATION_TICK_MS: 8000, // leisurely ticks during rotation (more screen time)
+
+  // ─── WFQ Scheduler State ─────────────────────────────────
+  // Weighted Fair Queuing with TTL-based eviction. No state machine.
+  // Each badge on panel has a TTL; when it expires, badge is evicted and
+  // returns to pool. Scheduler rate-limits all requests via WFQ weights.
+  _wfqRunning: false,              // true while scheduler loop is active
+  _wfqDivFillHandled: {},          // divTheme → boolean: TTL stagger applied after fill
+  _wfqVirtualTime: {},             // divTheme → number (WFQ scheduling credit)
+  _wfqWeight: {},                  // divTheme → number (poolSize / totalPoolSize)
+  _wfqInitialFillComplete: {},     // divTheme → boolean (first-pass priority tracking)
+  _wfqPanelTTLs: {},              // divTheme → Map<employeeId, { placedAt, ttl }>
+  _wfqDivPools: {},               // divTheme → [{ badge, divTheme }] (per-div pool index)
+  _WFQ_TTL_MIN_MS: 15000,         // min display time on panel before eviction
+  _WFQ_TTL_MAX_MS: 25000,         // max display time on panel before eviction
+  _WFQ_TICK_MS: 2000,             // scheduler tick interval
 
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
@@ -73,13 +81,10 @@ window.RackRenderer = {
     this._rackData = this._computeLayout(allBadges, { emptyPanels: this._animateFromEmpty });
     this._render();
 
-    // Initialize badge pool
+    // Initialize badge pool and WFQ scheduler
     this._initPool(allBadges);
+    this._initWfq();
 
-    // View switch return: panels already populated from DOM, drain queue empty
-    if (!this._animateFromEmpty) {
-      this._drainQueue = [];
-    }
   },
 
   addBadge(badge) {
@@ -99,33 +104,21 @@ window.RackRenderer = {
     // Exec/band members go directly to core portraits, no animation
     if (divTheme === '_exec') return null;
 
-    // Add to badge pool and drain queue
+    // Add to badge pool and WFQ per-division pool
     const entry = { badge, divTheme };
     this._badgePool.push(entry);
-    this._drainQueue.push(entry);
-
-    // If rotating or settling, the rotation scheduler will pick this badge up
-    if (this._schedulerState === 'rotating' || this._schedulerState === 'settling') {
-      requestAnimationFrame(() => window.scrollTo(0, scrollY));
-      return null;
+    if (this._wfqDivPools[divTheme]) {
+      this._wfqDivPools[divTheme].push(entry);
+      // Recompute WFQ weights (O(5) — trivial)
+      const totalSize = this._badgePool.length || 1;
+      for (const d of Object.keys(this._DIV_TOPOLOGY)) {
+        this._wfqWeight[d] = (this._wfqDivPools[d]?.length || 0) / totalSize;
+      }
     }
 
-    // Check if this badge's target panel is full — if so, start rotation
+    // WFQ scheduler picks it up on next tick (within 2s)
+    // If dual mode with cables, just let the scheduler handle it
     if (this._dualMode && this._cableSvg) {
-      const panelContents = this._getPanelContents(divTheme);
-      const cap = this._DIV_TOPOLOGY[divTheme]?.panelCap || 12;
-      if (panelContents.length >= cap) {
-        // Panel full — transition to rotating (skip settle for SSE urgency)
-        this._schedulerState = 'rotating';
-        this._stopScheduler();
-        this._startRotation();
-        requestAnimationFrame(() => window.scrollTo(0, scrollY));
-        return null;
-      }
-
-      // Panel has room — queue for animated ingress
-      this._ingressQueue.push(badge);
-      this._startScheduler();
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
       return null;
     }
@@ -224,8 +217,8 @@ window.RackRenderer = {
   },
 
   destroy() {
-    // State machine → idle (stops all async loops)
-    this._stopSchedulerState();
+    // Stop WFQ scheduler (async loop exits at next await)
+    this._stopWfq();
     // Safe to reset in-flight flags on full destroy — everything is being torn down
     for (const div of Object.keys(this._divInFlight)) {
       this._divInFlight[div] = 0;
@@ -233,7 +226,6 @@ window.RackRenderer = {
     this._stopCloudRain();
     this._stopThreatTraffic();
     this._stopIdleAnimations();
-    this._stopScheduler();
     this._cancelAllPackets();
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
@@ -253,6 +245,13 @@ window.RackRenderer = {
     this._coreCliPopup = { A: null, B: null };
     this._threatCounts = { A: 0, B: 0 };
     this._vpnSessions = 0;
+    // WFQ cleanup
+    this._wfqDivPools = {};
+    this._wfqPanelTTLs = {};
+    this._wfqVirtualTime = {};
+    this._wfqWeight = {};
+    this._wfqInitialFillComplete = {};
+    this._wfqDivFillHandled = {};
   },
 
   // ─── Layout Computation ─────────────────────────────────
@@ -576,21 +575,12 @@ window.RackRenderer = {
             this._startCloudRain();
             this._startThreatTraffic();
             this._startIdleAnimations();
-            if (this._badgePool.length > 0 && this._schedulerState === 'idle') {
-              if (this._animateFromEmpty) {
-                // First load — animate badges in from empty panels
-                this._startPoolDrain();
-              } else {
-                // Returning from view switch — check if any division needs rotation
-                const needsRotation = this._badgePool.some(entry => {
-                  const contents = this._getPanelContents(entry.divTheme);
-                  return !contents.includes(entry.badge.employeeId);
-                });
-                if (needsRotation) {
-                  this._schedulerState = 'rotating';
-                  this._startRotation();
-                }
+            if (this._badgePool.length > 0 && !this._wfqRunning) {
+              if (!this._animateFromEmpty) {
+                // Returning from view switch — seed TTLs from existing DOM panels
+                this._seedWfqTTLsFromDOM();
               }
+              this._startWfq();
             }
           }
         });
@@ -1501,10 +1491,10 @@ window.RackRenderer = {
     6: 0.35,  // BRS → Core A outbound
     9: 0.25,  // Core A → IT switch — let routing breathe
     10: 0.25, // Core A → Punk switch
-    11: 0.3,  // VPN → Core B
+    11: 0.4,  // Core B → VPN — faster handoff to concentrator
     12: 0.25, // Core B → Office switch
     13: 0.25, // Core B → Corporate switch
-    14: 0.2,  // VPN → Contractors — long scenic under-and-up
+    14: 0.35, // VPN → Contractors — was 0.2 (scenic), sped up to reduce fill time
     17: 0.35, // Core B → BRS-02 inbound
     18: 0.35, // BRS-02 → Core B outbound
   },
@@ -1681,9 +1671,24 @@ window.RackRenderer = {
     this._cableWaiters?.delete(cableIndex);
   },
 
+  // One-way cables: only used in a single direction for badge ingress.
+  // No collision risk, so skip busy-flag blocking to avoid unnecessary wait.
+  _ONE_WAY_CABLES: new Set([
+    9,  // core-a → sw-IT
+    10, // core-a → sw-Punk
+    11, // core-b → vpn
+    12, // core-b → sw-Office
+    13, // core-b → sw-Corporate
+    14, // vpn → sw-custom
+    15, // cloud-a → fw-a
+    16, // cloud-b → fw-b
+  ]),
+
   async _movePacketAlongCable(packet, cableIndex, fromNode, speed = 0.3) {
-    // Wait for cable to be free before starting (mutex with timeout)
-    await this._waitForCable(cableIndex);
+    // Skip busy-wait for one-way cables (no collision risk)
+    if (!this._ONE_WAY_CABLES.has(cableIndex)) {
+      await this._waitForCable(cableIndex);
+    }
 
     // Moves packet along cable from fromNode toward the other end.
     // Direction is auto-detected by comparing SVG path start/end to cable def ports.
@@ -1730,7 +1735,9 @@ window.RackRenderer = {
       packet.pathEl = path;
       packet.pathLength = pathLen;
 
-      if (this._cableBusy) this._cableBusy.set(cableIndex, true);
+      if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
+        this._cableBusy.set(cableIndex, true);
+      }
 
       if (!this._activePackets.includes(packet)) {
         this._activePackets.push(packet);
@@ -2151,9 +2158,7 @@ window.RackRenderer = {
 
   _initPool(allBadges) {
     this._badgePool = [];
-    this._drainQueue = [];
     this._divInFlight = {};
-    this._rotationDiv = 0;
 
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
       this._divInFlight[div] = 0;
@@ -2169,9 +2174,200 @@ window.RackRenderer = {
       const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
       this._badgePool.push({ badge, divTheme });
     }
+  },
 
-    // Drain queue = copy for initial fill (consumed as badges are dispatched)
-    this._drainQueue = [...this._badgePool];
+  // ─── WFQ: Initialize per-division pools and weights ────────
+  _initWfq() {
+    const divs = Object.keys(this._DIV_TOPOLOGY);
+    this._wfqDivPools = {};
+    this._wfqVirtualTime = {};
+    this._wfqInitialFillComplete = {};
+    this._wfqPanelTTLs = {};
+    this._wfqDivFillHandled = {};
+
+    for (const div of divs) {
+      this._wfqDivPools[div] = [];
+      this._wfqVirtualTime[div] = 0;
+      this._wfqInitialFillComplete[div] = false;
+      this._wfqPanelTTLs[div] = new Map();
+    }
+
+    // Partition badge pool into per-division pools
+    for (const entry of this._badgePool) {
+      if (this._wfqDivPools[entry.divTheme]) {
+        this._wfqDivPools[entry.divTheme].push(entry);
+      }
+    }
+
+    // Compute WFQ weights: weight = divPoolSize / totalPoolSize
+    // Larger pool = higher weight = lower cost per request = proportionally more bandwidth
+    const totalSize = this._badgePool.length || 1;
+    this._wfqWeight = {};
+    for (const div of divs) {
+      this._wfqWeight[div] = (this._wfqDivPools[div]?.length || 0) / totalSize;
+    }
+  },
+
+  // ─── WFQ: Scheduler lifecycle ───────────────────────────────
+
+  async _startWfq() {
+    if (this._wfqRunning) return;
+    this._wfqRunning = true;
+
+    while (this._wfqRunning && this._container && this._cableSvg) {
+      this._wfqTick();
+      await this._delay(this._WFQ_TICK_MS);
+    }
+  },
+
+  _stopWfq() {
+    this._wfqRunning = false;
+  },
+
+  // Seed TTL tracking from existing DOM panel contents (view-switch return).
+  // Panels are already populated from a prior session — give each badge a
+  // staggered TTL so eviction cycling resumes naturally without a burst.
+  _seedWfqTTLsFromDOM() {
+    for (const div of Object.keys(this._DIV_TOPOLOGY)) {
+      const contents = this._getPanelContents(div);
+      if (!this._wfqPanelTTLs[div]) this._wfqPanelTTLs[div] = new Map();
+      const now = Date.now();
+      const panelSize = contents.length;
+      // Shuffled slot indices for random expiry order
+      const slots = Array.from({ length: panelSize }, (_, i) => i);
+      for (let i = slots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [slots[i], slots[j]] = [slots[j], slots[i]];
+      }
+      let idx = 0;
+      for (const eid of contents) {
+        if (!this._wfqPanelTTLs[div].has(eid)) {
+          const ttl = this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS);
+          const elapsed = (slots[idx] / Math.max(panelSize, 1)) * ttl;
+          this._wfqPanelTTLs[div].set(eid, { placedAt: now - elapsed, ttl });
+        }
+        idx++;
+      }
+      // If panel has all its pool badges, mark initial fill complete
+      if (!this._wfqInitialFillComplete[div]) {
+        const poolSize = (this._wfqDivPools[div] || []).length;
+        const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+        if (contents.length >= Math.min(cap, poolSize)) {
+          this._wfqInitialFillComplete[div] = true;
+        }
+      }
+    }
+  },
+
+  // ─── WFQ: Core scheduler tick ───────────────────────────────
+  // One tick does: (1) evict TTL-expired badges, (2) fill empty slots via WFQ order.
+  // No state machine — this single method replaces _poolDrainTick, _rotationTick, _schedulerTick.
+  _wfqTick() {
+    if (!this._wfqRunning || !this._container || !this._cableSvg) return;
+
+    const now = Date.now();
+    const divs = Object.keys(this._DIV_TOPOLOGY);
+
+    // ── Step 1: Evict TTL-expired badges (per-division gating) ──
+    // Each division can only evict once its own initial fill is complete.
+    // This prevents early-filled divisions from cycling while slow ones (VPN/contractors) are still loading.
+    for (const div of divs) {
+      if (!this._wfqInitialFillComplete[div]) continue; // still filling — no evictions yet
+
+      // One-time TTL stagger when this division first completes fill
+      if (!this._wfqDivFillHandled[div]) {
+        this._wfqDivFillHandled[div] = true;
+        const ttls = this._wfqPanelTTLs[div];
+        if (ttls) {
+          const panelSize = ttls.size;
+          // Build shuffled slot indices so expiry order is random, not insertion-order
+          const slots = Array.from({ length: panelSize }, (_, i) => i);
+          for (let i = slots.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [slots[i], slots[j]] = [slots[j], slots[i]];
+          }
+          let idx = 0;
+          for (const [eid] of ttls) {
+            const ttl = this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS);
+            const elapsed = (slots[idx] / Math.max(panelSize, 1)) * ttl;
+            ttls.set(eid, { placedAt: now - elapsed, ttl });
+            idx++;
+          }
+        }
+      }
+
+      const ttls = this._wfqPanelTTLs[div];
+      if (!ttls) continue;
+      for (const [eid, meta] of ttls) {
+        if (now - meta.placedAt < meta.ttl) continue;
+        if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
+        if (this._divInFlight[div] >= this._MAX_PER_DIV) break;
+
+        // Remove TTL tracking immediately (prevent double-evict on next tick)
+        ttls.delete(eid);
+        this._divInFlight[div]++;
+        this._inFlightCount++;
+
+        this._executeRemoval(div, eid).finally(() => {
+          this._inFlightCount--;
+          this._divInFlight[div]--;
+        });
+      }
+    }
+
+    // ── Step 2: Determine division order (WFQ + first-pass priority) ──
+    const unfilled = divs.filter(d => !this._wfqInitialFillComplete[d]);
+    const filled = divs.filter(d => this._wfqInitialFillComplete[d]);
+    unfilled.sort((a, b) => this._wfqVirtualTime[a] - this._wfqVirtualTime[b]);
+    filled.sort((a, b) => this._wfqVirtualTime[a] - this._wfqVirtualTime[b]);
+    const ordered = [...unfilled, ...filled];
+
+    // ── Step 3: Fill empty panel slots ────────────────────────
+    for (const div of ordered) {
+      if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
+      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
+
+      const panelContents = this._getPanelContents(div);
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      if (panelContents.length >= cap) continue;
+
+      // Find a badge from this div's pool not currently on panel
+      const divPool = this._wfqDivPools[div] || [];
+      const onPanel = new Set(panelContents);
+      const candidate = divPool.find(e => !onPanel.has(e.badge.employeeId));
+      if (!candidate) continue;
+
+      // Dispatch ingress animation
+      this._divInFlight[div]++;
+      this._inFlightCount++;
+      const weight = this._wfqWeight[div] || 0.1;
+      this._wfqVirtualTime[div] += 1 / weight;
+
+      const badge = candidate.badge;
+      const ttlDiv = div; // capture for closure
+      this._executeCoreDownloadCli(div).then(() => {
+        return this._playIngress(badge);
+      }).then(() => {
+        // Record TTL on successful placement
+        if (this._wfqPanelTTLs[ttlDiv]) {
+          this._wfqPanelTTLs[ttlDiv].set(badge.employeeId, {
+            placedAt: Date.now(),
+            ttl: this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS),
+          });
+        }
+        // Check initial fill completion
+        if (!this._wfqInitialFillComplete[ttlDiv]) {
+          const currentPanel = this._getPanelContents(ttlDiv);
+          const poolSize = (this._wfqDivPools[ttlDiv] || []).length;
+          if (currentPanel.length >= Math.min(cap, poolSize)) {
+            this._wfqInitialFillComplete[ttlDiv] = true;
+          }
+        }
+      }).finally(() => {
+        this._inFlightCount--;
+        this._divInFlight[div]--;
+      });
+    }
   },
 
   // Verify panel integrity: check for duplicates and orphaned badges
@@ -2206,147 +2402,17 @@ window.RackRenderer = {
 
   // Remove a badge from pool entirely (badge-deleted SSE)
   _removeFromPool(employeeId) {
+    // Remove from global pool
+    const removed = this._badgePool.find(p => p.badge.employeeId === employeeId);
     this._badgePool = this._badgePool.filter(p => p.badge.employeeId !== employeeId);
-    this._drainQueue = this._drainQueue.filter(p => p.badge.employeeId !== employeeId);
-  },
-
-  // ─── Scheduler State Machine ──────────────────────────────
-  // States: idle → filling → settling → rotating → idle (on destroy)
-  // Transitions are explicit — no implicit state from timer/flag combos.
-
-  // ─── Pool Drain (filling state) ─────────────────────────
-  // Consumes _drainQueue sequentially. Multi-dispatch fills all in-flight slots per tick.
-
-  _startPoolDrain() {
-    if (this._schedulerState !== 'idle') return;
-    this._schedulerState = 'filling';
-    this._runPoolDrainLoop();
-  },
-
-  async _runPoolDrainLoop() {
-    while (this._schedulerState === 'filling' && this._container && this._cableSvg) {
-      this._poolDrainTick();
-      await this._delay(this._DRAIN_TICK_MS);
-    }
-  },
-
-  _poolDrainTick() {
-    if (this._schedulerState !== 'filling') return;
-
-    // Dispatch from drain queue — fill all available slots
-    let dispatched = 0;
-    while (this._inFlightCount < this._MAX_IN_FLIGHT && this._drainQueue.length > 0) {
-      // Find next badge whose panel has room
-      let found = false;
-      for (let i = 0; i < this._drainQueue.length; i++) {
-        const entry = this._drainQueue[i];
-        const panelContents = this._getPanelContents(entry.divTheme);
-        const cap = this._DIV_TOPOLOGY[entry.divTheme]?.panelCap || 12;
-
-        if (panelContents.length + this._divInFlight[entry.divTheme] >= cap) continue;
-        if (panelContents.includes(entry.badge.employeeId)) continue;
-        if (this._divInFlight[entry.divTheme] >= this._MAX_PER_DIV) continue;
-
-        // Remove from drain queue and dispatch
-        this._drainQueue.splice(i, 1);
-        this._divInFlight[entry.divTheme]++;
-        this._inFlightCount++;
-        this._executeCoreDownloadCli(entry.divTheme).then(() => {
-          return this._playIngress(entry.badge);
-        }).finally(() => {
-          this._inFlightCount--;
-          this._divInFlight[entry.divTheme]--;
-        });
-        dispatched++;
-        found = true;
-        break;
+    // Remove from WFQ per-division pool and TTL tracking
+    if (removed && this._wfqDivPools[removed.divTheme]) {
+      this._wfqDivPools[removed.divTheme] = this._wfqDivPools[removed.divTheme].filter(
+        p => p.badge.employeeId !== employeeId
+      );
+      if (this._wfqPanelTTLs[removed.divTheme]) {
+        this._wfqPanelTTLs[removed.divTheme].delete(employeeId);
       }
-      if (!found) break; // no eligible badge in drain queue
-    }
-
-    // Drain complete: queue empty and no animations running
-    if (this._drainQueue.length === 0 && this._inFlightCount === 0 && dispatched === 0) {
-      this._verifyPanelIntegrity();
-      // Always transition to rotation — panels cycle for visual interest
-      this._schedulerState = 'settling';
-      this._settleTimer = setTimeout(() => {
-        this._settleTimer = null;
-        this._schedulerState = 'rotating';
-        this._startRotation();
-      }, this._SETTLE_PERIOD_MS);
-    }
-  },
-
-  // ─── Rotation (rotating state) ──────────────────────────
-  // Panel-driven: round-robin through divisions, remove oldest, replace with pool badge.
-
-  _startRotation() {
-    if (this._schedulerState !== 'rotating') return;
-    if (this._badgePool.length === 0) return;
-    this._runRotationLoop();
-  },
-
-  async _runRotationLoop() {
-    while (this._schedulerState === 'rotating' && this._container && this._cableSvg) {
-      this._rotationTick();
-      await this._delay(this._ROTATION_TICK_MS);
-    }
-  },
-
-  _stopSchedulerState() {
-    if (this._settleTimer) {
-      clearTimeout(this._settleTimer);
-      this._settleTimer = null;
-    }
-    this._schedulerState = 'idle';
-  },
-
-  // Rotation tick — panel-driven: pick a division, swap a badge
-  _rotationTick() {
-    if (this._schedulerState !== 'rotating') return;
-    if (this._inFlightCount >= this._MAX_IN_FLIGHT) return;
-
-    const divs = Object.keys(this._DIV_TOPOLOGY);
-
-    // Round-robin through divisions to find one that can rotate
-    for (let i = 0; i < divs.length; i++) {
-      const div = divs[(this._rotationDiv + i) % divs.length];
-      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
-
-      const panelContents = this._getPanelContents(div);
-      const divPool = this._badgePool.filter(e => e.divTheme === div);
-
-      // Need at least 1 badge NOT currently displayed to swap in
-      const replacement = divPool.find(e => !panelContents.includes(e.badge.employeeId));
-      if (!replacement) continue;
-
-      // If panel is full, remove a random badge to make room (not always slot 1)
-      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-      const removeId = panelContents.length >= cap
-        ? panelContents[Math.floor(Math.random() * panelContents.length)]
-        : null;
-
-      // Advance round-robin past this division
-      this._rotationDiv = (this._rotationDiv + i + 1) % divs.length;
-
-      // Dispatch rotation cycle
-      this._divInFlight[div]++;
-      this._inFlightCount++;
-
-      (async () => {
-        try {
-          if (removeId) {
-            await this._executeRemoval(div, removeId);
-          }
-          await this._executeCoreDownloadCli(div);
-          await this._playIngress(replacement.badge);
-        } finally {
-          this._inFlightCount--;
-          this._divInFlight[div]--;
-        }
-      })();
-
-      return; // one rotation per tick
     }
   },
 
@@ -2459,66 +2525,11 @@ window.RackRenderer = {
     await this._delay(2500);
   },
 
-  // Scheduler state
-  _ingressQueue: [],
+  // Scheduler state (shared by WFQ scheduler)
   _inFlightCount: 0,
   _MAX_IN_FLIGHT: 5,
   _ENTRY_HOMESIDE_BIAS: 0.7, // probability badge enters from its destination rack's cloud
-  _LAUNCH_INTERVAL: 3000, // ms between launches
-  _schedulerTimer: null,
-  _brsBusy: { 'brs-01': false, 'brs-02': false },
-  _lastLaunchRack: null, // 'A' or 'B', for alternating
-
-  _startScheduler() {
-    if (this._schedulerTimer) return;
-    this._schedulerTick(); // immediate first tick
-    this._schedulerTimer = setInterval(() => this._schedulerTick(), this._LAUNCH_INTERVAL);
-  },
-
-  _stopScheduler() {
-    if (this._schedulerTimer) {
-      clearInterval(this._schedulerTimer);
-      this._schedulerTimer = null;
-    }
-    this._ingressQueue = [];
-    this._inFlightCount = 0;
-    this._brsBusy = { 'brs-01': false, 'brs-02': false };
-    this._lastLaunchRack = null;
-  },
-
-  _schedulerTick() {
-    if (this._ingressQueue.length === 0 || this._inFlightCount >= this._MAX_IN_FLIGHT) return;
-
-    // Try to alternate rack sides
-    let badge = null;
-    const preferSide = this._lastLaunchRack === 'A' ? 'B' : 'A';
-
-    for (let i = 0; i < this._ingressQueue.length; i++) {
-      const b = this._ingressQueue[i];
-      const theme = getDivisionForDept(b.department, b.isBandMember);
-      const topo = this._DIV_TOPOLOGY[theme];
-      if (topo && topo.rackSide === preferSide) {
-        badge = this._ingressQueue.splice(i, 1)[0];
-        break;
-      }
-    }
-
-    // Fallback: take first in queue regardless of side
-    if (!badge && this._ingressQueue.length > 0) {
-      badge = this._ingressQueue.shift();
-    }
-
-    if (!badge) return;
-
-    const theme = getDivisionForDept(badge.department, badge.isBandMember);
-    const topo = this._DIV_TOPOLOGY[theme];
-    this._lastLaunchRack = topo ? topo.rackSide : null;
-
-    this._inFlightCount++;
-    this._playIngress(badge).finally(() => {
-      this._inFlightCount--;
-    });
-  },
+  _brsBusy: { 'brs-01': false, 'brs-02': false }, // BRS render busy tracking (used by _playIngress)
 
   // ─── Device Trigger Effects ────────────────────────────
 
@@ -4027,7 +4038,7 @@ window.RackRenderer = {
       return;
     }
     this._debugActive = true;
-    this._stopScheduler();
+    this._stopWfq();
 
     const panel = document.createElement('div');
     panel.className = 'rack-debug-panel';

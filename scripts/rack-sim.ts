@@ -1,26 +1,25 @@
 #!/usr/bin/env bun
-// ─── Rack Packet Stress Test Simulator ─────────────────────
-// Headless timing simulation of the rack view packet scheduling engine.
+// ─── Rack Packet Simulator ─────────────────────────────────
+// Headless timing simulation of the rack view scheduling engine.
 // Mirrors topology, routing, scheduling from view-rack.js without DOM/SVG.
 //
 // Usage: bun run scripts/rack-sim.ts [mode] [count]
-//   mode: "ingress" (default) or "rotation"
+//   mode: "ingress" (default) or "ttl"
 //   count: number of badges (default: runs multiple counts)
 //
 // Modes:
-//   ingress  — Phase 2c: initial badge fill with dual-cloud bias sweep
-//   rotation — Phase 3: perpetual rotation cycle (removal + ingress)
+//   ingress — Cable stress test: initial badge fill with dual-cloud bias sweep
+//   ttl     — WFQ scheduler: always-rotating, TTL-based eviction with weighted fair queuing
 
 const args = process.argv.slice(2);
-const MODE = args.includes('rotation') ? 'rotation' : args.includes('drain') ? 'drain' : 'ingress';
+const MODE = args.includes('ttl') ? 'ttl' : 'ingress';
 const countArg = args.find(a => /^\d+$/.test(a));
 
 const INGRESS_BADGE_COUNTS = countArg ? [parseInt(countArg)] : [50, 100, 200, 500];
-const ROTATION_POOL_SIZES = countArg ? [parseInt(countArg)] : [60, 100, 200, 500];
 
 // SAME_SIDE_BIAS: probability badge enters from its "home" cloud (ingress mode sweeps this)
 const BIAS_RATIOS = [1.0, 0.8, 0.7, 0.6, 0.5];
-const ROTATION_BIAS = 0.7; // Fixed at 70% for rotation mode
+const WFQ_ROTATION_BIAS = 0.7; // Fixed at 70% for TTL mode
 
 // ─── Topology (mirrored from view-rack.js) ─────────────────
 
@@ -95,10 +94,8 @@ const REMOVAL_DEGAUSS_MS = 900;  // hue shimmer + squeeze + pop
 const REMOVAL_NOSHUT_MS = 1000;  // no shutdown CLI + LED dim
 const REMOVAL_TOTAL_MS = REMOVAL_CLI_MS + REMOVAL_LED_MS + REMOVAL_DEGAUSS_MS + REMOVAL_NOSHUT_MS; // ~4.2s
 const CORE_DOWNLOAD_CLI_MS = 1500; // core "download badge.pkg" CLI
-const SETTLE_PERIOD_MS = 30000;  // 30s after initial fill before cycling
 const STORAGE_DETOUR_CHANCE = 0.15; // 15% of badges get storage side trip
 const STORAGE_PAUSE_MS = 1000;   // "writing to disk" pause
-const ROTATION_TICK_MS = 5000;   // how often scheduler checks for rotation opportunity
 
 // ─── Route Resolution ──────────────────────────────────────
 
@@ -422,278 +419,7 @@ function simulateIngress(badgeCount: number, sameSideBias: number): IngressResul
   };
 }
 
-// ═══════════════════════════════════════════════════════════
-// ROTATION MODE (Phase 3 — perpetual cycling)
-// ═══════════════════════════════════════════════════════════
-
-interface RotationResult {
-  poolSize: number;
-  simDurationMs: number;
-  totalRotations: number;
-  rotationsPerDiv: Record<string, number>;
-  avgCycleMs: number;         // avg time for full rotation (removal + ingress)
-  minCycleMs: number;
-  maxCycleMs: number;
-  avgIngressMs: number;
-  fullRosterCycles: number;   // how many times entire pool was displayed
-  recencySkips: number;       // times recency suppression fired
-  divSkips: number;           // times division in-flight limit blocked
-  maxInFlight: number;
-  uniqueBadgesDisplayed: number;
-  badgeRepeatGap: { avg: number; min: number; max: number }; // time between same badge appearances
-  storagePct: number;
-  metrics: TransitMetrics;
-}
-
-interface RotationOptions {
-  maxInFlight?: number;
-  trunkCount?: number; // 2 = default (cables 0,1), 3 = add cable 20, 4 = add cables 20+21
-}
-
-function simulateRotation(poolSize: number, opts: RotationOptions = {}): RotationResult {
-  const SIM_DURATION = 10 * 60 * 1000;
-  const localMaxInFlight = opts.maxInFlight ?? MAX_IN_FLIGHT;
-  const trunkCount = opts.trunkCount ?? 2;
-
-  // Generate pool with random divisions
-  interface PoolBadge { id: number; divTheme: string; lastDisplayedAt: number; displayCount: number }
-  const pool: PoolBadge[] = [];
-  for (let i = 0; i < poolSize; i++) {
-    pool.push({ id: i, divTheme: DIVISIONS[Math.floor(Math.random() * DIVISIONS.length)], lastDisplayedAt: -Infinity, displayCount: 0 });
-  }
-
-  // Fill panels initially
-  const panelContents: Record<string, number[]> = {}; // div → array of badge IDs currently displayed
-  for (const div of DIVISIONS) {
-    const cap = DIV_TOPOLOGY[div].panelCapacity;
-    const divBadges = pool.filter(b => b.divTheme === div);
-    panelContents[div] = [];
-    for (let i = 0; i < Math.min(cap, divBadges.length); i++) {
-      panelContents[div].push(divBadges[i].id);
-      divBadges[i].lastDisplayedAt = 0;
-      divBadges[i].displayCount = 1;
-    }
-  }
-
-  const totalDisplayed = Object.values(panelContents).reduce((s, a) => s + a.length, 0);
-
-  // State
-  const state: CableState = {
-    cableFreeAt: new Map(),
-    brsFreeAt: { 'brs-01': 0, 'brs-02': 0 },
-  };
-  const metrics = freshMetrics();
-
-  let simTime = SETTLE_PERIOD_MS; // start after settle
-  let poolCursor = 0;
-  let totalRotations = 0;
-  const rotationsPerDiv: Record<string, number> = {};
-  for (const div of DIVISIONS) rotationsPerDiv[div] = 0;
-  let recencySkips = 0;
-  let divSkips = 0;
-  let maxInFlight = 0;
-  let inFlight = 0;
-  const divInFlight: Record<string, boolean> = {};
-  for (const div of DIVISIONS) divInFlight[div] = false;
-
-  const cycleTimes: number[] = [];
-  const ingressTimes: number[] = [];
-  const badgeAppearances: Record<number, number[]> = {}; // badge id → array of display timestamps
-  const displayedBadgeIds = new Set<number>();
-
-  // Track initial fill
-  for (const div of DIVISIONS) {
-    for (const id of panelContents[div]) {
-      displayedBadgeIds.add(id);
-      if (!badgeAppearances[id]) badgeAppearances[id] = [];
-      badgeAppearances[id].push(0);
-    }
-  }
-
-  const completionEvents: { time: number; action: () => void }[] = [];
-
-  // Recency suppression: skip badges displayed within last N rotations worth of time
-  const RECENCY_WINDOW_MS = 120000; // 2 minutes — don't re-show within this window
-  const MAX_RECENCY_SKIPS = 10; // don't skip more than 10 in a row (prevent infinite loop in small pools)
-
-  // Shuffle helper
-  function shuffle<T>(arr: T[]): void {
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-  }
-
-  function advancePool(): PoolBadge {
-    let skips = 0;
-    while (skips < MAX_RECENCY_SKIPS) {
-      const badge = pool[poolCursor];
-      poolCursor++;
-      if (poolCursor >= pool.length) {
-        shuffle(pool);
-        poolCursor = 0;
-      }
-      // Recency check: skip if displayed too recently
-      if (badge.lastDisplayedAt > 0 && (simTime - badge.lastDisplayedAt) < RECENCY_WINDOW_MS) {
-        skips++;
-        recencySkips++;
-        continue;
-      }
-      return badge;
-    }
-    // Fallback: just take current cursor position
-    const badge = pool[poolCursor];
-    poolCursor++;
-    if (poolCursor >= pool.length) {
-      shuffle(pool);
-      poolCursor = 0;
-    }
-    return badge;
-  }
-
-  // Main rotation loop — event-driven, concurrent rotations across divisions
-  let lastRotationDiv: string | null = null;
-
-  function launchRotation(badge: PoolBadge, targetDiv: string) {
-    const topo = DIV_TOPOLOGY[targetDiv];
-    const panel = panelContents[targetDiv];
-    const panelFull = panel.length >= topo.panelCapacity;
-
-    divInFlight[targetDiv] = true;
-    inFlight++;
-    if (inFlight > maxInFlight) maxInFlight = inFlight;
-    // Note: localMaxInFlight controls launch gate, maxInFlight tracks peak
-
-    const cycleStart = simTime;
-    let cursor = simTime;
-
-    // Phase A: Removal (if panel is full)
-    if (panelFull) {
-      const removedId = panel.shift()!;
-      cursor += REMOVAL_CLI_MS;
-      cursor += REMOVAL_LED_MS;
-      cursor += REMOVAL_DEGAUSS_MS;
-      cursor += REMOVAL_NOSHUT_MS;
-    }
-
-    // Core download CLI
-    cursor += CORE_DOWNLOAD_CLI_MS;
-
-    // Phase B: Ingress
-    const ingressStart = cursor;
-    const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
-    const route = resolveRoute(targetDiv, ROTATION_BIAS, useStorage, trunkCount);
-    if (route) {
-      cursor = simulateTransit(route, cursor, state, metrics);
-    }
-    const ingressEnd = cursor;
-    ingressTimes.push(ingressEnd - ingressStart);
-
-    // Place badge
-    panel.push(badge.id);
-    badge.lastDisplayedAt = cursor;
-    badge.displayCount++;
-    displayedBadgeIds.add(badge.id);
-    if (!badgeAppearances[badge.id]) badgeAppearances[badge.id] = [];
-    badgeAppearances[badge.id].push(cursor);
-
-    totalRotations++;
-    rotationsPerDiv[targetDiv]++;
-    lastRotationDiv = targetDiv;
-    cycleTimes.push(cursor - cycleStart);
-
-    completionEvents.push({
-      time: cursor,
-      action: () => {
-        inFlight--;
-        divInFlight[targetDiv] = false;
-      },
-    });
-  }
-
-  while (simTime < SIM_DURATION) {
-    // Process completion events up to current time
-    completionEvents.sort((a, b) => a.time - b.time);
-    while (completionEvents.length > 0 && completionEvents[0].time <= simTime) {
-      completionEvents.shift()!.action();
-    }
-
-    // Try to launch rotations (multiple per tick if slots available)
-    let launchedThisTick = 0;
-    while (inFlight < localMaxInFlight && launchedThisTick < 3) {
-      const badge = advancePool();
-      const targetDiv = badge.divTheme;
-
-      if (divInFlight[targetDiv]) {
-        divSkips++;
-        // Try a few more times to find an open division
-        let found = false;
-        for (let attempt = 0; attempt < 4; attempt++) {
-          const alt = advancePool();
-          if (!divInFlight[alt.divTheme]) {
-            launchRotation(alt, alt.divTheme);
-            launchedThisTick++;
-            found = true;
-            break;
-          } else {
-            divSkips++;
-          }
-        }
-        if (!found) break; // all divisions busy
-      } else {
-        launchRotation(badge, targetDiv);
-        launchedThisTick++;
-      }
-    }
-
-    // Advance to next tick
-    simTime += ROTATION_TICK_MS;
-  }
-
-  // Drain remaining events
-  completionEvents.sort((a, b) => a.time - b.time);
-  for (const e of completionEvents) { simTime = e.time; e.action(); }
-
-  // Compute badge repeat gap stats
-  let gapSum = 0, gapCount = 0, gapMin = Infinity, gapMax = 0;
-  for (const [, times] of Object.entries(badgeAppearances)) {
-    for (let i = 1; i < times.length; i++) {
-      const gap = times[i] - times[i - 1];
-      gapSum += gap;
-      gapCount++;
-      if (gap < gapMin) gapMin = gap;
-      if (gap > gapMax) gapMax = gap;
-    }
-  }
-
-  // Full roster cycles = how many times we showed all pool badges
-  const minDisplayCount = pool.reduce((m, b) => Math.min(m, b.displayCount), Infinity);
-
-  return {
-    poolSize,
-    simDurationMs: SIM_DURATION,
-    totalRotations,
-    rotationsPerDiv,
-    avgCycleMs: cycleTimes.length ? Math.round(cycleTimes.reduce((a, b) => a + b, 0) / cycleTimes.length) : 0,
-    minCycleMs: cycleTimes.length ? Math.round(Math.min(...cycleTimes)) : 0,
-    maxCycleMs: cycleTimes.length ? Math.round(Math.max(...cycleTimes)) : 0,
-    avgIngressMs: ingressTimes.length ? Math.round(ingressTimes.reduce((a, b) => a + b, 0) / ingressTimes.length) : 0,
-    fullRosterCycles: minDisplayCount === Infinity ? 0 : minDisplayCount,
-    recencySkips,
-    divSkips,
-    maxInFlight,
-    uniqueBadgesDisplayed: displayedBadgeIds.size,
-    badgeRepeatGap: {
-      avg: gapCount ? Math.round(gapSum / gapCount) : 0,
-      min: gapCount ? Math.round(gapMin) : 0,
-      max: gapCount ? Math.round(gapMax) : 0,
-    },
-    storagePct: metrics.storageDetours > 0 ? Math.round((metrics.storageDetours / totalRotations) * 100) : 0,
-    metrics,
-  };
-}
-
-// ─── Cable name lookup ─────────────────────────────────────
+// ─── Reports & Formatting ─────────────────────────────────
 
 const CABLE_NAMES: Record<number, string> = {
   0: 'Cross-rack A→B', 1: 'Cross-rack B→A', 2: 'Trunk 3',
@@ -707,8 +433,6 @@ const CABLE_NAMES: Record<number, string> = {
   17: 'Core B→BRS-02 in', 18: 'BRS-02→Core B out',
   19: 'Core A→Storage', 20: 'Storage→Core A',
 };
-
-// ─── Reports ───────────────────────────────────────────────
 
 const sec = (ms: number) => (ms / 1000).toFixed(1) + 's';
 const min = (ms: number) => (ms / 60000).toFixed(1) + 'm';
@@ -757,414 +481,519 @@ function printIngressReport(r: IngressResult) {
   }
 }
 
-function printRotationReport(r: RotationResult) {
-  console.log(`\n══ ROTATION: ${r.poolSize} badges in pool ══════════════════`);
-  console.log(`  Sim duration:       ${min(r.simDurationMs)}`);
-  console.log(`  Total rotations:    ${r.totalRotations}`);
-  console.log(`  Cycle time:         ${sec(r.avgCycleMs)} avg | ${sec(r.minCycleMs)} min | ${sec(r.maxCycleMs)} max`);
-  console.log(`  Ingress time:       ${sec(r.avgIngressMs)} avg`);
-  console.log(`  Max in-flight:      ${r.maxInFlight} / ${MAX_IN_FLIGHT}`);
-  console.log(`  Full roster cycles: ${r.fullRosterCycles} (every badge shown ${r.fullRosterCycles}× minimum)`);
-  console.log(`  Unique displayed:   ${r.uniqueBadgesDisplayed} / ${r.poolSize}`);
-  console.log(`  Storage detours:    ${r.storagePct}%`);
-
-  console.log(`\n  Badge repeat gap:   ${sec(r.badgeRepeatGap.avg)} avg | ${sec(r.badgeRepeatGap.min)} min | ${sec(r.badgeRepeatGap.max)} max`);
-  console.log(`  Recency skips:      ${r.recencySkips}`);
-  console.log(`  Division skips:     ${r.divSkips} (in-flight limit)`);
-
-  console.log(`\n  Rotations per division:`);
-  const maxRot = Math.max(...Object.values(r.rotationsPerDiv), 1);
-  for (const div of DIVISIONS) {
-    const count = r.rotationsPerDiv[div] || 0;
-    console.log(`    ${div.padEnd(12)} ${bar(count, maxRot)} ${String(count).padStart(4)}`);
-  }
-
-  console.log(`\n  Cable congestion:  ${r.metrics.cableWaits} waits | max ${sec(r.metrics.maxCableWaitMs)} wait`);
-  if (r.metrics.crossRackWaits > 0) {
-    console.log(`  Trunk congestion:  ${r.metrics.crossRackWaits} waits | max ${sec(r.metrics.maxCrossRackWaitMs)} wait`);
-  }
-  if (Object.keys(r.metrics.perCableWaits).length > 0) {
-    const sorted = Object.entries(r.metrics.perCableWaits).sort((a, b) => b[1].count - a[1].count);
-    for (const [cable, stats] of sorted.slice(0, 8)) {
-      const name = (CABLE_NAMES[Number(cable)] || `Cable ${cable}`).padEnd(20);
-      const avg = Math.round(stats.totalMs / stats.count);
-      console.log(`    ${name} ${String(stats.count).padStart(3)}× wait | avg ${sec(avg)} | max ${sec(stats.maxMs)}`);
-    }
-  }
-
-  console.log(`\n  BRS: ${r.metrics.brsRenders['brs-01']} / ${r.metrics.brsRenders['brs-02']} renders | ${r.metrics.brsSkips} skips`);
-}
-
-function printRotationIntegrity(r: RotationResult) {
-  const pass = (label: string, ok: boolean, detail?: string) =>
-    console.log(`  ${ok ? '✓' : '✗'} ${label}${detail ? ` (${detail})` : ''}`);
-
-  pass('Max in-flight respected', r.maxInFlight <= MAX_IN_FLIGHT,
-    `${r.maxInFlight}/${MAX_IN_FLIGHT}`);
-  pass('All badges displayed at least once', r.uniqueBadgesDisplayed === r.poolSize,
-    `${r.uniqueBadgesDisplayed}/${r.poolSize}`);
-  pass('Division fairness (max/min < 2x)',
-    Math.max(...Object.values(r.rotationsPerDiv)) / Math.max(Math.min(...Object.values(r.rotationsPerDiv)), 1) < 2,
-    Object.entries(r.rotationsPerDiv).map(([d, n]) => `${d}:${n}`).join(' '));
-  pass('No starvation (full roster cycled)', r.fullRosterCycles >= 1,
-    `${r.fullRosterCycles} full cycles`);
-  pass('Trunk wait under 10s', r.metrics.maxCrossRackWaitMs < 10000,
-    `max ${sec(r.metrics.maxCrossRackWaitMs)}`);
-  pass('Avg repeat gap > 60s', r.badgeRepeatGap.avg > 60000,
-    `avg ${sec(r.badgeRepeatGap.avg)}`);
-  pass('Dual BRS concurrent ≤ 2', r.metrics.maxBrsQueue <= 2,
-    `max ${r.metrics.maxBrsQueue}`);
-}
-
 // ═══════════════════════════════════════════════════════════
-// DRAIN MODE — Full lifecycle: fill panels → settle → rotate
-// Tests proposed scheduler improvements
+// TTL MODE — Always-rotating, request-driven scheduler
+// No state machine. Every badge has a TTL on the panel.
+// When TTL expires → evict → re-enter pool → re-request.
+// Scheduler just rate-limits requests.
 // ═══════════════════════════════════════════════════════════
 
-interface DrainConfig {
+interface TtlConfig {
   label: string;
-  maxPerDiv: number;        // max concurrent per division (current: 1, proposed: 2)
-  dispatchPerTick: number;  // max dispatches per tick (current: 1, proposed: fill all slots)
-  drainTickMs: number;      // tick interval during drain (current: 5000, proposed: 2000)
-  rotationTickMs: number;   // tick interval during rotation (current: 5000, proposed: 8000)
-  wifiPct: number;          // WiFi entry percentage (current: 0.20, proposed: 0.30)
-  brsRenderMs: number;      // BRS render duration
-  brsLoadBalance: boolean;  // cross-rack BRS when local busy
+  maxInFlight: number;           // global concurrent animations
+  maxPerDiv: number;              // per-division concurrent animations
+  ttlMinMs: number;               // min display time on panel
+  ttlMaxMs: number;               // max display time on panel
+  wfq: boolean;                   // Weighted Fair Queuing: bandwidth proportional to pool size
+  wfqFirstPassPriority: boolean;  // first-display badges get expedited forwarding (fill before rotate)
+  tickMs: number;                 // scheduler tick interval
 }
 
-interface DrainResult {
-  config: DrainConfig;
+interface TtlBadge {
+  id: number;
+  divTheme: string;
+  displayCount: number;
+  totalDisplayMs: number;      // cumulative time spent on panel
+  lastPlacedAt: number;
+}
+
+interface TtlPanelEntry {
+  badgeId: number;
+  placedAt: number;
+  ttl: number;                 // ms until eviction
+}
+
+interface TtlDivState {
+  pool: TtlBadge[];            // all badges for this division
+  panel: TtlPanelEntry[];      // currently displayed
+  cap: number;
+  overflowRatio: number;       // pool.length / cap (1.0 = exact fit, 1.5 = 50% overflow)
+  rotationCount: number;
+  evictionCount: number;
+}
+
+interface TtlResult {
+  config: TtlConfig;
   poolSize: number;
-  fillTimeMs: number;         // time to fill all panels
-  firstPanelFullMs: number;   // time first panel hits capacity
-  allPanelFullMs: number;     // time all panels full (or drain ends)
-  totalIngressDrain: number;  // badges placed during drain
-  rotationsAfterSettle: number;
-  brsSkips: number;
-  brsRenders: Record<string, number>;
-  maxInFlight: number;
+  simDurationMs: number;
+  // Per-division metrics
+  perDiv: Record<string, {
+    poolSize: number;
+    panelCap: number;
+    overflowRatio: number;
+    rotations: number;
+    evictions: number;
+    animationsPerMin: number;
+    avgBadgeVisibilityPct: number;  // avg across badges: time on panel / sim duration
+    minBadgeVisibilityPct: number;
+    maxBadgeVisibilityPct: number;
+  }>;
+  // Global metrics
+  totalRotations: number;
+  totalEvictions: number;
+  globalAnimationsPerMin: number;
+  maxInFlightSeen: number;
+  maxPerDivSeen: number;
+  fillTimeMs: number;              // time until all panels initially full (or pool exhausted)
+  // Cable/BRS
   cableWaits: number;
   maxCableWaitMs: number;
   trunkWaits: number;
   maxTrunkWaitMs: number;
-  divFillTimes: Record<string, number>; // when each division filled
+  brsRenders: Record<string, number>;
+  brsSkips: number;
+  // Badge fairness
+  avgRepeatGapMs: number;
+  minRepeatGapMs: number;
+  maxRepeatGapMs: number;
+  // Concurrency timeline (sampled)
+  avgConcurrentAnimations: number;
+  metrics: TransitMetrics;
 }
 
-// Uneven distribution matching real-world department sizes
-const UNEVEN_DIST: Record<string, number> = {
-  'IT': 25,           // largest dept
-  'Office': 18,
-  'Corporate': 15,
-  '_custom': 12,      // contractors
-  'Punk': 10,         // smallest dept
+// Real badge distribution from production DB (2026-04-04)
+const REAL_DISTRIBUTION: Record<string, number> = {
+  'IT': 17,
+  'Office': 16,
+  'Punk': 12,
+  'Corporate': 8,
+  '_custom': 20,
 };
 
-function generateUnevenPool(totalBadges: number): { id: number; divTheme: string }[] {
-  const totalWeight = Object.values(UNEVEN_DIST).reduce((a, b) => a + b, 0);
-  const badges: { id: number; divTheme: string }[] = [];
+function generateRealPool(): TtlBadge[] {
+  const badges: TtlBadge[] = [];
   let id = 0;
-  for (const [div, weight] of Object.entries(UNEVEN_DIST)) {
-    const count = Math.round((weight / totalWeight) * totalBadges);
+  for (const [div, count] of Object.entries(REAL_DISTRIBUTION)) {
     for (let i = 0; i < count; i++) {
-      badges.push({ id: id++, divTheme: div });
+      badges.push({ id: id++, divTheme: div, displayCount: 0, totalDisplayMs: 0, lastPlacedAt: -1 });
     }
-  }
-  // Shuffle so they don't arrive in department order
-  for (let i = badges.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [badges[i], badges[j]] = [badges[j], badges[i]];
   }
   return badges;
 }
 
-function simulateDrain(poolSize: number, config: DrainConfig, useUneven: boolean = false): DrainResult {
-  const badges = useUneven ? generateUnevenPool(poolSize) : (() => {
-    const b: { id: number; divTheme: string }[] = [];
-    for (let i = 0; i < poolSize; i++) {
-      b.push({ id: i, divTheme: DIVISIONS[Math.floor(Math.random() * DIVISIONS.length)] });
-    }
-    return b;
-  })();
+function generateRandomPool(total: number): TtlBadge[] {
+  const badges: TtlBadge[] = [];
+  for (let i = 0; i < total; i++) {
+    badges.push({
+      id: i,
+      divTheme: DIVISIONS[Math.floor(Math.random() * DIVISIONS.length)],
+      displayCount: 0,
+      totalDisplayMs: 0,
+      lastPlacedAt: -1,
+    });
+  }
+  return badges;
+}
 
-  const state: CableState = {
+function simulateTtl(config: TtlConfig, useRealDist: boolean, randomPoolSize?: number): TtlResult {
+  const SIM_DURATION = 10 * 60 * 1000; // 10 minutes
+
+  const allBadges = useRealDist ? generateRealPool() : generateRandomPool(randomPoolSize || 73);
+
+  // Initialize per-division state
+  const divState: Record<string, TtlDivState> = {};
+  for (const div of DIVISIONS) {
+    const divBadges = allBadges.filter(b => b.divTheme === div);
+    const cap = DIV_TOPOLOGY[div].panelCapacity;
+    divState[div] = {
+      pool: divBadges,
+      panel: [],
+      cap,
+      overflowRatio: divBadges.length / cap,
+      rotationCount: 0,
+      evictionCount: 0,
+    };
+  }
+
+  // Cable/BRS state
+  const cableState: CableState = {
     cableFreeAt: new Map(),
     brsFreeAt: { 'brs-01': 0, 'brs-02': 0 },
   };
   const metrics = freshMetrics();
 
-  // Panel state
-  const panelContents: Record<string, number[]> = {};
-  for (const div of DIVISIONS) panelContents[div] = [];
-
-  // Scheduler state
+  // Animation tracking
   let simTime = 0;
   let inFlight = 0;
-  let maxInFlight = 0;
-  const divInFlightCount: Record<string, number> = {};
-  for (const div of DIVISIONS) divInFlightCount[div] = 0;
+  let maxInFlightSeen = 0;
+  let maxPerDivSeen = 0;
+  const divInFlight: Record<string, number> = {};
+  for (const div of DIVISIONS) divInFlight[div] = 0;
 
-  let poolCursor = 0;
-  let lastLaunchRack: string | null = null;
-  let firstPanelFullMs = -1;
-  let allPanelFullMs = -1;
-  let totalPlaced = 0;
-  const divFillTimes: Record<string, number> = {};
+  let totalRotations = 0;
+  let totalEvictions = 0;
+  let fillTimeMs = -1;
+  let concurrencySamples = 0;
+  let concurrencySum = 0;
 
-  const completionEvents: { time: number; div: string; badgeId: number }[] = [];
+  // Badge appearance tracking for repeat gap
+  const badgeAppearances: Record<number, number[]> = {};
 
-  // Drain phase
-  let draining = true;
-  let settleStart = -1;
-  let rotationStart = -1;
-  let rotationCount = 0;
+  // Completion events
+  const events: { time: number; action: () => void }[] = [];
 
-  const totalCapacity = Object.entries(DIV_TOPOLOGY).reduce((s, [, t]) => s + t.panelCapacity, 0);
-
-  while (simTime < 5 * 60 * 1000) { // 5 min max
-    // Process completions
-    completionEvents.sort((a, b) => a.time - b.time);
-    while (completionEvents.length > 0 && completionEvents[0].time <= simTime) {
-      const ev = completionEvents.shift()!;
-      inFlight--;
-      divInFlightCount[ev.div]--;
-      panelContents[ev.div].push(ev.badgeId);
-      totalPlaced++;
-
-      // Track fill milestones
-      const cap = DIV_TOPOLOGY[ev.div].panelCapacity;
-      if (panelContents[ev.div].length >= cap && !divFillTimes[ev.div]) {
-        divFillTimes[ev.div] = ev.time;
-        if (firstPanelFullMs < 0) firstPanelFullMs = ev.time;
-      }
-    }
-
-    // Check if all panels full
-    if (allPanelFullMs < 0) {
-      const allFull = DIVISIONS.every(d => panelContents[d].length >= DIV_TOPOLOGY[d].panelCapacity);
-      if (allFull) allPanelFullMs = simTime;
-    }
-
-    if (draining) {
-      // Check transition: any panel full → settle
-      const anyFull = DIVISIONS.some(d => panelContents[d].length >= DIV_TOPOLOGY[d].panelCapacity);
-
-      // Also check: all badges placed or all remaining badges target full panels
-      const allPlacedOrBlocked = poolCursor >= badges.length || badges.slice(poolCursor).every(b => {
-        const cap = DIV_TOPOLOGY[b.divTheme].panelCapacity;
-        return panelContents[b.divTheme].length >= cap;
-      });
-
-      if ((anyFull && inFlight === 0 && allPlacedOrBlocked) || totalPlaced >= totalCapacity) {
-        draining = false;
-        settleStart = simTime;
-        simTime += SETTLE_PERIOD_MS;
-        rotationStart = simTime;
-        continue;
-      }
-
-      // Dispatch badges
-      const tickMs = config.drainTickMs;
-      let dispatched = 0;
-
-      while (dispatched < config.dispatchPerTick && inFlight < MAX_IN_FLIGHT && poolCursor < badges.length) {
-        // Find eligible badge with rack alternation
-        const preferSide = lastLaunchRack === 'A' ? 'B' : 'A';
-        let found = false;
-
-        for (let attempt = 0; attempt < 12 && poolCursor < badges.length; attempt++) {
-          const badge = badges[poolCursor];
-          poolCursor++;
-
-          const div = badge.divTheme;
-          const cap = DIV_TOPOLOGY[div].panelCapacity;
-
-          // Skip if panel full
-          if (panelContents[div].length + divInFlightCount[div] >= cap) continue;
-
-          // Skip if div at max concurrent
-          if (divInFlightCount[div] >= config.maxPerDiv) continue;
-
-          // Resolve route
-          const isWifi = Math.random() < config.wifiPct;
-          const topo = DIV_TOPOLOGY[div];
-          const homeSide = topo.rackSide;
-          const entrySide = isWifi ? 'A' : (Math.random() < 0.7 ? homeSide : (homeSide === 'A' ? 'B' : 'A'));
-          const entryCore = entrySide === 'A' ? 'core-a' : 'core-b';
-
-          // BRS selection with load balancing
-          let brsId: string;
-          if (config.brsLoadBalance) {
-            const localBrs = entryCore === 'core-a' ? 'brs-01' : 'brs-02';
-            const remoteBrs = entryCore === 'core-a' ? 'brs-02' : 'brs-01';
-            if (state.brsFreeAt[localBrs] <= simTime) {
-              brsId = localBrs;
-            } else if (state.brsFreeAt[remoteBrs] <= simTime) {
-              brsId = remoteBrs;
-            } else {
-              brsId = localBrs; // both busy, wait on local
-            }
-          } else {
-            brsId = entryCore === 'core-a' ? 'brs-01' : 'brs-02';
-          }
-
-          // Simulate transit time
-          const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
-          const route = resolveRoute(div, 0.7, useStorage);
-          if (!route) continue;
-
-          // Override BRS in route
-          for (const step of route.steps) {
-            if (step.type === 'brs-render') {
-              step.brsId = brsId;
-              step.durationMs = config.brsRenderMs;
-            }
-          }
-
-          const cliMs = CORE_DOWNLOAD_CLI_MS;
-          let cursor = simTime + cliMs;
-          cursor = simulateTransit(route, cursor, state, metrics);
-
-          divInFlightCount[div]++;
-          inFlight++;
-          if (inFlight > maxInFlight) maxInFlight = inFlight;
-          lastLaunchRack = topo.rackSide;
-
-          completionEvents.push({ time: cursor, div, badgeId: badge.id });
-          dispatched++;
-          found = true;
-          break;
-        }
-
-        if (!found) break;
-      }
-
-      simTime += tickMs;
-
-    } else if (rotationStart > 0 && simTime >= rotationStart) {
-      // Rotation phase — count how many rotations in remaining time
-      // Simple model: each rotation takes removal + ingress
-      if (inFlight < MAX_IN_FLIGHT) {
-        const div = DIVISIONS[rotationCount % DIVISIONS.length];
-        const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
-        const route = resolveRoute(div, 0.7, useStorage);
-        if (route) {
-          for (const step of route.steps) {
-            if (step.type === 'brs-render') step.durationMs = config.brsRenderMs;
-          }
-          let cursor = simTime + REMOVAL_TOTAL_MS + CORE_DOWNLOAD_CLI_MS;
-          cursor = simulateTransit(route, cursor, state, metrics);
-          inFlight++;
-          completionEvents.push({ time: cursor, div, badgeId: -1 });
-          rotationCount++;
-        }
-      }
-      simTime += config.rotationTickMs;
-    } else {
-      simTime += 100;
+  function processEvents() {
+    events.sort((a, b) => a.time - b.time);
+    while (events.length > 0 && events[0].time <= simTime) {
+      events.shift()!.action();
     }
   }
 
-  // Drain completions
-  completionEvents.sort((a, b) => a.time - b.time);
-  for (const e of completionEvents) {
-    inFlight--;
-    divInFlightCount[e.div]--;
-    if (e.badgeId >= 0) {
-      panelContents[e.div].push(e.badgeId);
-      totalPlaced++;
+  // ─── WFQ: Weighted Fair Queuing state ───────────────────
+  // Each division gets a "virtual time" credit. Division with lowest virtual time
+  // gets scheduled next. Credit cost is inversely proportional to weight (pool size).
+  // Bigger pool = more weight = lower cost per request = more throughput.
+  const wfqVirtualTime: Record<string, number> = {};
+  const wfqWeight: Record<string, number> = {};
+  const totalPoolSize = allBadges.length || 1;
+  for (const div of DIVISIONS) {
+    wfqVirtualTime[div] = 0;
+    // Weight = division's share of total pool. Larger pool = higher weight = lower cost.
+    const divSize = allBadges.filter(b => b.divTheme === div).length;
+    wfqWeight[div] = divSize / totalPoolSize; // e.g., IT: 17/73 = 0.23
+  }
+
+  // Track whether each division has completed its initial fill (for DSCP first-pass priority)
+  const divInitialFillComplete: Record<string, boolean> = {};
+  for (const div of DIVISIONS) divInitialFillComplete[div] = false;
+
+  function getWfqOrder(): string[] {
+    // Sort divisions by virtual time (lowest first = most deserving of bandwidth)
+    return [...DIVISIONS].sort((a, b) => wfqVirtualTime[a] - wfqVirtualTime[b]);
+  }
+
+  function recordWfqRequest(div: string) {
+    // Cost = 1 / weight. Small divisions pay more per request (limiting their throughput).
+    // But since they have fewer badges, they naturally make fewer requests.
+    // The effect: each division gets throughput proportional to its pool size.
+    const weight = wfqWeight[div] || 0.1;
+    wfqVirtualTime[div] += 1 / weight;
+  }
+
+  function getTtl(): number {
+    return config.ttlMinMs + Math.random() * (config.ttlMaxMs - config.ttlMinMs);
+  }
+
+  function getPoolWaiting(div: string): TtlBadge[] {
+    const onPanel = new Set(divState[div].panel.map(e => e.badgeId));
+    return divState[div].pool.filter(b => !onPanel.has(b.id));
+  }
+
+  function launchIngress(div: string, badge: TtlBadge) {
+    divInFlight[div]++;
+    inFlight++;
+    if (inFlight > maxInFlightSeen) maxInFlightSeen = inFlight;
+    if (divInFlight[div] > maxPerDivSeen) maxPerDivSeen = divInFlight[div];
+
+    const useStorage = Math.random() < STORAGE_DETOUR_CHANCE;
+    const route = resolveRoute(div, WFQ_ROTATION_BIAS, useStorage, 3);
+    const transitEnd = route ? simulateTransit(route, simTime, cableState, metrics) : simTime + 10000;
+
+    totalRotations++;
+    divState[div].rotationCount++;
+
+    events.push({
+      time: transitEnd,
+      action: () => {
+        inFlight--;
+        divInFlight[div]--;
+
+        // Place badge on panel
+        const ttl = getTtl();
+        divState[div].panel.push({ badgeId: badge.id, placedAt: transitEnd, ttl });
+        badge.displayCount++;
+        badge.lastPlacedAt = transitEnd;
+        if (!badgeAppearances[badge.id]) badgeAppearances[badge.id] = [];
+        badgeAppearances[badge.id].push(transitEnd);
+      },
+    });
+  }
+
+  function launchEviction(div: string, entry: TtlPanelEntry) {
+    divInFlight[div]++;
+    inFlight++;
+    if (inFlight > maxInFlightSeen) maxInFlightSeen = inFlight;
+    if (divInFlight[div] > maxPerDivSeen) maxPerDivSeen = divInFlight[div];
+
+    const removalEnd = simTime + REMOVAL_TOTAL_MS;
+
+    totalEvictions++;
+    divState[div].evictionCount++;
+
+    // Track display time
+    const badge = divState[div].pool.find(b => b.id === entry.badgeId);
+    if (badge) {
+      badge.totalDisplayMs += (simTime - entry.placedAt);
+    }
+
+    events.push({
+      time: removalEnd,
+      action: () => {
+        inFlight--;
+        divInFlight[div]--;
+        // Remove from panel
+        const idx = divState[div].panel.findIndex(e => e.badgeId === entry.badgeId);
+        if (idx >= 0) divState[div].panel.splice(idx, 1);
+      },
+    });
+  }
+
+  // ─── Main simulation loop ───────────────────────────────
+  while (simTime < SIM_DURATION) {
+    processEvents();
+
+    // Sample concurrency
+    concurrencySamples++;
+    concurrencySum += inFlight;
+
+    // Check if all panels initially full (or pool exhausted) — track fill time
+    if (fillTimeMs < 0) {
+      const allFilled = DIVISIONS.every(div => {
+        const ds = divState[div];
+        return ds.panel.length >= Math.min(ds.cap, ds.pool.length);
+      });
+      if (allFilled) fillTimeMs = simTime;
+    }
+
+    // ─── Per-division: evict expired, then fill empty slots ───
+
+    // Determine division ordering: WFQ sort or static
+    let divOrder: string[] = config.wfq ? getWfqOrder() : DIVISIONS;
+
+    // First-pass priority: unfilled divisions processed before filled ones
+    if (config.wfqFirstPassPriority) {
+      const unfilledDivs = divOrder.filter(d => !divInitialFillComplete[d]);
+      const filledDivs = divOrder.filter(d => divInitialFillComplete[d]);
+      divOrder = [...unfilledDivs, ...filledDivs];
+    }
+
+    for (const div of divOrder) {
+      if (inFlight >= config.maxInFlight) break;
+
+      const ds = divState[div];
+
+      // DSCP first-pass: skip evictions for ALL divisions until this division's initial fill is done
+      const skipEvictions = config.wfqFirstPassPriority && !divInitialFillComplete[div];
+
+      // 1. Find expired panel entries (TTL elapsed)
+      if (!skipEvictions) {
+        const expired = ds.panel.filter(e => (simTime - e.placedAt) >= e.ttl);
+
+        // 2. Evict expired badges (rate-limited)
+        for (const entry of expired) {
+          if (inFlight >= config.maxInFlight) break;
+          if (divInFlight[div] >= config.maxPerDiv) break;
+          launchEviction(div, entry);
+          if (config.wfq) recordWfqRequest(div);
+        }
+      }
+
+      // 3. Fill empty slots from pool (rate-limited)
+      const currentPanelSize = ds.panel.length;
+      const emptySlots = ds.cap - currentPanelSize;
+      if (emptySlots > 0) {
+        const waiting = getPoolWaiting(div);
+        waiting.sort((a, b) => (a.lastPlacedAt ?? -1) - (b.lastPlacedAt ?? -1));
+
+        for (let i = 0; i < Math.min(emptySlots, waiting.length); i++) {
+          if (inFlight >= config.maxInFlight) break;
+          if (divInFlight[div] >= config.maxPerDiv) break;
+          launchIngress(div, waiting[i]);
+          if (config.wfq) recordWfqRequest(div);
+        }
+      }
+
+      // Track initial fill completion
+      if (!divInitialFillComplete[div]) {
+        const panelCount = ds.panel.length;
+        const poolCount = ds.pool.length;
+        if (panelCount >= Math.min(ds.cap, poolCount)) {
+          divInitialFillComplete[div] = true;
+        }
+      }
+    }
+
+    simTime += config.tickMs;
+  }
+
+  // Drain remaining events and accumulate final display times
+  processEvents();
+  for (const div of DIVISIONS) {
+    for (const entry of divState[div].panel) {
+      const badge = divState[div].pool.find(b => b.id === entry.badgeId);
+      if (badge) {
+        badge.totalDisplayMs += (simTime - entry.placedAt);
+      }
+    }
+  }
+
+  // ─── Compute results ────────────────────────────────────
+  const perDiv: TtlResult['perDiv'] = {};
+  for (const div of DIVISIONS) {
+    const ds = divState[div];
+    const visibilities = ds.pool.map(b => (b.totalDisplayMs / SIM_DURATION) * 100);
+    perDiv[div] = {
+      poolSize: ds.pool.length,
+      panelCap: ds.cap,
+      overflowRatio: Math.round(ds.overflowRatio * 100) / 100,
+      rotations: ds.rotationCount,
+      evictions: ds.evictionCount,
+      animationsPerMin: Math.round(((ds.rotationCount + ds.evictionCount) / (SIM_DURATION / 60000)) * 10) / 10,
+      avgBadgeVisibilityPct: visibilities.length ? Math.round(visibilities.reduce((a, b) => a + b, 0) / visibilities.length * 10) / 10 : 0,
+      minBadgeVisibilityPct: visibilities.length ? Math.round(Math.min(...visibilities) * 10) / 10 : 0,
+      maxBadgeVisibilityPct: visibilities.length ? Math.round(Math.max(...visibilities) * 10) / 10 : 0,
+    };
+  }
+
+  // Repeat gap
+  let gapSum = 0, gapCount = 0, gapMin = Infinity, gapMax = 0;
+  for (const times of Object.values(badgeAppearances)) {
+    for (let i = 1; i < times.length; i++) {
+      const gap = times[i] - times[i - 1];
+      gapSum += gap;
+      gapCount++;
+      if (gap < gapMin) gapMin = gap;
+      if (gap > gapMax) gapMax = gap;
     }
   }
 
   return {
     config,
-    poolSize,
-    fillTimeMs: settleStart > 0 ? settleStart : simTime,
-    firstPanelFullMs: firstPanelFullMs > 0 ? firstPanelFullMs : -1,
-    allPanelFullMs: allPanelFullMs > 0 ? allPanelFullMs : -1,
-    totalIngressDrain: totalPlaced,
-    rotationsAfterSettle: rotationCount,
-    brsSkips: metrics.brsSkips,
-    brsRenders: metrics.brsRenders,
-    maxInFlight,
+    poolSize: allBadges.length,
+    simDurationMs: SIM_DURATION,
+    perDiv,
+    totalRotations,
+    totalEvictions,
+    globalAnimationsPerMin: Math.round(((totalRotations + totalEvictions) / (SIM_DURATION / 60000)) * 10) / 10,
+    maxInFlightSeen,
+    maxPerDivSeen,
+    fillTimeMs: fillTimeMs > 0 ? fillTimeMs : SIM_DURATION,
     cableWaits: metrics.cableWaits,
     maxCableWaitMs: metrics.maxCableWaitMs,
     trunkWaits: metrics.crossRackWaits,
     maxTrunkWaitMs: metrics.maxCrossRackWaitMs,
-    divFillTimes,
+    brsRenders: metrics.brsRenders,
+    brsSkips: metrics.brsSkips,
+    avgRepeatGapMs: gapCount ? Math.round(gapSum / gapCount) : 0,
+    minRepeatGapMs: gapCount ? Math.round(gapMin) : 0,
+    maxRepeatGapMs: gapCount ? Math.round(gapMax) : 0,
+    avgConcurrentAnimations: concurrencySamples ? Math.round((concurrencySum / concurrencySamples) * 100) / 100 : 0,
+    metrics,
   };
 }
 
-function printDrainComparison(poolSize: number, useUneven: boolean) {
-  const configs: DrainConfig[] = [
-    {
-      label: 'CURRENT',
-      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
-      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-    {
-      label: '2/div',
-      maxPerDiv: 2, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
-      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-    {
-      label: 'Multi-dispatch',
-      maxPerDiv: 1, dispatchPerTick: 5, drainTickMs: 5000, rotationTickMs: 5000,
-      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-    {
-      label: 'Fast drain tick',
-      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 2000, rotationTickMs: 8000,
-      wifiPct: 0.20, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-    {
-      label: '30% WiFi',
-      maxPerDiv: 1, dispatchPerTick: 1, drainTickMs: 5000, rotationTickMs: 5000,
-      wifiPct: 0.30, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-    {
-      label: 'ALL PROPOSED',
-      maxPerDiv: 2, dispatchPerTick: 5, drainTickMs: 2000, rotationTickMs: 8000,
-      wifiPct: 0.30, brsRenderMs: 1500, brsLoadBalance: true,
-    },
-  ];
+function printTtlReport(r: TtlResult) {
+  console.log(`\n── ${r.config.label} ──────────────────────────────`);
+  console.log(`  Pool: ${r.poolSize} badges | Sim: ${min(r.simDurationMs)} | Tick: ${sec(r.config.tickMs)}`);
+  console.log(`  TTL: ${sec(r.config.ttlMinMs)}-${sec(r.config.ttlMaxMs)}${r.config.wfq ? ' (WFQ)' : ' (fixed)'}`);
+  console.log(`  Rate limit: ${r.config.maxInFlight} global / ${r.config.maxPerDiv} per-div`);
+  console.log(`  Fill time: ${sec(r.fillTimeMs)}`);
+  console.log(`  Avg concurrent animations: ${r.avgConcurrentAnimations}`);
+  console.log(`  Max in-flight: ${r.maxInFlightSeen} / ${r.config.maxInFlight} | Max per-div: ${r.maxPerDivSeen} / ${r.config.maxPerDiv}`);
 
-  const distLabel = useUneven ? 'UNEVEN (IT:25 Off:18 Corp:15 Con:12 Punk:10)' : 'EVEN (random)';
-  console.log(`\n══ DRAIN SIM: ${poolSize} badges | ${distLabel} ══════════════`);
-  console.log(`  ${'Config'.padEnd(18)} FillTime  1stFull  AllFull  Placed  MaxFly  BRS-1  BRS-2  Skip  CbleW  TrnkW  Rots`);
-  console.log(`  ${'─'.repeat(18)} ────────  ───────  ───────  ──────  ──────  ─────  ─────  ────  ─────  ─────  ────`);
+  console.log(`\n  Global: ${r.totalRotations} ingress + ${r.totalEvictions} evictions = ${r.totalRotations + r.totalEvictions} total animations`);
+  console.log(`  Rate: ${r.globalAnimationsPerMin} animations/min`);
+  console.log(`  Repeat gap: ${sec(r.avgRepeatGapMs)} avg | ${sec(r.minRepeatGapMs)} min | ${sec(r.maxRepeatGapMs)} max`);
 
-  for (const cfg of configs) {
-    // Average over 3 runs for stability
-    const runs = [0, 1, 2].map(() => simulateDrain(poolSize, cfg, useUneven));
-    const avg = (fn: (r: DrainResult) => number) => Math.round(runs.reduce((s, r) => s + fn(r), 0) / runs.length);
-
+  console.log(`\n  Per-division breakdown:`);
+  console.log(`  ${'Div'.padEnd(12)} Pool  Cap  Ratio  Rots  Evict  Anim/m  AvgVis%  MinVis%  MaxVis%`);
+  console.log(`  ${'─'.repeat(12)} ────  ───  ─────  ────  ─────  ──────  ───────  ───────  ───────`);
+  for (const div of DIVISIONS) {
+    const d = r.perDiv[div];
+    if (!d) continue;
     console.log(
-      `  ${cfg.label.padEnd(18)} ` +
-      `${sec(avg(r => r.fillTimeMs)).padStart(8)}  ` +
-      `${sec(avg(r => r.firstPanelFullMs)).padStart(7)}  ` +
-      `${(avg(r => r.allPanelFullMs) > 0 ? sec(avg(r => r.allPanelFullMs)) : '  n/a').padStart(7)}  ` +
-      `${String(avg(r => r.totalIngressDrain)).padStart(6)}  ` +
-      `${String(avg(r => r.maxInFlight)).padStart(6)}  ` +
-      `${String(avg(r => r.brsRenders['brs-01'])).padStart(5)}  ` +
-      `${String(avg(r => r.brsRenders['brs-02'])).padStart(5)}  ` +
-      `${String(avg(r => r.brsSkips)).padStart(4)}  ` +
-      `${String(avg(r => r.cableWaits)).padStart(5)}  ` +
-      `${String(avg(r => r.trunkWaits)).padStart(5)}  ` +
-      `${String(avg(r => r.rotationsAfterSettle)).padStart(4)}`
+      `  ${div.padEnd(12)} ` +
+      `${String(d.poolSize).padStart(4)}  ` +
+      `${String(d.panelCap).padStart(3)}  ` +
+      `${d.overflowRatio.toFixed(2).padStart(5)}  ` +
+      `${String(d.rotations).padStart(4)}  ` +
+      `${String(d.evictions).padStart(5)}  ` +
+      `${d.animationsPerMin.toFixed(1).padStart(6)}  ` +
+      `${d.avgBadgeVisibilityPct.toFixed(1).padStart(7)}  ` +
+      `${d.minBadgeVisibilityPct.toFixed(1).padStart(7)}  ` +
+      `${d.maxBadgeVisibilityPct.toFixed(1).padStart(7)}`
     );
   }
 
-  // Show per-division fill times for ALL PROPOSED with uneven dist
-  if (useUneven) {
-    const proposed = simulateDrain(poolSize, configs[configs.length - 1], true);
-    console.log(`\n  Per-division fill times (ALL PROPOSED, uneven):`);
-    for (const div of DIVISIONS) {
-      const t = proposed.divFillTimes[div];
-      const cap = DIV_TOPOLOGY[div].panelCapacity;
-      const badge_count = generateUnevenPool(poolSize).filter(b => b.divTheme === div).length;
-      console.log(`    ${div.padEnd(12)} ${t > 0 ? sec(t) : 'never'} (${badge_count} badges, ${cap} cap)`);
+  console.log(`\n  Cable: ${r.cableWaits} waits | max ${sec(r.maxCableWaitMs)} wait`);
+  if (r.trunkWaits > 0) {
+    console.log(`  Trunk: ${r.trunkWaits} waits | max ${sec(r.maxTrunkWaitMs)} wait`);
+  }
+  if (Object.keys(r.metrics.perCableWaits).length > 0) {
+    const sorted = Object.entries(r.metrics.perCableWaits).sort((a, b) => b[1].count - a[1].count);
+    for (const [cable, stats] of sorted.slice(0, 5)) {
+      const name = (CABLE_NAMES[Number(cable)] || `Cable ${cable}`).padEnd(20);
+      const avg = Math.round(stats.totalMs / stats.count);
+      console.log(`    ${name} ${String(stats.count).padStart(3)}× wait | avg ${sec(avg)} | max ${sec(stats.maxMs)}`);
     }
   }
+  console.log(`  BRS: ${r.brsRenders['brs-01']}/${r.brsRenders['brs-02']} renders | ${r.brsSkips} skips`);
+}
+
+function printTtlComparison(results: TtlResult[]) {
+  console.log(`\n  ══ COMPARISON TABLE ══════════════════════════════════════════════════════`);
+  console.log(`  ${'Config'.padEnd(28)} FillTm  Anim/m  AvgCon  MaxFly  AvgGap  CbleW  TrnkW  BRS1  BRS2  Skip`);
+  console.log(`  ${'─'.repeat(28)} ──────  ──────  ──────  ──────  ──────  ─────  ─────  ────  ────  ────`);
+
+  for (const r of results) {
+    console.log(
+      `  ${r.config.label.padEnd(28)} ` +
+      `${sec(r.fillTimeMs).padStart(6)}  ` +
+      `${r.globalAnimationsPerMin.toFixed(1).padStart(6)}  ` +
+      `${r.avgConcurrentAnimations.toFixed(2).padStart(6)}  ` +
+      `${String(r.maxInFlightSeen).padStart(6)}  ` +
+      `${sec(r.avgRepeatGapMs).padStart(6)}  ` +
+      `${String(r.cableWaits).padStart(5)}  ` +
+      `${String(r.trunkWaits).padStart(5)}  ` +
+      `${String(r.brsRenders['brs-01']).padStart(4)}  ` +
+      `${String(r.brsRenders['brs-02']).padStart(4)}  ` +
+      `${String(r.brsSkips).padStart(4)}`
+    );
+  }
+}
+
+function printTtlIntegrity(r: TtlResult) {
+  const pass = (label: string, ok: boolean, detail?: string) =>
+    console.log(`  ${ok ? '✓' : '✗'} ${label}${detail ? ` (${detail})` : ''}`);
+
+  pass('Max in-flight respected', r.maxInFlightSeen <= r.config.maxInFlight,
+    `${r.maxInFlightSeen}/${r.config.maxInFlight}`);
+  pass('Max per-div respected', r.maxPerDivSeen <= r.config.maxPerDiv,
+    `${r.maxPerDivSeen}/${r.config.maxPerDiv}`);
+  pass('All divisions active', DIVISIONS.every(d => (r.perDiv[d]?.rotations || 0) > 0),
+    DIVISIONS.map(d => `${d}:${r.perDiv[d]?.rotations || 0}`).join(' '));
+  pass('Trunk wait under 10s', r.maxTrunkWaitMs < 10000,
+    `max ${sec(r.maxTrunkWaitMs)}`);
+  pass('Avg concurrent < maxInFlight', r.avgConcurrentAnimations < r.config.maxInFlight,
+    `${r.avgConcurrentAnimations} avg`);
+
+  // Fairness: no division should have >3x the animations/min of another (accounting for pool size differences)
+  const animRates = DIVISIONS.map(d => r.perDiv[d]?.animationsPerMin || 0).filter(r => r > 0);
+  const rateRatio = animRates.length > 1 ? Math.max(...animRates) / Math.min(...animRates) : 1;
+  pass('Division fairness (max/min rate < 5x)', rateRatio < 5,
+    `ratio ${rateRatio.toFixed(1)}x`);
+
+  // Visibility: every badge should be visible at least some % of the time
+  const allMinVis = DIVISIONS.map(d => r.perDiv[d]?.minBadgeVisibilityPct || 0);
+  const worstVis = Math.min(...allMinVis);
+  pass('No badge starved (>5% visibility)', worstVis > 5,
+    `worst ${worstVis.toFixed(1)}%`);
+
+  // Cadence: should have meaningful activity but not chaos
+  pass('Animations/min > 5 (not dead)', r.globalAnimationsPerMin > 5,
+    `${r.globalAnimationsPerMin}/min`);
+  pass('Animations/min < 60 (not chaos)', r.globalAnimationsPerMin < 60,
+    `${r.globalAnimationsPerMin}/min`);
 }
 
 // ─── Run ───────────────────────────────────────────────────
@@ -1190,57 +1019,98 @@ if (MODE === 'ingress') {
   pass('Dual BRS concurrent ≤ 2', r.metrics.maxBrsQueue <= 2, `max ${r.metrics.maxBrsQueue}`);
   pass('Trunk wait under 10s', r.metrics.maxCrossRackWaitMs < 10000, `max ${sec(r.metrics.maxCrossRackWaitMs)}`);
 
-} else if (MODE === 'rotation') {
+} else if (MODE === 'ttl') {
   console.log(`\n══════════════════════════════════════════════`);
-  console.log(`  RACK ROTATION SIMULATOR`);
-  console.log(`  Phase 3 — Pool Rotation Cycle`);
-  console.log(`  10-minute sim | 70% home-side bias`);
-  console.log(`  ${REMOVAL_TOTAL_MS}ms removal + ingress per cycle`);
-  console.log(`  15% storage detour | 30s settle`);
+  console.log(`  TTL MODE — Always-Rotating Scheduler`);
+  console.log(`  No state machine. Badge TTL → evict → re-request.`);
+  console.log(`  10-minute sim | 70% home-side bias | 3 trunks`);
+  console.log(`  Real distribution: IT:17 Off:16 Punk:12 Corp:8 Con:20`);
   console.log(`══════════════════════════════════════════════`);
 
-  for (const size of ROTATION_POOL_SIZES) {
-    printRotationReport(simulateRotation(size));
-  }
+  // Default config = production settings (WFQ + first-pass priority)
+  const defaults: TtlConfig = {
+    label: '', maxInFlight: 5, maxPerDiv: 2, ttlMinMs: 15000, ttlMaxMs: 25000,
+    wfq: true, wfqFirstPassPriority: true, tickMs: 2000,
+  };
 
-  // Congestion comparison at 500 badges
-  console.log(`\n══ CONGESTION COMPARISON (500-badge pool, 3 trunks) ═══════════`);
-  const variants: { label: string; opts: RotationOptions }[] = [
-    { label: '3 in-flight', opts: { maxInFlight: 3 } },
-    { label: '4 in-flight', opts: { maxInFlight: 4 } },
-    { label: '5 in-flight (default)', opts: {} },
+  const configs: TtlConfig[] = [
+    // ─── Production config ───
+    { ...defaults, label: 'WFQ+FP (production)' },
+
+    // ─── Baseline (no fairness — for comparison) ───
+    { ...defaults, label: 'BASELINE: no fairness', wfq: false, wfqFirstPassPriority: false },
+
+    // ─── TTL tuning ───
+    { ...defaults, label: 'WFQ+FP TTL 8-15s (short)', ttlMinMs: 8000, ttlMaxMs: 15000 },
+    { ...defaults, label: 'WFQ+FP TTL 25-40s (long)', ttlMinMs: 25000, ttlMaxMs: 40000 },
+
+    // ─── Capacity planning ───
+    { ...defaults, label: 'WFQ+FP MIF=3', maxInFlight: 3 },
+    { ...defaults, label: 'WFQ+FP MIF=7', maxInFlight: 7 },
   ];
 
-  console.log(`  ${'Variant'.padEnd(32)}  Rotations  MaxTrunkWait  TrunkWaits  CableWaits  MaxCableWait  Unique/500`);
-  console.log(`  ${'─'.repeat(32)}  ─────────  ────────────  ──────────  ──────────  ────────────  ──────────`);
-  for (const v of variants) {
-    const r = simulateRotation(500, v.opts);
-    console.log(
-      `  ${v.label.padEnd(32)}  ` +
-      `${String(r.totalRotations).padStart(9)}  ` +
-      `${sec(r.metrics.maxCrossRackWaitMs).padStart(12)}  ` +
-      `${String(r.metrics.crossRackWaits).padStart(10)}  ` +
-      `${String(r.metrics.cableWaits).padStart(10)}  ` +
-      `${sec(r.metrics.maxCableWaitMs).padStart(12)}  ` +
-      `${(r.uniqueBadgesDisplayed + '/500').padStart(10)}`
-    );
+  const results: TtlResult[] = [];
+
+  // Run each config with real distribution (average 3 runs for stability)
+  for (const cfg of configs) {
+    const runs = [0, 1, 2].map(() => simulateTtl(cfg, true));
+    // Use middle run (sorted by total rotations) for detailed report
+    runs.sort((a, b) => a.totalRotations - b.totalRotations);
+    const median = runs[1];
+    results.push(median);
+    printTtlReport(median);
   }
 
-  console.log(`\n── INTEGRITY CHECKS (200-badge pool) ────────`);
-  printRotationIntegrity(simulateRotation(200));
+  // Comparison table
+  printTtlComparison(results);
 
-} else if (MODE === 'drain') {
-  console.log(`\n══════════════════════════════════════════════`);
-  console.log(`  DRAIN MODE — Fill Lifecycle Simulator`);
-  console.log(`  Tests: per-div concurrency, multi-dispatch,`);
-  console.log(`  tick speed, WiFi %, BRS load balancing`);
-  console.log(`══════════════════════════════════════════════`);
+  // Integrity checks on key configs
+  console.log(`\n── INTEGRITY CHECKS ──`);
 
-  const poolSize = countArg ? parseInt(countArg) : 80;
+  // Check baseline, round-robin, and best WFQ
+  const checkConfigs = [
+    { label: 'BASELINE', result: results[0] },
+    { label: 'ROUND ROBIN', result: results[1] },
+  ];
 
-  printDrainComparison(poolSize, false);  // even distribution
-  printDrainComparison(poolSize, true);   // uneven distribution
+  // Find best WFQ config (most divisions active, then highest anim/min)
+  const wfqResults = results.filter(r => r.config.wfq);
+  if (wfqResults.length > 0) {
+    const bestWfq = wfqResults.reduce((best, r) => {
+      const activeCount = DIVISIONS.filter(d => (r.perDiv[d]?.rotations || 0) > 0).length;
+      const bestActive = DIVISIONS.filter(d => (best.perDiv[d]?.rotations || 0) > 0).length;
+      if (activeCount > bestActive) return r;
+      if (activeCount === bestActive) {
+        // Prefer lower fairness ratio (more even distribution)
+        const rRates = DIVISIONS.map(d => r.perDiv[d]?.animationsPerMin || 0).filter(x => x > 0);
+        const bRates = DIVISIONS.map(d => best.perDiv[d]?.animationsPerMin || 0).filter(x => x > 0);
+        const rRatio = rRates.length > 1 ? Math.max(...rRates) / Math.min(...rRates) : Infinity;
+        const bRatio = bRates.length > 1 ? Math.max(...bRates) / Math.min(...bRates) : Infinity;
+        if (rRatio < bRatio) return r;
+      }
+      return best;
+    });
+    checkConfigs.push({ label: `BEST WFQ: ${bestWfq.config.label}`, result: bestWfq });
+  }
 
+  for (const { label, result } of checkConfigs) {
+    console.log(`\n  [${label}]`);
+    printTtlIntegrity(result);
+  }
+
+  // Scale test with best WFQ config
+  if (wfqResults.length > 0) {
+    const bestWfqConfig = wfqResults.reduce((best, r) => {
+      const ac = DIVISIONS.filter(d => (r.perDiv[d]?.rotations || 0) > 0).length;
+      const bc = DIVISIONS.filter(d => (best.perDiv[d]?.rotations || 0) > 0).length;
+      return ac > bc ? r : best;
+    }).config;
+
+    console.log(`\n── SCALE TEST: 150 badges with ${bestWfqConfig.label} ──`);
+    const scaleResult = simulateTtl(bestWfqConfig, false, 150);
+    printTtlReport(scaleResult);
+    printTtlIntegrity(scaleResult);
+  }
 }
 
 console.log(`\n══════════════════════════════════════════════\n`);
