@@ -46,6 +46,26 @@ window.RackRenderer = {
     this._badgeIndex = {};
     this._reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    // Pause all animations when tab is not visible (save CPU/battery)
+    this._onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        this._stopWfq();
+        this._stopCloudRain();
+        this._stopThreatTraffic();
+        this._stopIdleAnimations();
+        this._cancelAllPackets();
+      } else if (document.visibilityState === 'visible' && this._container) {
+        this._startCloudRain();
+        this._startThreatTraffic();
+        this._startIdleAnimations();
+        if (this._badgePool.length > 0 && !this._wfqRunning) {
+          this._seedWfqTTLsFromDOM();
+          this._startWfq();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this._onVisibilityChange);
+
     // Load CSS
     this._cssLink = document.createElement('link');
     this._cssLink.rel = 'stylesheet';
@@ -227,6 +247,7 @@ window.RackRenderer = {
     this._stopThreatTraffic();
     this._stopIdleAnimations();
     this._cancelAllPackets();
+    if (this._onVisibilityChange) { document.removeEventListener('visibilitychange', this._onVisibilityChange); this._onVisibilityChange = null; }
     if (this._cssLink) { this._cssLink.remove(); this._cssLink = null; }
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null; }
     if (this._onWindowResize) { window.removeEventListener('resize', this._onWindowResize); this._onWindowResize = null; }
@@ -1690,59 +1711,83 @@ window.RackRenderer = {
       await this._waitForCable(cableIndex);
     }
 
-    // Moves packet along cable from fromNode toward the other end.
-    // Direction is auto-detected by comparing SVG path start/end to cable def ports.
     const path = this._cablePaths && this._cablePaths.get(cableIndex);
-    if (!path) {
-      return Promise.resolve();
-    }
+    if (!path) return Promise.resolve();
 
-    // Auto-detect direction: check if SVG path start (progress=0) is near the fromNode's port
+    // Auto-detect direction: which end of the SVG path is the "from" port?
     const def = this._CABLE_DEFS[cableIndex];
     const fromPortNode = this._PORT_TO_NODE[def[0]];
-    // If fromNode matches the cable's "from" port, SVG path may or may not start there
-    // Check actual SVG geometry: path start vs from-port position
     const pathLen = path.getTotalLength();
     const startPt = path.getPointAtLength(0);
     const endPt = path.getPointAtLength(pathLen);
 
-    // Find the from-port element position to determine which end is "from"
     const fromPortId = fromNode === fromPortNode ? def[0] : def[1];
     const fromEl = this._container && this._container.querySelector(`[data-port-id="${fromPortId}"]`);
-    let direction = 1; // default: follow SVG path direction
+    let reverse = false;
     if (fromEl) {
       const framesRow = this._container.querySelector('.rack-frames-row');
       if (framesRow) {
         const ref = framesRow.getBoundingClientRect();
         const port = this._toSvgCoords(fromEl.getBoundingClientRect(), ref);
-        // Which SVG path end is closer to the from-port?
         const distToStart = Math.hypot(startPt.x - port.x, startPt.y - port.y);
         const distToEnd = Math.hypot(endPt.x - port.x, endPt.y - port.y);
-        direction = distToStart <= distToEnd ? 1 : -1;
+        reverse = distToEnd < distToStart;
       }
     }
 
+    // Calculate duration from speed (same formula as before)
+    const pxPerSec = 150 * speed / 0.4;
+    const durationSec = pathLen / pxPerSec;
+
+    // Set cable busy
+    if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
+      this._cableBusy.set(cableIndex, true);
+    }
+
+    // Position packet at start of path
+    const startPos = reverse ? endPt : startPt;
+    if (packet.el) {
+      packet.el.setAttribute('transform', `translate(${startPos.x}, ${startPos.y})`);
+    }
+
+    // Create <animateMotion> — GPU-composited, zero JS per-frame cost
+    const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+    anim.setAttribute('dur', `${durationSec}s`);
+    anim.setAttribute('fill', 'freeze');
+    anim.setAttribute('calcMode', 'linear');
+    if (reverse) {
+      anim.setAttribute('keyPoints', '1;0');
+      anim.setAttribute('keyTimes', '0;1');
+    }
+    const mpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
+    mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#rack-cable-${cableIndex}`);
+    mpath.setAttribute('href', `#rack-cable-${cableIndex}`);
+    anim.appendChild(mpath);
+
     return new Promise(resolve => {
       packet.cableIndex = cableIndex;
-      packet.progress = direction === 1 ? 0 : 1;
-      // Convert speed from "progress/sec" to distance-normalized:
-      // Target ~150px/sec visual speed. Speed param is a multiplier.
-      const pxPerSec = 150 * speed / 0.4; // 0.4 is the default speed param
-      packet.speed = pxPerSec / pathLen; // progress per second, normalized to path length
-      packet.direction = direction;
-      packet.resolve = resolve;
-      packet.type = 'cable';
-      packet.pathEl = path;
-      packet.pathLength = pathLen;
 
-      if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
-        this._cableBusy.set(cableIndex, true);
+      // Append animateMotion to packet element
+      if (packet.el) {
+        // Clear any previous transform so animateMotion takes over
+        packet.el.removeAttribute('transform');
+        packet.el.appendChild(anim);
+        anim.beginElement();
       }
 
-      if (!this._activePackets.includes(packet)) {
-        this._activePackets.push(packet);
-      }
-      this._startAnimLoop();
+      // Resolve + cleanup after animation duration
+      setTimeout(() => {
+        // Remove animateMotion element
+        if (anim.parentNode) anim.remove();
+        // Clear cable busy
+        if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
+          this._cableBusy.set(cableIndex, false);
+          // Wake any waiter
+          const waiter = this._cableWaiters?.get(cableIndex);
+          if (waiter) { waiter(); this._cableWaiters.delete(cableIndex); }
+        }
+        resolve();
+      }, durationSec * 1000);
     });
   },
 
@@ -2239,12 +2284,13 @@ window.RackRenderer = {
         const j = Math.floor(Math.random() * (i + 1));
         [slots[i], slots[j]] = [slots[j], slots[i]];
       }
+      const spreadMs = (panelSize / this._MAX_PER_DIV) * this._WFQ_TTL_MIN_MS;
       let idx = 0;
       for (const eid of contents) {
         if (!this._wfqPanelTTLs[div].has(eid)) {
-          const ttl = this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS);
-          const elapsed = (slots[idx] / Math.max(panelSize, 1)) * ttl;
-          this._wfqPanelTTLs[div].set(eid, { placedAt: now - elapsed, ttl });
+          const slotOffset = (slots[idx] / Math.max(panelSize - 1, 1)) * spreadMs;
+          const ttl = this._WFQ_TTL_MIN_MS + slotOffset + Math.random() * 3000;
+          this._wfqPanelTTLs[div].set(eid, { placedAt: now, ttl });
         }
         idx++;
       }
@@ -2280,17 +2326,22 @@ window.RackRenderer = {
         const ttls = this._wfqPanelTTLs[div];
         if (ttls) {
           const panelSize = ttls.size;
-          // Build shuffled slot indices so expiry order is random, not insertion-order
+          // Shuffled slot indices for random port expiry order
           const slots = Array.from({ length: panelSize }, (_, i) => i);
           for (let i = slots.length - 1; i > 0; i--) {
             const j = Math.floor(Math.random() * (i + 1));
             [slots[i], slots[j]] = [slots[j], slots[i]];
           }
+          // Stagger TTLs so badges expire one-by-one over a wide window.
+          // With 12 badges and MAX_PER_DIV=2, we want ~1 expiry per TTL_MIN interval.
+          // Total spread = panelSize * TTL_MIN / 2 ≈ 90s for 12 badges.
+          // Badge with slot 0 expires at TTL_MIN, slot 11 at TTL_MIN + spread.
+          const spreadMs = (panelSize / this._MAX_PER_DIV) * this._WFQ_TTL_MIN_MS;
           let idx = 0;
           for (const [eid] of ttls) {
-            const ttl = this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS);
-            const elapsed = (slots[idx] / Math.max(panelSize, 1)) * ttl;
-            ttls.set(eid, { placedAt: now - elapsed, ttl });
+            const slotOffset = (slots[idx] / Math.max(panelSize - 1, 1)) * spreadMs;
+            const ttl = this._WFQ_TTL_MIN_MS + slotOffset + Math.random() * 3000; // small jitter
+            ttls.set(eid, { placedAt: now, ttl });
             idx++;
           }
         }
@@ -2656,16 +2707,15 @@ window.RackRenderer = {
     requestAnimationFrame(animate);
   },
 
-  // ─── Cloud Binary Rain ─────────────────────────────────
-  // Idle matrix-style digits streaming down from the cloud. Runs continuously.
-  // When a badge ingress starts, the rain digits get "absorbed" into the materialization.
+  // ─── Cloud Binary Rain (CSS-animated) ───────────────────
+  // Matrix-style digits fall from clouds. Pure CSS animation — no rAF loop.
+  // JS just spawns SVG text elements on a timer; CSS handles motion + fade.
+  // Elements self-remove via animationend event.
 
   _cloudRainTimer: null,
-  _cloudRainDrops: [],
-  _cloudRainFrame: null,
 
   _startCloudRain() {
-    if (this._cloudRainFrame) return;
+    if (this._cloudRainTimer) return;
     if (!this._cableSvg) return;
     const cloudA = this._virtualCoords?.cloudA;
     const cloudB = this._virtualCoords?.cloudB;
@@ -2676,22 +2726,17 @@ window.RackRenderer = {
     if (cloudA) clouds.push(cloudA);
     if (cloudB) clouds.push(cloudB);
     const colors = ['#5B8DEF', '#93C5FD', '#B4D4FF', '#FFFFFF', '#3B6FCF'];
-    const maxDrops = 24; // per cloud (48 total for dual, same density as before)
 
-    const cloudW = 75; // half-width of rain zone
-    const cloudH = 70; // height of cloud above bottom edge
+    const cloudW = 75;  // half-width of rain zone
+    const cloudH = 70;  // height of cloud above bottom edge
 
-    // Spawn a new digit every 200-400ms, alternating between clouds
     let spawnIdx = 0;
     this._cloudRainTimer = setInterval(() => {
-      if (this._cloudRainDrops.length >= maxDrops * clouds.length) return;
-
-      // Alternate spawn between clouds
       const cloud = clouds[spawnIdx % clouds.length];
       spawnIdx++;
 
       const cloudTop = cloud.y - cloudH;
-      const cloudBot = cloud.y - 5;
+      const fallDist = cloudH - 5; // distance to fall
 
       const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       txt.textContent = Math.random() < 0.5 ? '0' : '1';
@@ -2705,58 +2750,20 @@ window.RackRenderer = {
       const startY = cloudTop + Math.random() * 10;
       txt.setAttribute('x', startX);
       txt.setAttribute('y', startY);
-      txt.setAttribute('opacity', '0');
+
+      // CSS custom properties drive the animation
+      const speed = 12 + Math.random() * 20; // px/sec
+      const duration = fallDist / speed;       // seconds
+      const opacity = 0.3 + Math.random() * 0.4;
+      txt.style.setProperty('--rain-duration', `${duration.toFixed(2)}s`);
+      txt.style.setProperty('--rain-dist', `${fallDist}px`);
+      txt.style.setProperty('--rain-opacity', `${opacity}`);
+
       svg.appendChild(txt);
 
-      this._cloudRainDrops.push({
-        el: txt,
-        x: startX,
-        y: startY,
-        speed: 12 + Math.random() * 20,
-        fadeInY: startY + 5,
-        maxY: cloudBot,
-        opacity: 0.3 + Math.random() * 0.4,
-      });
-    }, 200 + Math.random() * 200);
-
-    // Animation loop for rain
-    const animateRain = (now) => {
-      if (!this._cloudRainFrame && this._cloudRainFrame !== 0) return;
-
-      const dt = this._cloudRainLastTime ? (now - this._cloudRainLastTime) / 1000 : 0.016;
-      this._cloudRainLastTime = now;
-      const clampedDt = Math.min(dt, 0.1);
-
-      for (let i = this._cloudRainDrops.length - 1; i >= 0; i--) {
-        const d = this._cloudRainDrops[i];
-        d.y += d.speed * clampedDt;
-
-        // Fade in near top
-        if (d.y < d.fadeInY) {
-          const fadeT = (d.y - (d.fadeInY - 5)) / 5;
-          d.el.setAttribute('opacity', String(Math.max(0, fadeT * d.opacity)));
-        }
-        // Fade out near bottom
-        else if (d.y > d.maxY - 15) {
-          const fadeT = (d.maxY - d.y) / 15;
-          d.el.setAttribute('opacity', String(Math.max(0, fadeT * d.opacity)));
-        } else {
-          d.el.setAttribute('opacity', String(d.opacity));
-        }
-
-        d.el.setAttribute('y', d.y);
-
-        // Remove when past max
-        if (d.y >= d.maxY) {
-          d.el.remove();
-          this._cloudRainDrops.splice(i, 1);
-        }
-      }
-
-      this._cloudRainFrame = requestAnimationFrame(animateRain);
-    };
-    this._cloudRainLastTime = 0;
-    this._cloudRainFrame = requestAnimationFrame(animateRain);
+      // Remove after animation duration (setTimeout is reliable; animationend is not on SVG in Firefox)
+      setTimeout(() => txt.remove(), duration * 1000 + 100);
+    }, 300);
   },
 
   _stopCloudRain() {
@@ -2764,15 +2771,10 @@ window.RackRenderer = {
       clearInterval(this._cloudRainTimer);
       this._cloudRainTimer = null;
     }
-    if (this._cloudRainFrame) {
-      cancelAnimationFrame(this._cloudRainFrame);
-      this._cloudRainFrame = null;
+    // Remove any remaining rain digits
+    if (this._cableSvg) {
+      this._cableSvg.querySelectorAll('.rack-cloud-rain-digit').forEach(el => el.remove());
     }
-    for (const d of this._cloudRainDrops) {
-      if (d.el.parentNode) d.el.remove();
-    }
-    this._cloudRainDrops = [];
-    this._cloudRainLastTime = 0;
   },
 
   // Red rain precursor — briefly contaminate the cloud rain with red digits before a threat drops
@@ -2804,18 +2806,18 @@ window.RackRenderer = {
         const startY = cloudTop + Math.random() * 10;
         txt.setAttribute('x', startX);
         txt.setAttribute('y', startY);
-        txt.setAttribute('opacity', '0');
-        svg.appendChild(txt);
 
-        this._cloudRainDrops.push({
-          el: txt,
-          x: startX,
-          y: startY,
-          speed: 15 + Math.random() * 15,
-          fadeInY: startY + 5,
-          maxY: cloudBot,
-          opacity: 0.6 + Math.random() * 0.3,
-        });
+        // CSS-animated: set custom properties and self-remove on completion
+        const fallDist = cloudBot - startY;
+        const speed = 15 + Math.random() * 15;
+        const duration = fallDist / speed;
+        const opacity = 0.6 + Math.random() * 0.3;
+        txt.style.setProperty('--rain-duration', `${duration.toFixed(2)}s`);
+        txt.style.setProperty('--rain-dist', `${fallDist}px`);
+        txt.style.setProperty('--rain-opacity', `${opacity}`);
+
+        svg.appendChild(txt);
+        setTimeout(() => txt.remove(), duration * 1000 + 100);
 
         spawned++;
         if (spawned < count) {
@@ -3855,6 +3857,7 @@ window.RackRenderer = {
       if (style === 'dashed') path.setAttribute('stroke-dasharray', '6 4');
       path.classList.add('rack-cable-path');
       path.setAttribute('data-cable-index', cableIdx);
+      path.id = `rack-cable-${cableIdx}`;
 
       svg.appendChild(path);
 
