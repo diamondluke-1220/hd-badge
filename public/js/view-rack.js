@@ -2267,7 +2267,9 @@ window.RackRenderer = {
 
     for (const div of filledDivs) {
       if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
-      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
+      // Skip if this division already has ANY in-flight work (eviction or ingress).
+      // This prevents cascading evictions while a replacement is still animating.
+      if (this._divInFlight[div] > 0) continue;
 
       // Only evict if this division has pool badges waiting (more badges than panel cap)
       const panelContents = this._getPanelContents(div);
@@ -2276,8 +2278,11 @@ window.RackRenderer = {
       const hasWaiting = divPool.some(e => !onPanel.has(e.badge.employeeId));
       if (!hasWaiting) continue;
 
+      // Only evict if panel is at capacity — don't evict from a panel that has empty slots
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      if (panelContents.length < cap) continue;
+
       // Pick one random badge from the panel to evict
-      if (panelContents.length === 0) continue;
       const evictId = panelContents[Math.floor(Math.random() * panelContents.length)];
 
       this._divInFlight[div]++;
