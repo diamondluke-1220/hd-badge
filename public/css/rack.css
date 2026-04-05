@@ -2072,123 +2072,102 @@ body.view-rack .public-orgchart {
 
 /* Long-cycle activity pattern A — 24s master animation weaving through
    multiple burst styles so no two ports ever visually sync.
-   Uses glow intensity variation to simulate traffic load. */
+   Opacity-only (no box-shadow) to avoid per-port paint operations. */
 @keyframes rack-led-activity-cycle {
-  /* 3-burst (moderate traffic) */
-  0%   { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  2%   { opacity: 0.1; box-shadow: none; }
-  4%   { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  6%   { opacity: 0.1; box-shadow: none; }
-  8%   { opacity: 0.8; box-shadow: 0 0 2px #d97706; }
-  10%  { opacity: 0.1; box-shadow: none; }
-  /* pause */
-  18%  { opacity: 0.1; box-shadow: none; }
-  /* double-tap */
-  19%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  21%  { opacity: 0.1; box-shadow: none; }
-  23%  { opacity: 0.7; box-shadow: 0 0 2px #d97706; }
-  25%  { opacity: 0.1; box-shadow: none; }
-  /* long idle — dim glow */
-  26%  { opacity: 0.15; box-shadow: none; }
-  36%  { opacity: 0.15; box-shadow: none; }
-  /* single blink */
-  37%  { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  39%  { opacity: 0.1; box-shadow: none; }
-  /* pause */
-  44%  { opacity: 0.1; box-shadow: none; }
-  /* 5-burst (heavy traffic — bright glow) */
-  45%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  46%  { opacity: 0.15; box-shadow: none; }
-  47%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  48%  { opacity: 0.15; box-shadow: none; }
-  49%  { opacity: 1; box-shadow: 0 0 6px #f59e0b; }
-  50%  { opacity: 0.1; box-shadow: none; }
-  51%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  52%  { opacity: 0.15; box-shadow: none; }
-  53%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  55%  { opacity: 0.1; box-shadow: none; }
-  /* rest */
-  66%  { opacity: 0.1; box-shadow: none; }
-  /* double-tap */
-  67%  { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  69%  { opacity: 0.1; box-shadow: none; }
-  71%  { opacity: 0.8; box-shadow: 0 0 2px #d97706; }
-  73%  { opacity: 0.1; box-shadow: none; }
-  /* idle */
-  80%  { opacity: 0.1; box-shadow: none; }
-  /* 3-burst */
-  81%  { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  83%  { opacity: 0.1; box-shadow: none; }
-  84%  { opacity: 0.7; box-shadow: 0 0 2px #d97706; }
-  86%  { opacity: 0.1; box-shadow: none; }
-  87%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  89%  { opacity: 0.1; box-shadow: none; }
-  /* fade to dark */
-  100% { opacity: 0.1; box-shadow: none; }
+  0%   { opacity: 1; }
+  2%   { opacity: 0.1; }
+  4%   { opacity: 1; }
+  6%   { opacity: 0.1; }
+  8%   { opacity: 0.8; }
+  10%  { opacity: 0.1; }
+  18%  { opacity: 0.1; }
+  19%  { opacity: 1; }
+  21%  { opacity: 0.1; }
+  23%  { opacity: 0.7; }
+  25%  { opacity: 0.1; }
+  26%  { opacity: 0.15; }
+  36%  { opacity: 0.15; }
+  37%  { opacity: 1; }
+  39%  { opacity: 0.1; }
+  44%  { opacity: 0.1; }
+  45%  { opacity: 1; }
+  46%  { opacity: 0.15; }
+  47%  { opacity: 1; }
+  48%  { opacity: 0.15; }
+  49%  { opacity: 1; }
+  50%  { opacity: 0.1; }
+  51%  { opacity: 1; }
+  52%  { opacity: 0.15; }
+  53%  { opacity: 1; }
+  55%  { opacity: 0.1; }
+  66%  { opacity: 0.1; }
+  67%  { opacity: 1; }
+  69%  { opacity: 0.1; }
+  71%  { opacity: 0.8; }
+  73%  { opacity: 0.1; }
+  80%  { opacity: 0.1; }
+  81%  { opacity: 1; }
+  83%  { opacity: 0.1; }
+  84%  { opacity: 0.7; }
+  86%  { opacity: 0.1; }
+  87%  { opacity: 1; }
+  89%  { opacity: 0.1; }
+  100% { opacity: 0.1; }
 }
 
 /* Activity pattern B — offset timing, different burst rhythm.
-   Assigned to odd-numbered ports via JS for visual variety. */
+   Assigned to odd-numbered ports via JS for visual variety.
+   Opacity-only (no box-shadow) to avoid per-port paint operations. */
 @keyframes rack-led-activity-cycle-b {
-  /* single tap */
-  0%   { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  2%   { opacity: 0.1; box-shadow: none; }
-  /* long idle */
-  12%  { opacity: 0.1; box-shadow: none; }
-  /* 4-burst (upload) */
-  13%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  14%  { opacity: 0.1; box-shadow: none; }
-  15%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  16%  { opacity: 0.1; box-shadow: none; }
-  17%  { opacity: 0.8; box-shadow: 0 0 3px #d97706; }
-  18%  { opacity: 0.1; box-shadow: none; }
-  19%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  21%  { opacity: 0.1; box-shadow: none; }
-  /* pause */
-  30%  { opacity: 0.1; box-shadow: none; }
-  /* double-tap */
-  31%  { opacity: 0.7; box-shadow: 0 0 2px #d97706; }
-  33%  { opacity: 0.1; box-shadow: none; }
-  35%  { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  37%  { opacity: 0.1; box-shadow: none; }
-  /* long rest */
-  52%  { opacity: 0.15; box-shadow: none; }
-  /* 6-burst (heavy download — bright) */
-  53%  { opacity: 1; box-shadow: 0 0 6px #f59e0b; }
-  54%  { opacity: 0.1; box-shadow: none; }
-  55%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  56%  { opacity: 0.15; box-shadow: none; }
-  57%  { opacity: 1; box-shadow: 0 0 6px #f59e0b; }
-  58%  { opacity: 0.1; box-shadow: none; }
-  59%  { opacity: 1; box-shadow: 0 0 5px #f59e0b; }
-  60%  { opacity: 0.15; box-shadow: none; }
-  61%  { opacity: 0.8; box-shadow: 0 0 3px #d97706; }
-  62%  { opacity: 0.1; box-shadow: none; }
-  63%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  65%  { opacity: 0.1; box-shadow: none; }
-  /* pause */
-  75%  { opacity: 0.1; box-shadow: none; }
-  /* single */
-  76%  { opacity: 1; box-shadow: 0 0 3px #d97706; }
-  78%  { opacity: 0.1; box-shadow: none; }
-  /* triple */
-  85%  { opacity: 0.7; box-shadow: 0 0 2px #d97706; }
-  86%  { opacity: 0.1; box-shadow: none; }
-  87%  { opacity: 1; box-shadow: 0 0 4px #d97706; }
-  88%  { opacity: 0.1; box-shadow: none; }
-  89%  { opacity: 0.8; box-shadow: 0 0 2px #d97706; }
-  91%  { opacity: 0.1; box-shadow: none; }
-  100% { opacity: 0.1; box-shadow: none; }
+  0%   { opacity: 1; }
+  2%   { opacity: 0.1; }
+  12%  { opacity: 0.1; }
+  13%  { opacity: 1; }
+  14%  { opacity: 0.1; }
+  15%  { opacity: 1; }
+  16%  { opacity: 0.1; }
+  17%  { opacity: 0.8; }
+  18%  { opacity: 0.1; }
+  19%  { opacity: 1; }
+  21%  { opacity: 0.1; }
+  30%  { opacity: 0.1; }
+  31%  { opacity: 0.7; }
+  33%  { opacity: 0.1; }
+  35%  { opacity: 1; }
+  37%  { opacity: 0.1; }
+  52%  { opacity: 0.15; }
+  53%  { opacity: 1; }
+  54%  { opacity: 0.1; }
+  55%  { opacity: 1; }
+  56%  { opacity: 0.15; }
+  57%  { opacity: 1; }
+  58%  { opacity: 0.1; }
+  59%  { opacity: 1; }
+  60%  { opacity: 0.15; }
+  61%  { opacity: 0.8; }
+  62%  { opacity: 0.1; }
+  63%  { opacity: 1; }
+  65%  { opacity: 0.1; }
+  75%  { opacity: 0.1; }
+  76%  { opacity: 1; }
+  78%  { opacity: 0.1; }
+  85%  { opacity: 0.7; }
+  86%  { opacity: 0.1; }
+  87%  { opacity: 1; }
+  88%  { opacity: 0.1; }
+  89%  { opacity: 0.8; }
+  91%  { opacity: 0.1; }
+  100% { opacity: 0.1; }
 }
 
 /* Link LED — solid green with glow, rare brief flicker (link renegotiation) */
+/* Link LED — mostly steady, brief dropout. Opacity-only for compositing. */
 @keyframes rack-led-link-cycle {
-  0%, 92%  { opacity: 1; box-shadow: 0 0 3px rgba(34, 197, 94, 0.6); }
-  /* brief dropout — link renegotiation */
-  93%      { opacity: 0.1; box-shadow: none; }
-  94%      { opacity: 1; box-shadow: 0 0 3px rgba(34, 197, 94, 0.6); }
-  95%      { opacity: 0.1; box-shadow: none; }
-  96%, 100%{ opacity: 1; box-shadow: 0 0 3px rgba(34, 197, 94, 0.6); }
+  0%, 92%  { opacity: 1; }
+  93%      { opacity: 0.1; }
+  94%      { opacity: 1; }
+  95%      { opacity: 0.1; }
+  96%, 100%{ opacity: 1; }
 }
 
 /* Port activity LED (orange, left) — pattern A (even ports) */

@@ -20,18 +20,14 @@ window.RackRenderer = {
   _MAX_PER_DIV: 2,       // max concurrent ingress per division
 
   // ─── WFQ Scheduler State ─────────────────────────────────
-  // Weighted Fair Queuing with TTL-based eviction. No state machine.
-  // Each badge on panel has a TTL; when it expires, badge is evicted and
-  // returns to pool. Scheduler rate-limits all requests via WFQ weights.
+  // Weighted Fair Queuing with tick-driven eviction. No state machine, no TTL timers.
+  // Each tick picks 1 random badge to evict from the lowest-virtual-time division.
+  // Rotation rate = tick interval. Panels stay mostly full.
   _wfqRunning: false,              // true while scheduler loop is active
-  _wfqDivFillHandled: {},          // divTheme → boolean: TTL stagger applied after fill
   _wfqVirtualTime: {},             // divTheme → number (WFQ scheduling credit)
   _wfqWeight: {},                  // divTheme → number (poolSize / totalPoolSize)
   _wfqInitialFillComplete: {},     // divTheme → boolean (first-pass priority tracking)
-  _wfqPanelTTLs: {},              // divTheme → Map<employeeId, { placedAt, ttl }>
   _wfqDivPools: {},               // divTheme → [{ badge, divTheme }] (per-div pool index)
-  _WFQ_TTL_MIN_MS: 15000,         // min display time on panel before eviction
-  _WFQ_TTL_MAX_MS: 25000,         // max display time on panel before eviction
   _WFQ_TICK_MS: 2000,             // scheduler tick interval
 
   // Rack assignment: which division themes go where
@@ -59,7 +55,7 @@ window.RackRenderer = {
         this._startThreatTraffic();
         this._startIdleAnimations();
         if (this._badgePool.length > 0 && !this._wfqRunning) {
-          this._seedWfqTTLsFromDOM();
+          this._seedWfqFromDOM();
           this._startWfq();
         }
       }
@@ -268,11 +264,9 @@ window.RackRenderer = {
     this._vpnSessions = 0;
     // WFQ cleanup
     this._wfqDivPools = {};
-    this._wfqPanelTTLs = {};
     this._wfqVirtualTime = {};
     this._wfqWeight = {};
     this._wfqInitialFillComplete = {};
-    this._wfqDivFillHandled = {};
   },
 
   // ─── Layout Computation ─────────────────────────────────
@@ -599,7 +593,7 @@ window.RackRenderer = {
             if (this._badgePool.length > 0 && !this._wfqRunning) {
               if (!this._animateFromEmpty) {
                 // Returning from view switch — seed TTLs from existing DOM panels
-                this._seedWfqTTLsFromDOM();
+                this._seedWfqFromDOM();
               }
               this._startWfq();
             }
@@ -1711,19 +1705,21 @@ window.RackRenderer = {
       await this._waitForCable(cableIndex);
     }
 
+    // Moves packet along cable from fromNode toward the other end.
+    // Direction is auto-detected by comparing SVG path start/end to cable def ports.
     const path = this._cablePaths && this._cablePaths.get(cableIndex);
     if (!path) return Promise.resolve();
 
-    // Auto-detect direction: which end of the SVG path is the "from" port?
     const def = this._CABLE_DEFS[cableIndex];
     const fromPortNode = this._PORT_TO_NODE[def[0]];
     const pathLen = path.getTotalLength();
     const startPt = path.getPointAtLength(0);
     const endPt = path.getPointAtLength(pathLen);
 
+    // Auto-detect direction
     const fromPortId = fromNode === fromPortNode ? def[0] : def[1];
     const fromEl = this._container && this._container.querySelector(`[data-port-id="${fromPortId}"]`);
-    let reverse = false;
+    let direction = 1;
     if (fromEl) {
       const framesRow = this._container.querySelector('.rack-frames-row');
       if (framesRow) {
@@ -1731,62 +1727,29 @@ window.RackRenderer = {
         const port = this._toSvgCoords(fromEl.getBoundingClientRect(), ref);
         const distToStart = Math.hypot(startPt.x - port.x, startPt.y - port.y);
         const distToEnd = Math.hypot(endPt.x - port.x, endPt.y - port.y);
-        reverse = distToEnd < distToStart;
+        direction = distToStart <= distToEnd ? 1 : -1;
       }
     }
-
-    // Calculate duration from speed (same formula as before)
-    const pxPerSec = 150 * speed / 0.4;
-    const durationSec = pathLen / pxPerSec;
-
-    // Set cable busy
-    if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
-      this._cableBusy.set(cableIndex, true);
-    }
-
-    // Position packet at start of path
-    const startPos = reverse ? endPt : startPt;
-    if (packet.el) {
-      packet.el.setAttribute('transform', `translate(${startPos.x}, ${startPos.y})`);
-    }
-
-    // Create <animateMotion> — GPU-composited, zero JS per-frame cost
-    const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
-    anim.setAttribute('dur', `${durationSec}s`);
-    anim.setAttribute('fill', 'freeze');
-    anim.setAttribute('calcMode', 'linear');
-    if (reverse) {
-      anim.setAttribute('keyPoints', '1;0');
-      anim.setAttribute('keyTimes', '0;1');
-    }
-    const mpath = document.createElementNS('http://www.w3.org/2000/svg', 'mpath');
-    mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#rack-cable-${cableIndex}`);
-    mpath.setAttribute('href', `#rack-cable-${cableIndex}`);
-    anim.appendChild(mpath);
 
     return new Promise(resolve => {
       packet.cableIndex = cableIndex;
+      packet.progress = direction === 1 ? 0 : 1;
+      const pxPerSec = 150 * speed / 0.4;
+      packet.speed = pxPerSec / pathLen;
+      packet.direction = direction;
+      packet.resolve = resolve;
+      packet.type = 'cable';
+      packet.pathEl = path;
+      packet.pathLength = pathLen;
 
-      // Append animateMotion to packet element
-      if (packet.el) {
-        // Clear any previous transform so animateMotion takes over
-        packet.el.removeAttribute('transform');
-        packet.el.appendChild(anim);
-        anim.beginElement();
+      if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
+        this._cableBusy.set(cableIndex, true);
       }
 
-      // Resolve + cleanup after animation duration
-      setTimeout(() => {
-        // Remove animateMotion element
-        if (anim.parentNode) anim.remove();
-        // Clear cable busy
-        if (this._cableBusy && !this._ONE_WAY_CABLES.has(cableIndex)) {
-          this._cableBusy.set(cableIndex, false);
-          // Wake any waiter
-          const waiter = this._cableWaiters?.get(cableIndex);
-          if (waiter) { waiter(); this._cableWaiters.delete(cableIndex); }
-        }
-        resolve();
+      if (!this._activePackets.includes(packet)) {
+        this._activePackets.push(packet);
+      }
+      this._startAnimLoop();
       }, durationSec * 1000);
     });
   },
@@ -1826,7 +1789,14 @@ window.RackRenderer = {
       return;
     }
 
-    const dt = this._lastAnimTime ? (timestamp - this._lastAnimTime) / 1000 : 0.016;
+    // Throttle to ~30fps — halves JS cost, visually smooth for packet motion
+    const elapsed = this._lastAnimTime ? (timestamp - this._lastAnimTime) : 16;
+    if (this._lastAnimTime && elapsed < 33) {
+      this._animFrameId = requestAnimationFrame(t => this._animLoop(t));
+      return;
+    }
+
+    const dt = elapsed / 1000;
     this._lastAnimTime = timestamp;
 
     // Cap delta to prevent jumps after tab switch
@@ -2227,14 +2197,10 @@ window.RackRenderer = {
     this._wfqDivPools = {};
     this._wfqVirtualTime = {};
     this._wfqInitialFillComplete = {};
-    this._wfqPanelTTLs = {};
-    this._wfqDivFillHandled = {};
-
     for (const div of divs) {
       this._wfqDivPools[div] = [];
       this._wfqVirtualTime[div] = 0;
       this._wfqInitialFillComplete[div] = false;
-      this._wfqPanelTTLs[div] = new Map();
     }
 
     // Partition badge pool into per-division pools
@@ -2272,98 +2238,58 @@ window.RackRenderer = {
   // Seed TTL tracking from existing DOM panel contents (view-switch return).
   // Panels are already populated from a prior session — give each badge a
   // staggered TTL so eviction cycling resumes naturally without a burst.
-  _seedWfqTTLsFromDOM() {
+  // Mark divisions as filled based on current DOM state (view-switch return).
+  _seedWfqFromDOM() {
     for (const div of Object.keys(this._DIV_TOPOLOGY)) {
+      if (this._wfqInitialFillComplete[div]) continue;
       const contents = this._getPanelContents(div);
-      if (!this._wfqPanelTTLs[div]) this._wfqPanelTTLs[div] = new Map();
-      const now = Date.now();
-      const panelSize = contents.length;
-      // Shuffled slot indices for random expiry order
-      const slots = Array.from({ length: panelSize }, (_, i) => i);
-      for (let i = slots.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [slots[i], slots[j]] = [slots[j], slots[i]];
-      }
-      const spreadMs = (panelSize / this._MAX_PER_DIV) * this._WFQ_TTL_MIN_MS;
-      let idx = 0;
-      for (const eid of contents) {
-        if (!this._wfqPanelTTLs[div].has(eid)) {
-          const slotOffset = (slots[idx] / Math.max(panelSize - 1, 1)) * spreadMs;
-          const ttl = this._WFQ_TTL_MIN_MS + slotOffset + Math.random() * 3000;
-          this._wfqPanelTTLs[div].set(eid, { placedAt: now, ttl });
-        }
-        idx++;
-      }
-      // If panel has all its pool badges, mark initial fill complete
-      if (!this._wfqInitialFillComplete[div]) {
-        const poolSize = (this._wfqDivPools[div] || []).length;
-        const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-        if (contents.length >= Math.min(cap, poolSize)) {
-          this._wfqInitialFillComplete[div] = true;
-        }
+      const poolSize = (this._wfqDivPools[div] || []).length;
+      const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
+      if (contents.length >= Math.min(cap, poolSize)) {
+        this._wfqInitialFillComplete[div] = true;
       }
     }
   },
 
   // ─── WFQ: Core scheduler tick ───────────────────────────────
-  // One tick does: (1) evict TTL-expired badges, (2) fill empty slots via WFQ order.
-  // No state machine — this single method replaces _poolDrainTick, _rotationTick, _schedulerTick.
+  // One tick does: (1) pick 1 random badge to evict per eligible division, (2) fill empty slots.
+  // No TTL timers — the tick interval IS the rotation clock. At most 1 eviction per division per tick.
   _wfqTick() {
     if (!this._wfqRunning || !this._container || !this._cableSvg) return;
 
-    const now = Date.now();
     const divs = Object.keys(this._DIV_TOPOLOGY);
 
-    // ── Step 1: Evict TTL-expired badges (per-division gating) ──
-    // Each division can only evict once its own initial fill is complete.
-    // This prevents early-filled divisions from cycling while slow ones (VPN/contractors) are still loading.
-    for (const div of divs) {
-      if (!this._wfqInitialFillComplete[div]) continue; // still filling — no evictions yet
+    // ── Step 1: Pick one badge to evict from one eligible division ──
+    // Only divisions that have completed initial fill can evict.
+    // WFQ ordering: division with lowest virtual time goes first.
+    const filledDivs = divs
+      .filter(d => this._wfqInitialFillComplete[d])
+      .sort((a, b) => this._wfqVirtualTime[a] - this._wfqVirtualTime[b]);
 
-      // One-time TTL stagger when this division first completes fill
-      if (!this._wfqDivFillHandled[div]) {
-        this._wfqDivFillHandled[div] = true;
-        const ttls = this._wfqPanelTTLs[div];
-        if (ttls) {
-          const panelSize = ttls.size;
-          // Shuffled slot indices for random port expiry order
-          const slots = Array.from({ length: panelSize }, (_, i) => i);
-          for (let i = slots.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [slots[i], slots[j]] = [slots[j], slots[i]];
-          }
-          // Stagger TTLs so badges expire one-by-one over a wide window.
-          // With 12 badges and MAX_PER_DIV=2, we want ~1 expiry per TTL_MIN interval.
-          // Total spread = panelSize * TTL_MIN / 2 ≈ 90s for 12 badges.
-          // Badge with slot 0 expires at TTL_MIN, slot 11 at TTL_MIN + spread.
-          const spreadMs = (panelSize / this._MAX_PER_DIV) * this._WFQ_TTL_MIN_MS;
-          let idx = 0;
-          for (const [eid] of ttls) {
-            const slotOffset = (slots[idx] / Math.max(panelSize - 1, 1)) * spreadMs;
-            const ttl = this._WFQ_TTL_MIN_MS + slotOffset + Math.random() * 3000; // small jitter
-            ttls.set(eid, { placedAt: now, ttl });
-            idx++;
-          }
-        }
-      }
+    for (const div of filledDivs) {
+      if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
+      if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
 
-      const ttls = this._wfqPanelTTLs[div];
-      if (!ttls) continue;
-      for (const [eid, meta] of ttls) {
-        if (now - meta.placedAt < meta.ttl) continue;
-        if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
-        if (this._divInFlight[div] >= this._MAX_PER_DIV) break;
+      // Only evict if this division has pool badges waiting (more badges than panel cap)
+      const panelContents = this._getPanelContents(div);
+      const divPool = this._wfqDivPools[div] || [];
+      const onPanel = new Set(panelContents);
+      const hasWaiting = divPool.some(e => !onPanel.has(e.badge.employeeId));
+      if (!hasWaiting) continue;
 
-        // Remove TTL tracking immediately (prevent double-evict on next tick)
-        ttls.delete(eid);
-        this._divInFlight[div]++;
-        this._inFlightCount++;
+      // Pick one random badge from the panel to evict
+      if (panelContents.length === 0) continue;
+      const evictId = panelContents[Math.floor(Math.random() * panelContents.length)];
 
-        this._executeRemoval(div, eid).finally(() => {
-          this._inFlightCount--;
-          this._divInFlight[div]--;
-        });
-      }
+      this._divInFlight[div]++;
+      this._inFlightCount++;
+
+      this._executeRemoval(div, evictId).finally(() => {
+        this._inFlightCount--;
+        this._divInFlight[div]--;
+      });
+
+      break; // one eviction per tick globally — keeps rotation gentle
     }
 
     // ── Step 2: Determine division order (WFQ + first-pass priority) ──
@@ -2395,23 +2321,16 @@ window.RackRenderer = {
       this._wfqVirtualTime[div] += 1 / weight;
 
       const badge = candidate.badge;
-      const ttlDiv = div; // capture for closure
+      const fillDiv = div; // capture for closure
       this._executeCoreDownloadCli(div).then(() => {
         return this._playIngress(badge);
       }).then(() => {
-        // Record TTL on successful placement
-        if (this._wfqPanelTTLs[ttlDiv]) {
-          this._wfqPanelTTLs[ttlDiv].set(badge.employeeId, {
-            placedAt: Date.now(),
-            ttl: this._WFQ_TTL_MIN_MS + Math.random() * (this._WFQ_TTL_MAX_MS - this._WFQ_TTL_MIN_MS),
-          });
-        }
         // Check initial fill completion
-        if (!this._wfqInitialFillComplete[ttlDiv]) {
-          const currentPanel = this._getPanelContents(ttlDiv);
-          const poolSize = (this._wfqDivPools[ttlDiv] || []).length;
+        if (!this._wfqInitialFillComplete[fillDiv]) {
+          const currentPanel = this._getPanelContents(fillDiv);
+          const poolSize = (this._wfqDivPools[fillDiv] || []).length;
           if (currentPanel.length >= Math.min(cap, poolSize)) {
-            this._wfqInitialFillComplete[ttlDiv] = true;
+            this._wfqInitialFillComplete[fillDiv] = true;
           }
         }
       }).finally(() => {
@@ -2456,14 +2375,11 @@ window.RackRenderer = {
     // Remove from global pool
     const removed = this._badgePool.find(p => p.badge.employeeId === employeeId);
     this._badgePool = this._badgePool.filter(p => p.badge.employeeId !== employeeId);
-    // Remove from WFQ per-division pool and TTL tracking
+    // Remove from WFQ per-division pool
     if (removed && this._wfqDivPools[removed.divTheme]) {
       this._wfqDivPools[removed.divTheme] = this._wfqDivPools[removed.divTheme].filter(
         p => p.badge.employeeId !== employeeId
       );
-      if (this._wfqPanelTTLs[removed.divTheme]) {
-        this._wfqPanelTTLs[removed.divTheme].delete(employeeId);
-      }
     }
   },
 
@@ -2763,7 +2679,7 @@ window.RackRenderer = {
 
       // Remove after animation duration (setTimeout is reliable; animationend is not on SVG in Firefox)
       setTimeout(() => txt.remove(), duration * 1000 + 100);
-    }, 300);
+    }, 500);
   },
 
   _stopCloudRain() {
@@ -3653,7 +3569,7 @@ window.RackRenderer = {
     }
 
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
-    const entryType = Math.random() < 0.3 ? 'wifi' : 'firewall';
+    const entryType = Math.random() < 0.15 ? 'wifi' : 'firewall';
     const route = this._resolveRoute(entryType, divTheme);
 
     if (!route) {
