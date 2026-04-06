@@ -576,10 +576,10 @@ body.view-rack .public-orgchart {
   color: rgba(34, 197, 94, 0.15);
 }
 
-/* Hollow arcs — fill with color via animation */
+/* Hollow arcs — pulse via opacity (composited, no paint) */
 .rack-wifi-arc {
-  stroke: rgba(34, 197, 94, 0.15);
-  transition: stroke 0.4s ease;
+  stroke: rgba(34, 197, 94, 0.7);
+  will-change: opacity;
 }
 
 .rack-wifi-dot {
@@ -587,22 +587,14 @@ body.view-rack .public-orgchart {
   opacity: 0.8;
 }
 
-/* Animated fill stages — arc 1 (inner) → 2 → 3 (outer) */
-.rack-wifi-arc-1 {
-  animation: rack-wifi-pulse 3s ease-in-out infinite;
-}
-
-.rack-wifi-arc-2 {
-  animation: rack-wifi-pulse 3s ease-in-out infinite 0.4s;
-}
-
-.rack-wifi-arc-3 {
-  animation: rack-wifi-pulse 3s ease-in-out infinite 0.8s;
+/* Wifi arcs — JS-driven opacity toggle via device LED groups */
+.rack-wifi-arc-1, .rack-wifi-arc-2, .rack-wifi-arc-3 {
+  opacity: 1;
 }
 
 @keyframes rack-wifi-pulse {
-  0%, 100% { stroke: rgba(34, 197, 94, 0.15); }
-  30%, 60% { stroke: rgba(34, 197, 94, 0.7); }
+  0%, 100% { opacity: 0.2; }
+  30%, 60% { opacity: 1; }
 }
 
 .rack-wifi-ssid {
@@ -711,9 +703,9 @@ body.view-rack .public-orgchart {
 }
 
 .rack-wifi-led-pwr { background: var(--accent-green); }
-.rack-wifi-led-wlan { background: var(--accent-green); animation: rack-led-blink 1s ease-in-out infinite; }
-.rack-wifi-led-eth { background: var(--accent-green); animation: rack-led-blink 1.5s ease-in-out infinite 0.3s; }
-.rack-wifi-led-act { background: var(--accent-gold); animation: rack-led-blink 0.6s ease-in-out infinite; }
+.rack-wifi-led-wlan { background: var(--accent-green); }
+.rack-wifi-led-eth { background: var(--accent-green); }
+.rack-wifi-led-act { background: var(--accent-gold); }
 
 /* ─── WLC (Wireless LAN Controller) ──────────────────────── */
 
@@ -824,8 +816,6 @@ body.view-rack .public-orgchart {
 
 .rack-brs-led-render.rack-brs-led-active {
   background: #a855f7;
-  box-shadow: 0 0 6px rgba(168, 85, 247, 0.6);
-  animation: rack-led-blink 0.5s steps(1, end) infinite;
 }
 
 .rack-brs-led-queue {
@@ -833,8 +823,6 @@ body.view-rack .public-orgchart {
   height: 6px;
   border-radius: 50%;
   background: #d97706;
-  box-shadow: 0 0 4px rgba(217, 119, 6, 0.5);
-  animation: rack-led-blink 2s ease-in-out infinite;
 }
 
 .rack-brs-throughput {
@@ -865,8 +853,8 @@ body.view-rack .public-orgchart {
 }
 
 @keyframes rack-brs-lcd-glow {
-  0%, 100% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 6px rgba(15, 245, 232, 0.15); }
-  50% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 12px rgba(15, 245, 232, 0.25); }
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 /* BRS-02: green LCD variant */
@@ -881,8 +869,8 @@ body.view-rack .public-orgchart {
   border-right-color: rgba(34, 197, 94, 0.15);
 }
 @keyframes rack-brs-02-lcd-glow {
-  0%, 100% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 6px rgba(34, 197, 94, 0.15); }
-  50% { box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.15), 0 0 12px rgba(34, 197, 94, 0.25); }
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 .rack-brs-lcd-header {
@@ -1240,16 +1228,13 @@ body.view-rack .public-orgchart {
 
 .rack-led-blink-gold {
   background: var(--accent-gold);
-  animation: rack-led-blink 2s steps(1, end) infinite;
 }
 
 .rack-led-blink-blue {
   background: var(--accent-blue);
-  animation: rack-led-blink 1.8s steps(1, end) infinite;
 }
 
 .rack-led-slow-blink {
-  animation: rack-led-blink 3s steps(1, end) infinite;
 }
 
 .rack-led-off {
@@ -1285,7 +1270,7 @@ body.view-rack .public-orgchart {
   background: rgba(0, 0, 0, 0.15);
 }
 
-/* Green link LED (top-right corner) — staggered timing via CSS vars */
+/* Green link LED (top-right corner) — no CSS animation; JS batch-toggles opacity */
 .rack-conn-port-active::after {
   content: '';
   position: absolute;
@@ -1295,12 +1280,11 @@ body.view-rack .public-orgchart {
   height: 5px;
   border-radius: 50%;
   background: var(--accent-green);
-  animation: rack-led-blink var(--port-speed, 2s) ease-in-out infinite;
-  animation-delay: var(--port-delay, 0s);
-  will-change: opacity;
+  opacity: 1;
+  transition: opacity 0.15s steps(1, end);
 }
 
-/* Dual-color ports: orange activity LED (top-left corner) + green link LED (top-right corner) */
+/* Dual-color ports: orange activity LED (top-left) + green link LED (top-right) */
 .rack-conn-port-dual::before {
   content: '';
   position: absolute;
@@ -1310,10 +1294,16 @@ body.view-rack .public-orgchart {
   height: 5px;
   border-radius: 50%;
   background: #d97706;
-  animation: rack-led-blink var(--port-speed, 1.5s) ease-in-out infinite;
-  animation-delay: var(--port-delay, 0s);
-  will-change: opacity;
+  opacity: 1;
+  transition: opacity 0.15s steps(1, end);
 }
+
+/* JS-driven LED dim state — only affects orange activity LED (::before).
+   Green link LED (::after) stays solid when port is active. */
+.rack-port-led-dim::before { opacity: 0.15 !important; }
+.rack-storage-led-dim { opacity: 0.15; }
+/* Device status LEDs (switch, wifi, BRS, UPS) and wifi arcs — JS-driven blink */
+.rack-device-led-dim { opacity: 0.2; }
 
 .rack-conn-port-trunk {
   border-color: rgba(212, 168, 67, 0.4);
@@ -1647,8 +1637,8 @@ body.view-rack .public-orgchart {
 }
 
 @keyframes rack-ups-lcd-glow {
-  0%, 100% { box-shadow: 0 0 6px rgba(56, 189, 248, 0.25), 0 0 12px rgba(56, 189, 248, 0.1); }
-  50% { box-shadow: 0 0 10px rgba(56, 189, 248, 0.4), 0 0 20px rgba(56, 189, 248, 0.2); }
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 /* LCD scanline overlay */
@@ -1715,7 +1705,7 @@ body.view-rack .public-orgchart {
 }
 
 .rack-ups-led-on { background: var(--accent-green); box-shadow: 0 0 3px rgba(34, 197, 94, 0.5); }
-.rack-ups-led-bat { background: var(--accent-gold); animation: rack-led-blink 3s steps(1, end) infinite; }
+.rack-ups-led-bat { background: var(--accent-gold); }
 .rack-ups-led-fault { background: var(--text-disabled); opacity: 0.3; }
 
 /* (EBM removed — UPS is now 1U only) */
@@ -1935,9 +1925,7 @@ body.view-rack .public-orgchart {
 
 .rack-storage-led-activity.active {
   background: #5B8DEF;
-  box-shadow: 0 0 10px rgba(91, 141, 239, 0.9), 0 0 18px rgba(91, 141, 239, 0.5);
-  animation: rack-led-activity-cycle steps(1, end) infinite;
-  /* duration and delay set inline per bay for stagger */
+  /* No CSS animation — driven by port LED batch-toggle JS timer */
 }
 
 /* Fault LED repurposed as unlit LED housing */
@@ -1965,13 +1953,12 @@ body.view-rack .public-orgchart {
 }
 .rack-conn-port-shutdown::after {
   background: #F59E0B !important; /* amber */
-  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8) !important;
   animation: rack-shutdown-led 800ms ease-out forwards !important;
 }
 
 @keyframes rack-shutdown-led {
-  0% { background: #F59E0B; box-shadow: 0 0 6px rgba(245, 158, 11, 0.8); }
-  100% { background: #EF4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.9); }
+  0% { background: #F59E0B; }
+  100% { background: #EF4444; }
 }
 
 /* Degauss — hue shimmer + squeeze to line + dot pop */
@@ -2065,9 +2052,9 @@ body.view-rack .public-orgchart {
 
 /* Status LED — slow steady pulse (power indicators, link status) */
 @keyframes rack-led-blink {
-  0%, 20% { opacity: 1; box-shadow: 0 0 4px currentColor; }
-  21%, 70% { opacity: 0.2; box-shadow: none; }
-  71%, 100% { opacity: 1; box-shadow: 0 0 4px currentColor; }
+  0%, 20% { opacity: 1; }
+  21%, 70% { opacity: 0.2; }
+  71%, 100% { opacity: 1; }
 }
 
 /* Long-cycle activity pattern A — 24s master animation weaving through
@@ -2170,22 +2157,9 @@ body.view-rack .public-orgchart {
   96%, 100%{ opacity: 1; }
 }
 
-/* Port activity LED (orange, left) — pattern A (even ports) */
-.rack-conn-port-dual::before {
-  animation: rack-led-activity-cycle var(--port-speed, 18s) steps(1, end) infinite;
-  animation-delay: var(--port-delay, 0s);
-}
-
-/* Port activity LED — pattern B (odd ports, different burst rhythm) */
-.rack-led-pattern-b.rack-conn-port-dual::before {
-  animation-name: rack-led-activity-cycle-b;
-}
-
-/* Port link LED (green, right) */
-.rack-conn-port-active::after {
-  animation: rack-led-link-cycle var(--port-speed, 20s) steps(1, end) infinite;
-  animation-delay: var(--port-delay, 0s);
-}
+/* Port LED animations are JS-driven via rack-port-led-dim class toggling.
+   Activity cycle and link cycle CSS animations removed — replaced by a single
+   setInterval in JS that batch-toggles groups, reducing 150+ animations to 0. */
 
 /* Phase 2c prep — badge processing state (toggled by _playIngress) */
 .rack-conn-port-processing::before {
@@ -2563,9 +2537,9 @@ body.view-rack .public-orgchart {
 }
 
 @keyframes rack-arrival-pulse {
-  0% { box-shadow: 0 0 12px 4px rgba(147, 197, 253, 0.9); }
-  30% { box-shadow: 0 0 8px 2px rgba(147, 197, 253, 0.6); }
-  100% { box-shadow: none; }
+  0% { opacity: 1; }
+  30% { opacity: 0.7; }
+  100% { opacity: 1; }
 }
 
 /* Badge packet portrait */

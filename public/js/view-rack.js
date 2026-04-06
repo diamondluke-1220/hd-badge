@@ -199,8 +199,10 @@ window.RackRenderer = {
       const switchPort = sw.querySelector(`[data-switch-port="${filledPorts - 1}"]`);
       if (switchPort && !switchPort.classList.contains('rack-conn-port-active')) {
         switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-        switchPort.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
-        switchPort.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+        // Assign to a port animation group based on existing data attribute
+        const portIdx = parseInt(switchPort.dataset.switchPort || '0', 10);
+        const seed = Array.from(divThemeEsc).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+        switchPort.classList.add(`rack-port-group-${((Math.abs(seed) * 7 + portIdx * 3) % 8)}`);
       }
     }
 
@@ -761,7 +763,7 @@ window.RackRenderer = {
     portsHtml += '</div>';
     portsHtml += '<div class="rack-fw-port-divider"></div>';
     portsHtml += '<div class="rack-fw-port-group">';
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-fw-port-core" data-port-id="fw-${sideL}-core" title="Core ${side}" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-fw-port-core rack-port-group-${side === 'A' ? 2 : 5}" data-port-id="fw-${sideL}-core" title="Core ${side}"></div>`;
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-core" title="Core B"></div>';
     portsHtml += '<div class="rack-conn-port rack-conn-port-active rack-fw-port-ha" title="HA Link"></div>';
     portsHtml += '</div>';
@@ -884,23 +886,24 @@ window.RackRenderer = {
       ? { left: ['wlc-uplink', 'brs-outbound', 'brs-inbound', 'fw-a-uplink', 'spare', 'spare', 'spare', 'spare'], right: ['spare', 'spare', 'spare', 'it-uplink', 'punk-uplink', 'trunk-3', 'trunk-ba', 'trunk-ab'] }
       : { left: ['trunk-ab', 'trunk-ba', 'trunk-3', 'vpn-uplink', 'fw-b-uplink', 'brs02-inbound', 'brs02-outbound', 'spare'], right: ['spare', 'spare', 'spare', 'spare', 'spare', 'spare', 'office-uplink', 'corporate-uplink'] };
 
-    // Left trunk ports (8) — connected ports get dual LEDs with animation
+    // Left trunk ports (8) — connected ports get dual LEDs with group animation
     let leftPortsHtml = '<div class="rack-switch-ports rack-core-ports-left">';
-    portMap.left.forEach(id => {
+    const coreSeed = side === 'A' ? 0 : 4;
+    portMap.left.forEach((id, idx) => {
       const connected = id !== 'spare';
       const cls = connected ? 'rack-conn-port-active rack-conn-port-dual' : '';
-      const anim = connected ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
-      leftPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}" data-port-id="core-${side.toLowerCase()}-${id}" ${anim}></div>`;
+      const group = connected ? ` rack-port-group-${(coreSeed + idx * 3) % 8}` : '';
+      leftPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}${group}" data-port-id="core-${side.toLowerCase()}-${id}"></div>`;
     });
     leftPortsHtml += '</div>';
 
     // Right trunk ports (8)
     let rightPortsHtml = '<div class="rack-switch-ports rack-core-ports-right">';
-    portMap.right.forEach(id => {
+    portMap.right.forEach((id, idx) => {
       const connected = id !== 'spare';
       const cls = connected ? 'rack-conn-port-active rack-conn-port-dual' : '';
-      const anim = connected ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
-      rightPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}" data-port-id="core-${side.toLowerCase()}-${id}" ${anim}></div>`;
+      const group = connected ? ` rack-port-group-${(coreSeed + 2 + idx * 3) % 8}` : '';
+      rightPortsHtml += `<div class="rack-conn-port rack-conn-port-trunk ${cls}${group}" data-port-id="core-${side.toLowerCase()}-${id}"></div>`;
     });
     rightPortsHtml += '</div>';
 
@@ -941,21 +944,21 @@ window.RackRenderer = {
     const totalPorts = device.totalPorts || 12;
     const employeePorts = device.portCount; // already capped at 12
     const themeSlug = device.theme.replace('_', '');
+    // Seed from theme name for deterministic cross-switch group distribution
+    const switchSeed = Array.from(device.theme).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
     let portsHtml = '<div class="rack-switch-ports">';
     for (let i = 0; i < totalPorts; i++) {
       if (i > 0 && i % 4 === 0) portsHtml += '<div class="rack-switch-port-divider"></div>';
-      // Port N maps 1:1 with patch panel badge N. Pre-activate for badges already present at render time.
-      // Uplink to core is the SFP trunk port (rendered separately below), not port 0.
       const isActive = i < employeePorts;
       const patternB = i % 2 === 1 ? ' rack-led-pattern-b' : '';
-      const style = isActive ? `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"` : '';
-      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}${patternB}" data-switch-port="${i}" ${style}></div>`;
+      const group = isActive ? ` rack-port-group-${((Math.abs(switchSeed) * 7 + i * 3) % 8)}` : '';
+      portsHtml += `<div class="rack-conn-port ${isActive ? 'rack-conn-port-active rack-conn-port-dual' : ''}${patternB}${group}" data-switch-port="${i}"></div>`;
     }
-    // SFP trunk ports (right side, separated by divider) — first is unused, second carries the uplink cable
-    const sfpStyle = `style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"`;
+    // SFP trunk ports (right side, separated by divider)
+    const sfpGroup = `rack-port-group-${((Math.abs(switchSeed) * 7 + 13) % 8)}`;
     portsHtml += '<div class="rack-switch-port-divider rack-switch-sfp-divider"></div>';
     portsHtml += `<div class="rack-conn-port rack-conn-port-trunk rack-switch-sfp" data-port-id="sw-${themeSlug}-core-uplink" title="Core Uplink"></div>`;
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-switch-sfp" data-port-id="sw-${themeSlug}-spare" title="Spare" ${sfpStyle}></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-switch-sfp ${sfpGroup}" data-port-id="sw-${themeSlug}-spare" title="Spare"></div>`;
     portsHtml += '</div>';
 
     el.innerHTML = `
@@ -984,9 +987,9 @@ window.RackRenderer = {
     const apCount = Math.max(1, this._allBadges.length * 3);
 
     let portsHtml = '<div class="rack-switch-ports">';
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="wlc-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap" data-port-id="wlc-ap-uplink" title="AP Mgmt" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap" title="AP Mgmt" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-port-group-1" data-port-id="wlc-core-uplink" title="Core Uplink"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap rack-port-group-4" data-port-id="wlc-ap-uplink" title="AP Mgmt"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-wlc-port-ap rack-port-group-6" title="AP Mgmt"></div>`;
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
     }
@@ -1059,11 +1062,10 @@ window.RackRenderer = {
       for (let row = 0; row < 4; row++) {
         const i = col * 4 + row;
         const actLed = 'active';
-        const delay = `style="animation-delay:-${(Math.random() * 24).toFixed(1)}s;animation-duration:${(14 + Math.random() * 8).toFixed(1)}s"`;
         baysHtml += `
           <div class="rack-storage-bay rack-storage-bay-occupied" data-bay="${i}">
             <div class="rack-storage-bay-leds">
-              <div class="rack-storage-led-activity ${actLed}" ${delay}></div>
+              <div class="rack-storage-led-activity ${actLed}"></div>
               <div class="rack-storage-led-fault"></div>
             </div>
             <div class="rack-storage-bay-tab"></div>
@@ -1127,8 +1129,8 @@ window.RackRenderer = {
           </div>
           <div class="rack-brs-controls">
             <div class="rack-switch-ports">
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="${uplinkId}" title="Core Inbound" style="--port-delay:-12.3s;--port-speed:18.7s"></div>
-              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="${outboundId}" title="Core Outbound" style="--port-delay:-8.1s;--port-speed:19.4s"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-port-group-3" data-port-id="${uplinkId}" title="Core Inbound"></div>
+              <div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-port-group-7" data-port-id="${outboundId}" title="Core Outbound"></div>
             </div>
             <div class="rack-switch-leds rack-brs-leds">
               <div class="rack-switch-led rack-led-solid-green" title="PWR"></div>
@@ -1273,9 +1275,9 @@ window.RackRenderer = {
 
     let portsHtml = '<div class="rack-switch-ports">';
     // 2 uplink ports (to core) + 1 tunnel port + 1 downlink (to contractor switch) + empties
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk" data-port-id="vpn-core-uplink" title="Core Uplink" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-vpn-port-tunnel" title="IPsec Tunnel" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
-    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual" data-port-id="vpn-contractor-downlink" title="SW-CTR" style="--port-delay:-${(Math.random() * 24).toFixed(1)}s;--port-speed:${(16 + Math.random() * 6).toFixed(1)}s"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-conn-port-trunk rack-port-group-0" data-port-id="vpn-core-uplink" title="Core Uplink"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-vpn-port-tunnel rack-port-group-5" title="IPsec Tunnel"></div>`;
+    portsHtml += `<div class="rack-conn-port rack-conn-port-active rack-conn-port-dual rack-port-group-2" data-port-id="vpn-contractor-downlink" title="SW-CTR"></div>`;
     for (let i = 0; i < 5; i++) {
       portsHtml += '<div class="rack-conn-port"></div>';
     }
@@ -1617,13 +1619,21 @@ window.RackRenderer = {
     img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
     g.appendChild(img);
 
-    // White ring border
+    // Glow layer — larger semi-transparent circle behind the ring (no filter needed)
+    const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    glow.setAttribute('r', radius + 4);
+    glow.setAttribute('fill', 'none');
+    glow.setAttribute('stroke', ringColor);
+    glow.setAttribute('stroke-width', '3');
+    glow.setAttribute('opacity', '0.3');
+    g.appendChild(glow);
+
+    // Ring border
     const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     ring.setAttribute('r', radius);
     ring.setAttribute('fill', 'none');
     ring.setAttribute('stroke', ringColor);
     ring.setAttribute('stroke-width', '1.5');
-    ring.setAttribute('filter', 'url(#packet-glow)');
     g.appendChild(ring);
 
     // Start hidden for materialization
@@ -1712,9 +1722,15 @@ window.RackRenderer = {
 
     const def = this._CABLE_DEFS[cableIndex];
     const fromPortNode = this._PORT_TO_NODE[def[0]];
-    const pathLen = path.getTotalLength();
-    const startPt = path.getPointAtLength(0);
-    const endPt = path.getPointAtLength(pathLen);
+    const sampled = this._cablePathSamples?.get(cableIndex);
+    const pathLen = sampled ? sampled.totalLen : path.getTotalLength();
+    // Use pre-sampled start/end points instead of getPointAtLength
+    const startPt = sampled
+      ? { x: sampled.samples[0], y: sampled.samples[1] }
+      : path.getPointAtLength(0);
+    const endPt = sampled
+      ? { x: sampled.samples[sampled.samples.length - 2], y: sampled.samples[sampled.samples.length - 1] }
+      : path.getPointAtLength(pathLen);
 
     // Auto-detect direction
     const fromPortId = fromNode === fromPortNode ? def[0] : def[1];
@@ -1788,7 +1804,7 @@ window.RackRenderer = {
       return;
     }
 
-    // Throttle to ~30fps — halves JS cost, visually smooth for packet motion
+    // Throttle to ~30fps — even with cheap lerp, halving frame count saves GPU compositing
     const elapsed = this._lastAnimTime ? (timestamp - this._lastAnimTime) : 16;
     if (this._lastAnimTime && elapsed < 33) {
       this._animFrameId = requestAnimationFrame(t => this._animLoop(t));
@@ -1823,9 +1839,24 @@ window.RackRenderer = {
 
   _updatePacketPosition(pkt) {
     let x, y;
-    if (pkt.type === 'cable' && pkt.pathEl) {
-      const pt = pkt.pathEl.getPointAtLength(pkt.progress * pkt.pathLength);
-      x = pt.x; y = pt.y;
+    if (pkt.type === 'cable') {
+      // Use pre-sampled path points with linear interpolation (no getPointAtLength)
+      const sampled = this._cablePathSamples?.get(pkt.cableIndex);
+      if (sampled) {
+        const { samples } = sampled;
+        const sampleCount = samples.length / 2;
+        const t = Math.max(0, Math.min(1, pkt.progress)) * (sampleCount - 1);
+        const idx = Math.floor(t);
+        const frac = t - idx;
+        const i0 = Math.min(idx, sampleCount - 1) * 2;
+        const i1 = Math.min(idx + 1, sampleCount - 1) * 2;
+        x = samples[i0] + (samples[i1] - samples[i0]) * frac;
+        y = samples[i0 + 1] + (samples[i1 + 1] - samples[i0 + 1]) * frac;
+      } else if (pkt.pathEl) {
+        // Fallback if samples missing
+        const pt = pkt.pathEl.getPointAtLength(pkt.progress * pkt.pathLength);
+        x = pt.x; y = pt.y;
+      } else return;
     } else if (pkt.type === 'virtual') {
       const t = pkt.progress;
       x = pkt.vx1 + (pkt.vx2 - pkt.vx1) * t;
@@ -2627,12 +2658,14 @@ window.RackRenderer = {
     requestAnimationFrame(animate);
   },
 
-  // ─── Cloud Binary Rain (CSS-animated) ───────────────────
-  // Matrix-style digits fall from clouds. Pure CSS animation — no rAF loop.
-  // JS just spawns SVG text elements on a timer; CSS handles motion + fade.
-  // Elements self-remove via animationend event.
+  // ─── Cloud Binary Rain (recycled pool) ──────────────────
+  // Matrix-style digits fall from clouds. Fixed pool of SVG text elements
+  // recycled on a timer — no DOM create/destroy, no animation count growth.
+  // Each tick repositions the next element and restarts its CSS animation.
 
   _cloudRainTimer: null,
+  _cloudRainPool: [],
+  _CLOUD_RAIN_POOL_SIZE: 8,
 
   _startCloudRain() {
     if (this._cloudRainTimer) return;
@@ -2649,41 +2682,51 @@ window.RackRenderer = {
 
     const cloudW = 75;  // half-width of rain zone
     const cloudH = 70;  // height of cloud above bottom edge
+    const fallDist = cloudH - 5;
 
+    // Pre-create pool of SVG text elements (never added/removed from DOM after this)
+    this._cloudRainPool = [];
+    for (let i = 0; i < this._CLOUD_RAIN_POOL_SIZE; i++) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('font-family', 'monospace');
+      txt.setAttribute('text-anchor', 'middle');
+      txt.classList.add('rack-cloud-rain-digit');
+      txt.style.opacity = '0'; // start hidden
+      svg.appendChild(txt);
+      this._cloudRainPool.push(txt);
+    }
+
+    let poolIdx = 0;
     let spawnIdx = 0;
     this._cloudRainTimer = setInterval(() => {
       const cloud = clouds[spawnIdx % clouds.length];
       spawnIdx++;
 
-      const cloudTop = cloud.y - cloudH;
-      const fallDist = cloudH - 5; // distance to fall
+      // Recycle next element from pool
+      const txt = this._cloudRainPool[poolIdx % this._CLOUD_RAIN_POOL_SIZE];
+      poolIdx++;
 
-      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      const cloudTop = cloud.y - cloudH;
       txt.textContent = Math.random() < 0.5 ? '0' : '1';
-      txt.setAttribute('font-family', 'monospace');
       txt.setAttribute('font-size', `${8 + Math.random() * 5}`);
       txt.setAttribute('fill', colors[Math.floor(Math.random() * colors.length)]);
-      txt.setAttribute('text-anchor', 'middle');
-      txt.classList.add('rack-cloud-rain-digit');
+      txt.setAttribute('x', cloud.x + (Math.random() - 0.5) * cloudW * 1.4);
+      txt.setAttribute('y', cloudTop + Math.random() * 10);
 
-      const startX = cloud.x + (Math.random() - 0.5) * cloudW * 1.4;
-      const startY = cloudTop + Math.random() * 10;
-      txt.setAttribute('x', startX);
-      txt.setAttribute('y', startY);
-
-      // CSS custom properties drive the animation
-      const speed = 12 + Math.random() * 20; // px/sec
-      const duration = fallDist / speed;       // seconds
+      const speed = 12 + Math.random() * 20;
+      const duration = fallDist / speed;
       const opacity = 0.3 + Math.random() * 0.4;
       txt.style.setProperty('--rain-duration', `${duration.toFixed(2)}s`);
       txt.style.setProperty('--rain-dist', `${fallDist}px`);
       txt.style.setProperty('--rain-opacity', `${opacity}`);
 
-      svg.appendChild(txt);
-
-      // Remove after animation duration (setTimeout is reliable; animationend is not on SVG in Firefox)
-      setTimeout(() => txt.remove(), duration * 1000 + 100);
-    }, 500);
+      // Restart animation by removing/re-adding the class
+      txt.classList.remove('rack-cloud-rain-digit');
+      // Force reflow to restart animation (void is intentional)
+      void txt.getBBox();
+      txt.classList.add('rack-cloud-rain-digit');
+      txt.style.opacity = '';
+    }, 600);
   },
 
   _stopCloudRain() {
@@ -2691,43 +2734,56 @@ window.RackRenderer = {
       clearInterval(this._cloudRainTimer);
       this._cloudRainTimer = null;
     }
-    // Remove any remaining rain digits
-    if (this._cableSvg) {
-      this._cableSvg.querySelectorAll('.rack-cloud-rain-digit').forEach(el => el.remove());
+    // Hide pool elements (don't remove — they'll be cleaned up with the SVG)
+    this._cloudRainPool.forEach(el => { el.style.opacity = '0'; el.classList.remove('rack-cloud-rain-digit'); });
+    this._cloudRainPool = [];
+  },
+
+  // Red rain precursor — briefly contaminate the cloud rain with red digits before a threat drops.
+  // Uses a recycled pool of 5 SVG text elements (never added/removed from DOM after init).
+  _threatRainPool: [],
+  _THREAT_RAIN_POOL_SIZE: 5,
+
+  _ensureThreatRainPool() {
+    if (this._threatRainPool.length) return;
+    const svg = this._cableSvg;
+    if (!svg) return;
+    for (let i = 0; i < this._THREAT_RAIN_POOL_SIZE; i++) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('font-family', 'monospace');
+      txt.setAttribute('text-anchor', 'middle');
+      txt.style.opacity = '0';
+      svg.appendChild(txt);
+      this._threatRainPool.push(txt);
     }
   },
 
-  // Red rain precursor — briefly contaminate the cloud rain with red digits before a threat drops
   _spawnThreatRain(side = 'A') {
-    const svg = this._cableSvg;
     const cloud = side === 'A' ? this._virtualCoords?.cloudA : this._virtualCoords?.cloudB;
-    if (!svg || !cloud) return Promise.resolve();
+    if (!this._cableSvg || !cloud) return Promise.resolve();
+
+    this._ensureThreatRainPool();
 
     const cloudW = 75;
     const cloudH = 70;
     const cloudTop = cloud.y - cloudH;
     const cloudBot = cloud.y - 5;
     const redColors = ['#EF4444', '#F87171', '#DC2626', '#FCA5A5'];
-    const count = 5;
 
     return new Promise(resolve => {
       let spawned = 0;
       const spawnOne = () => {
-        if (spawned >= count || !svg.parentNode) { return; }
-        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        if (spawned >= this._THREAT_RAIN_POOL_SIZE) return;
+        const txt = this._threatRainPool[spawned];
         txt.textContent = Math.random() < 0.5 ? '0' : '1';
-        txt.setAttribute('font-family', 'monospace');
         txt.setAttribute('font-size', `${9 + Math.random() * 5}`);
         txt.setAttribute('fill', redColors[Math.floor(Math.random() * redColors.length)]);
-        txt.setAttribute('text-anchor', 'middle');
-        txt.classList.add('rack-cloud-rain-digit');
 
         const startX = cloud.x + (Math.random() - 0.5) * cloudW * 1.2;
         const startY = cloudTop + Math.random() * 10;
         txt.setAttribute('x', startX);
         txt.setAttribute('y', startY);
 
-        // CSS-animated: set custom properties and self-remove on completion
         const fallDist = cloudBot - startY;
         const speed = 15 + Math.random() * 15;
         const duration = fallDist / speed;
@@ -2736,17 +2792,19 @@ window.RackRenderer = {
         txt.style.setProperty('--rain-dist', `${fallDist}px`);
         txt.style.setProperty('--rain-opacity', `${opacity}`);
 
-        svg.appendChild(txt);
-        setTimeout(() => txt.remove(), duration * 1000 + 100);
+        // Restart animation by removing/re-adding the class
+        txt.classList.remove('rack-cloud-rain-digit');
+        void txt.getBBox();
+        txt.classList.add('rack-cloud-rain-digit');
+        txt.style.opacity = '';
 
         spawned++;
-        if (spawned < count) {
+        if (spawned < this._THREAT_RAIN_POOL_SIZE) {
           setTimeout(spawnOne, 60);
         }
       };
       spawnOne();
-      // Resolve after all red digits spawned + brief pause for visual effect
-      setTimeout(resolve, count * 60 + 300);
+      setTimeout(resolve, this._THREAT_RAIN_POOL_SIZE * 60 + 300);
     });
   },
 
@@ -3049,6 +3107,78 @@ window.RackRenderer = {
 
     // Idle cable traffic — background dots on cables
     this._startIdleTraffic();
+
+    // Port LED batch-toggle — replaces 150+ CSS animations with a single JS interval.
+    // Every 200ms, pick ~20% of active ports and toggle their dim state, creating
+    // a realistic flickering effect with zero CSS animation overhead.
+    this._startPortLedTimer();
+  },
+
+  _portLedTimer: null,
+  _portLedGroupIdx: 0,
+  _portLedGroupCache: null,
+
+  _startPortLedTimer() {
+    if (this._portLedTimer) clearInterval(this._portLedTimer);
+    // Cache port groups once — 8 groups, each an array of port elements
+    this._portLedGroupCache = [];
+    for (let g = 0; g < 8; g++) {
+      this._portLedGroupCache[g] = Array.from(
+        this._container?.querySelectorAll(`.rack-port-group-${g}.rack-conn-port-dual`) || []
+      );
+    }
+    // Also cache storage bay LEDs into 8 groups
+    this._storageLedCache = [];
+    const storageLeds = Array.from(this._container?.querySelectorAll('.rack-storage-led-activity.active') || []);
+    for (let g = 0; g < 8; g++) {
+      this._storageLedCache[g] = storageLeds.filter((_, i) => i % 8 === g);
+    }
+
+    // Cache device status LEDs (switch LEDs, wifi LEDs, BRS LEDs, UPS LEDs) into 4 groups
+    this._deviceLedCache = [];
+    const deviceLeds = Array.from(this._container?.querySelectorAll(
+      '.rack-led-blink-gold, .rack-led-blink-blue, .rack-led-slow-blink, ' +
+      '.rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act, ' +
+      '.rack-wifi-arc-1, .rack-wifi-arc-2, .rack-wifi-arc-3, ' +
+      '.rack-brs-led-render.rack-brs-led-active, .rack-brs-led-queue, ' +
+      '.rack-ups-led-bat'
+    ) || []);
+    for (let g = 0; g < 4; g++) {
+      this._deviceLedCache[g] = deviceLeds.filter((_, i) => i % 4 === g);
+    }
+    this._portLedGroupIdx = 0;
+    this._deviceLedTick = 0;
+
+    // Every 400ms, randomly toggle 3 port groups between dim/bright.
+    this._portLedTimer = setInterval(() => {
+      if (!this._idleActive) return;
+      const cache = this._portLedGroupCache;
+      if (!cache) return;
+      // Toggle 3 random port groups
+      for (let t = 0; t < 3; t++) {
+        const g = Math.floor(Math.random() * 8);
+        const isDim = cache[g].length && cache[g][0].classList.contains('rack-port-led-dim');
+        cache[g].forEach(p => p.classList.toggle('rack-port-led-dim', !isDim));
+        this._storageLedCache[g]?.forEach(p => p.classList.toggle('rack-storage-led-dim', !isDim));
+      }
+      // Toggle 1 device LED group every other tick (~800ms cycle)
+      this._deviceLedTick++;
+      if (this._deviceLedTick % 2 === 0) {
+        const dg = Math.floor(Math.random() * 4);
+        const dDim = this._deviceLedCache[dg]?.length && this._deviceLedCache[dg][0].classList.contains('rack-device-led-dim');
+        this._deviceLedCache[dg]?.forEach(p => p.classList.toggle('rack-device-led-dim', !dDim));
+      }
+    }, 400);
+  },
+
+  _stopPortLedTimer() {
+    if (this._portLedTimer) { clearInterval(this._portLedTimer); this._portLedTimer = null; }
+    this._portLedGroupCache = null;
+    this._storageLedCache = null;
+    this._deviceLedCache = null;
+    this._container?.querySelectorAll('.rack-port-led-dim').forEach(p => p.classList.remove('rack-port-led-dim'));
+    this._container?.querySelectorAll('.rack-storage-led-dim').forEach(p => p.classList.remove('rack-storage-led-dim'));
+    this._container?.querySelectorAll('.rack-device-led-dim').forEach(p => p.classList.remove('rack-device-led-dim'));
   },
 
   _stopIdleAnimations() {
@@ -3056,6 +3186,7 @@ window.RackRenderer = {
     this._idleTimers.forEach(t => clearTimeout(t));
     this._idleTimers = [];
     this._stopIdleTraffic();
+    this._stopPortLedTimer();
   },
 
   // ─── Idle Cable Traffic ─────────────────────────────────
@@ -3528,8 +3659,9 @@ window.RackRenderer = {
               // Activate the switch port LED as the badge beams down
               if (!switchPort.classList.contains('rack-conn-port-active')) {
                 switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-                switchPort.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
-                switchPort.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+                const pIdx = parseInt(switchPort.dataset.switchPort || '0', 10);
+                const sSeed = Array.from(dt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+                switchPort.classList.add(`rack-port-group-${((Math.abs(sSeed) * 7 + pIdx * 3) % 8)}`);
               }
               this._triggerFlash(switchPort, 'rack-trigger-switch-flash', 800);
               srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
@@ -3654,9 +3786,10 @@ window.RackRenderer = {
     // Also clear any lingering packet circles
     svg.querySelectorAll('.rack-packet').forEach(p => p.remove());
 
-    // Initialize cable path index
+    // Initialize cable path index and pre-sampled points
     this._cablePaths = new Map();
     this._cableBusy = new Map();
+    this._cablePathSamples = new Map();
 
     // Get rack frame edges for cable routing gutters
     const frames = container.querySelectorAll('.rack-frame');
@@ -3784,6 +3917,17 @@ window.RackRenderer = {
       // Index for packet animation
       this._cablePaths.set(cableIdx, path);
       this._cableBusy.set(cableIdx, false);
+
+      // Pre-sample path points for fast lerp animation (avoids per-frame getPointAtLength)
+      const totalLen = path.getTotalLength();
+      const sampleCount = 60;
+      const samples = new Float32Array(sampleCount * 2);
+      for (let s = 0; s < sampleCount; s++) {
+        const pt = path.getPointAtLength((s / (sampleCount - 1)) * totalLen);
+        samples[s * 2] = pt.x;
+        samples[s * 2 + 1] = pt.y;
+      }
+      this._cablePathSamples.set(cableIdx, { samples, totalLen });
     });
 
     // Cache virtual edge positions (cloud drops, switch→patch drops)
@@ -4228,8 +4372,9 @@ window.RackRenderer = {
                 // Activate switch port LED during beam-down
                 if (!port.classList.contains('rack-conn-port-active')) {
                   port.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-                  port.style.setProperty('--port-delay', `-${(Math.random() * 24).toFixed(1)}s`);
-                  port.style.setProperty('--port-speed', `${(16 + Math.random() * 6).toFixed(1)}s`);
+                  const pI = parseInt(port.dataset.switchPort || '0', 10);
+                  const sS = Array.from(dt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
+                  port.classList.add(`rack-port-group-${((Math.abs(sS) * 7 + pI * 3) % 8)}`);
                 }
                 this._triggerFlash(port, 'rack-trigger-switch-flash', 800);
                 srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
