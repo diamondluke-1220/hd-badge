@@ -2723,7 +2723,7 @@ window.RackRenderer = {
       void txt.getBBox();
       txt.classList.add('rack-cloud-rain-digit');
       txt.style.opacity = '';
-    }, 600);
+    }, 1500);
   },
 
   _stopCloudRain() {
@@ -3105,37 +3105,39 @@ window.RackRenderer = {
     // Idle cable traffic — background dots on cables
     this._startIdleTraffic();
 
-    // Port LED batch-toggle
-    this._startPortLedTimer();
-
-    // UPS LCD page cycling — JS-driven, replaces 8 CSS animations
-    this._startUpsLcdCycle();
-
-    // Fan rotation — JS-driven class toggle, replaces 4 CSS animations
-    this._startFanRotation();
+    // Single consolidated timer for all device effects — one wake-up instead of four.
+    // Runs at 800ms, handles: port LED toggling, fan rotation, UPS LCD cycling.
+    this._startDeviceEffectsTimer();
   },
 
-  _portLedTimer: null,
-  _portLedGroupIdx: 0,
+  // ─── Consolidated Device Effects Timer ──────────────────
+  // Single setInterval replaces 4 separate timers (port LEDs, storage LEDs,
+  // device LEDs, fan rotation, UPS LCD cycling). One browser wake-up per tick.
+  _deviceEffectsTimer: null,
+  _deviceEffectsTick: 0,
   _portLedGroupCache: null,
+  _storageLedCache: null,
+  _deviceLedCache: null,
+  _fanAngle: 0,
+  _upsLcdPageIdx: 0,
 
-  _startPortLedTimer() {
-    if (this._portLedTimer) clearInterval(this._portLedTimer);
-    // Cache port groups once — 8 groups, each an array of port elements
+  _startDeviceEffectsTimer() {
+    if (this._deviceEffectsTimer) clearInterval(this._deviceEffectsTimer);
+
+    // Cache port groups
     this._portLedGroupCache = [];
     for (let g = 0; g < 8; g++) {
       this._portLedGroupCache[g] = Array.from(
         this._container?.querySelectorAll(`.rack-port-group-${g}.rack-conn-port-dual`) || []
       );
     }
-    // Also cache storage bay LEDs into 8 groups
+    // Cache storage bay LEDs
     this._storageLedCache = [];
     const storageLeds = Array.from(this._container?.querySelectorAll('.rack-storage-led-activity.active') || []);
     for (let g = 0; g < 8; g++) {
       this._storageLedCache[g] = storageLeds.filter((_, i) => i % 8 === g);
     }
-
-    // Cache device status LEDs (switch LEDs, wifi LEDs, BRS LEDs, UPS LEDs) into 4 groups
+    // Cache device status LEDs
     this._deviceLedCache = [];
     const deviceLeds = Array.from(this._container?.querySelectorAll(
       '.rack-led-blink-gold, .rack-led-blink-blue, .rack-led-slow-blink, ' +
@@ -3147,85 +3149,67 @@ window.RackRenderer = {
     for (let g = 0; g < 4; g++) {
       this._deviceLedCache[g] = deviceLeds.filter((_, i) => i % 4 === g);
     }
-    this._portLedGroupIdx = 0;
-    this._deviceLedTick = 0;
+    // Cache fans and UPS screens
+    this._fanEls = Array.from(this._container?.querySelectorAll('.rack-fw-fan-1, .rack-fw-fan-2') || []);
+    this._upsScreens = Array.from(this._container?.querySelectorAll('.rack-ups-lcd-screen') || []);
+    this._upsLcdPageIdx = 0;
+    this._upsScreens.forEach(screen => {
+      screen.querySelectorAll('.rack-ups-lcd-page').forEach((p, i) =>
+        p.classList.toggle('rack-ups-lcd-page-active', i === 0));
+    });
 
-    // Every 400ms, randomly toggle 3 port groups between dim/bright.
-    this._portLedTimer = setInterval(() => {
+    this._deviceEffectsTick = 0;
+    this._fanAngle = 0;
+
+    // Single 2s timer handles everything — slow enough to let GPU idle between ticks
+    this._deviceEffectsTimer = setInterval(() => {
       if (!this._idleActive) return;
+      this._deviceEffectsTick++;
+
+      // Port + storage LEDs: toggle 2 random groups
       const cache = this._portLedGroupCache;
-      if (!cache) return;
-      // Toggle 3 random port groups
-      for (let t = 0; t < 3; t++) {
-        const g = Math.floor(Math.random() * 8);
-        const isDim = cache[g].length && cache[g][0].classList.contains('rack-port-led-dim');
-        cache[g].forEach(p => p.classList.toggle('rack-port-led-dim', !isDim));
-        this._storageLedCache[g]?.forEach(p => p.classList.toggle('rack-storage-led-dim', !isDim));
+      if (cache) {
+        for (let t = 0; t < 2; t++) {
+          const g = Math.floor(Math.random() * 8);
+          const isDim = cache[g].length && cache[g][0].classList.contains('rack-port-led-dim');
+          cache[g].forEach(p => p.classList.toggle('rack-port-led-dim', !isDim));
+          this._storageLedCache[g]?.forEach(p => p.classList.toggle('rack-storage-led-dim', !isDim));
+        }
       }
-      // Toggle 1 device LED group every other tick (~800ms cycle)
-      this._deviceLedTick++;
-      if (this._deviceLedTick % 2 === 0) {
+
+      // Device LEDs: toggle 1 group every other tick
+      if (this._deviceEffectsTick % 2 === 0) {
         const dg = Math.floor(Math.random() * 4);
         const dDim = this._deviceLedCache[dg]?.length && this._deviceLedCache[dg][0].classList.contains('rack-device-led-dim');
         this._deviceLedCache[dg]?.forEach(p => p.classList.toggle('rack-device-led-dim', !dDim));
       }
-    }, 400);
+
+      // Fan rotation: 15° per tick = full rotation in ~19s (subtle spin)
+      this._fanAngle = (this._fanAngle + 15) % 360;
+      this._fanEls.forEach(f => f.style.transform = `rotate(${this._fanAngle}deg)`);
+
+      // UPS LCD page: cycle every 3 ticks (6s)
+      if (this._deviceEffectsTick % 3 === 0) {
+        this._upsLcdPageIdx = (this._upsLcdPageIdx + 1) % 4;
+        const idx = this._upsLcdPageIdx;
+        this._upsScreens.forEach(screen => {
+          screen.querySelectorAll('.rack-ups-lcd-page').forEach((p, i) =>
+            p.classList.toggle('rack-ups-lcd-page-active', i === idx));
+        });
+      }
+    }, 2000);
   },
 
-  _stopPortLedTimer() {
-    if (this._portLedTimer) { clearInterval(this._portLedTimer); this._portLedTimer = null; }
+  _stopDeviceEffectsTimer() {
+    if (this._deviceEffectsTimer) { clearInterval(this._deviceEffectsTimer); this._deviceEffectsTimer = null; }
     this._portLedGroupCache = null;
     this._storageLedCache = null;
     this._deviceLedCache = null;
+    this._fanEls = null;
+    this._upsScreens = null;
     this._container?.querySelectorAll('.rack-port-led-dim').forEach(p => p.classList.remove('rack-port-led-dim'));
     this._container?.querySelectorAll('.rack-storage-led-dim').forEach(p => p.classList.remove('rack-storage-led-dim'));
     this._container?.querySelectorAll('.rack-device-led-dim').forEach(p => p.classList.remove('rack-device-led-dim'));
-  },
-
-  // ─── UPS LCD Page Cycling (JS-driven) ──────────────────
-  _upsLcdTimer: null,
-
-  _startUpsLcdCycle() {
-    if (this._upsLcdTimer) clearInterval(this._upsLcdTimer);
-    // Find all UPS LCD screens and set first page active
-    const screens = Array.from(this._container?.querySelectorAll('.rack-ups-lcd-screen') || []);
-    screens.forEach(screen => {
-      const pages = screen.querySelectorAll('.rack-ups-lcd-page');
-      pages.forEach((p, i) => p.classList.toggle('rack-ups-lcd-page-active', i === 0));
-    });
-    let pageIdx = 0;
-    this._upsLcdTimer = setInterval(() => {
-      if (!this._idleActive) return;
-      pageIdx = (pageIdx + 1) % 4;
-      screens.forEach(screen => {
-        const pages = screen.querySelectorAll('.rack-ups-lcd-page');
-        pages.forEach((p, i) => p.classList.toggle('rack-ups-lcd-page-active', i === pageIdx));
-      });
-    }, 4000);
-  },
-
-  _stopUpsLcdCycle() {
-    if (this._upsLcdTimer) { clearInterval(this._upsLcdTimer); this._upsLcdTimer = null; }
-  },
-
-  // ─── Fan Rotation (JS-driven) ─────────────────────────
-  _fanTimer: null,
-  _fanAngle: 0,
-
-  _startFanRotation() {
-    if (this._fanTimer) clearInterval(this._fanTimer);
-    const fans = Array.from(this._container?.querySelectorAll('.rack-fw-fan-1, .rack-fw-fan-2') || []);
-    this._fanAngle = 0;
-    this._fanTimer = setInterval(() => {
-      if (!this._idleActive) return;
-      this._fanAngle = (this._fanAngle + 30) % 360;
-      const transform = `rotate(${this._fanAngle}deg)`;
-      fans.forEach(f => f.style.transform = transform);
-    }, 100);
-  },
-
-  _stopFanRotation() {
-    if (this._fanTimer) { clearInterval(this._fanTimer); this._fanTimer = null; }
   },
 
   _stopIdleAnimations() {
@@ -3233,9 +3217,7 @@ window.RackRenderer = {
     this._idleTimers.forEach(t => clearTimeout(t));
     this._idleTimers = [];
     this._stopIdleTraffic();
-    this._stopPortLedTimer();
-    this._stopUpsLcdCycle();
-    this._stopFanRotation();
+    this._stopDeviceEffectsTimer();
   },
 
   // ─── Idle Cable Traffic ─────────────────────────────────
@@ -3281,9 +3263,9 @@ window.RackRenderer = {
             .catch(() => { dot.remove(); });
         }
       }
-      this._idleTrafficTimers.push(setTimeout(fireIntra, 4000 + Math.random() * 4000));
+      this._idleTrafficTimers.push(setTimeout(fireIntra, 12000 + Math.random() * 8000));
     };
-    this._idleTrafficTimers.push(setTimeout(fireIntra, 2000 + Math.random() * 3000));
+    this._idleTrafficTimers.push(setTimeout(fireIntra, 5000 + Math.random() * 5000));
 
     // Cross-rack trunk: gold dots, 10-15s interval
     const fireTrunk = () => {
@@ -3303,9 +3285,9 @@ window.RackRenderer = {
             .catch(() => { dot.remove(); });
         }
       }
-      this._idleTrafficTimers.push(setTimeout(fireTrunk, 10000 + Math.random() * 5000));
+      this._idleTrafficTimers.push(setTimeout(fireTrunk, 20000 + Math.random() * 10000));
     };
-    this._idleTrafficTimers.push(setTimeout(fireTrunk, 6000 + Math.random() * 4000));
+    this._idleTrafficTimers.push(setTimeout(fireTrunk, 10000 + Math.random() * 5000));
   },
 
   _stopIdleTraffic() {
