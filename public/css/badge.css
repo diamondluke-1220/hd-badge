@@ -67,7 +67,7 @@
   top: 0;
   width: 100%;
   height: 240px;
-  background: linear-gradient(90deg, #0F2D5C 0%, #163A75 50%, #0F2D5C 100%);
+  background: #133567;
   overflow: hidden;
 }
 .badge .navy-stripe::before,
