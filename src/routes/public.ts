@@ -7,7 +7,7 @@ import { existsSync, unlinkSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
 import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore } from '../db';
-import { checkRateLimit } from '../rate-limit';
+import { checkRateLimit, checkGameScoreRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
 import { log } from '../logger';
@@ -36,7 +36,7 @@ interface PublicDeps {
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
   broadcastSSE: (event: string, data: any) => void;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
-  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
+  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
   clampField: (val: string, field?: string) => string;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
@@ -638,31 +638,77 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   // ─── Game Score Telemetry ─────────────────────────────────
 
   app.post('/api/game/score', async (c) => {
+    const ip = getClientIp(c);
+
+    // Rate limit — dedicated bucket, doesn't affect badge creation limits
+    const rateCheck = checkGameScoreRateLimit(ip);
+    if (!rateCheck.allowed) {
+      log('warn', 'rate-limit', `Blocked game score from ${ip}: ${rateCheck.message}`);
+      return c.json({ success: false, error: rateCheck.message }, 429);
+    }
+
+    let body: any;
     try {
-      const body = await c.req.json();
-      const { employeeId, profit, floor, perksUsed, cardsPlayed, win } = body;
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+    }
 
-      if (!employeeId || typeof profit !== 'number' || typeof floor !== 'number') {
-        return c.json({ success: false, error: 'Missing required fields' }, 400);
+    const { employeeId, profit, floor, perksUsed, cardsPlayed, win } = body;
+
+    // Required field presence + type checks
+    if (typeof employeeId !== 'string' || !employeeId) {
+      return c.json({ success: false, error: 'Missing or invalid employeeId.' }, 400);
+    }
+    if (!Number.isFinite(profit) || !Number.isFinite(floor)) {
+      return c.json({ success: false, error: 'profit and floor must be numbers.' }, 400);
+    }
+    if (typeof win !== 'boolean') {
+      return c.json({ success: false, error: 'win must be a boolean.' }, 400);
+    }
+
+    // Bounds checks — prevent garbage / injection of extreme values
+    if (profit < -1_000_000 || profit > 1_000_000) {
+      return c.json({ success: false, error: 'profit out of range.' }, 400);
+    }
+    if (floor < 0 || floor > 100) {
+      return c.json({ success: false, error: 'floor out of range.' }, 400);
+    }
+
+    // Optional fields — default if missing, validate if present
+    const cardsPlayedSafe = cardsPlayed === undefined ? 0 : cardsPlayed;
+    if (!Number.isFinite(cardsPlayedSafe) || cardsPlayedSafe < 0 || cardsPlayedSafe > 10000) {
+      return c.json({ success: false, error: 'cardsPlayed out of range.' }, 400);
+    }
+
+    const perksUsedSafe = perksUsed === undefined ? [] : perksUsed;
+    if (!Array.isArray(perksUsedSafe) || perksUsedSafe.length > 50) {
+      return c.json({ success: false, error: 'perksUsed must be an array with at most 50 items.' }, 400);
+    }
+    for (const perk of perksUsedSafe) {
+      if (typeof perk !== 'string' || perk.length > 50) {
+        return c.json({ success: false, error: 'perksUsed items must be strings ≤ 50 chars.' }, 400);
       }
+    }
 
-      const badge = getBadge(employeeId);
-      if (!badge) {
-        return c.json({ success: false, error: 'Invalid badge ID' }, 404);
-      }
+    // Verify badge exists — prevents telemetry for unknown IDs
+    const badge = getBadge(employeeId);
+    if (!badge) {
+      return c.json({ success: false, error: 'Invalid badge ID' }, 404);
+    }
 
+    try {
       saveGameScore({
         employeeId,
         profit,
         floor,
-        perksUsed: perksUsed || [],
-        cardsPlayed: cardsPlayed || 0,
-        win: !!win,
+        perksUsed: perksUsedSafe,
+        cardsPlayed: cardsPlayedSafe,
+        win,
       });
-
       return c.json({ success: true });
     } catch (e) {
-      log('error', 'Game score save failed', e);
+      log('error', 'game-score', 'Save failed');
       return c.json({ success: false, error: 'Internal error' }, 500);
     }
   });

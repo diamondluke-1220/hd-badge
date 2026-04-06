@@ -110,6 +110,7 @@ let stmts: {
   togglePrinted: ReturnType<Database['prepare']>;
   toggleFlagged: ReturnType<Database['prepare']>;
   setHasPhoto: ReturnType<Database['prepare']>;
+  insertGameScore: ReturnType<Database['prepare']>;
 };
 
 /** Run a migration only if its version hasn't been applied yet */
@@ -267,6 +268,10 @@ export function initDb(dbPath: string) {
     togglePrinted: db.prepare("UPDATE badges SET is_printed = CASE WHEN is_printed = 1 THEN 0 ELSE 1 END, printed_at = CASE WHEN is_printed = 1 THEN NULL ELSE datetime('now') END WHERE employee_id = $id"),
     toggleFlagged: db.prepare('UPDATE badges SET is_flagged = CASE WHEN is_flagged = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
     setHasPhoto: db.prepare('UPDATE badges SET has_photo = $photo WHERE employee_id = $id'),
+    insertGameScore: db.prepare(`
+      INSERT INTO game_scores (employee_id, profit, floor, perks_used, cards_played, win)
+      VALUES ($employee_id, $profit, $floor, $perks_used, $cards_played, $win)
+    `),
   };
 
   // Migrate 4-digit band member IDs to 5-digit format (HD-0001 → HD-00001)
@@ -754,17 +759,14 @@ export function saveGameScore(data: {
   cardsPlayed: number;
   win: boolean;
 }): void {
-  db.prepare(`
-    INSERT INTO game_scores (employee_id, profit, floor, perks_used, cards_played, win)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    data.employeeId,
-    Math.floor(data.profit),
-    Math.floor(data.floor),
-    JSON.stringify(data.perksUsed),
-    Math.floor(data.cardsPlayed),
-    data.win ? 1 : 0,
-  );
+  stmts.insertGameScore.run({
+    $employee_id: data.employeeId,
+    $profit: Math.floor(data.profit),
+    $floor: Math.floor(data.floor),
+    $perks_used: JSON.stringify(data.perksUsed),
+    $cards_played: Math.floor(data.cardsPlayed),
+    $win: data.win ? 1 : 0,
+  });
 }
 
 export function closeDb() {
