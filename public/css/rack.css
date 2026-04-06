@@ -361,7 +361,6 @@ body.view-rack .public-orgchart {
 .rack-cloud-svg {
   width: 200px;
   height: 100px;
-  filter: drop-shadow(0 0 10px rgba(91, 141, 239, 0.25));
 }
 
 .rack-cloud-fill {
@@ -2380,7 +2379,6 @@ body.view-rack .public-orgchart {
 }
 
 .rack-cable-path {
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.5));
 }
 
 /* ─── Mobile — hide rack view option (desktop/presentation only) ── */

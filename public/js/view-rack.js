@@ -28,7 +28,7 @@ window.RackRenderer = {
   _wfqWeight: {},                  // divTheme → number (poolSize / totalPoolSize)
   _wfqInitialFillComplete: {},     // divTheme → boolean (first-pass priority tracking)
   _wfqDivPools: {},               // divTheme → [{ badge, divTheme }] (per-div pool index)
-  _WFQ_TICK_MS: 2000,             // scheduler tick interval
+  _WFQ_TICK_MS: 8000,             // scheduler tick interval (matched to pre-WFQ rotation cadence)
 
   // Rack assignment: which division themes go where
   _RACK_A_THEMES: ['IT', 'Punk'],
