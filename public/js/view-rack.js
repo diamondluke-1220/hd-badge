@@ -72,7 +72,9 @@ window.RackRenderer = {
     let allBadges = [];
     try {
       allBadges = await BadgePool.fetchAll({ limit: 100 });
-    } catch {
+    } catch (err) {
+      // Log for ops visibility — silent failures here hide real API/network issues during shows
+      console.error('[rack] BadgePool.fetchAll failed:', err);
       container.innerHTML = '<div class="rack-fallback">Failed to load employee data.</div>';
       return;
     }
