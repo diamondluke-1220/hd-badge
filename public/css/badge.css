@@ -139,7 +139,7 @@
   left: 36px;
   width: 200px;
   height: 200px;
-  background: linear-gradient(180deg, #0A1F3F 0%, #0D2B5E 100%);
+  background: #0A1F3F;
   border-radius: 20px;
   display: flex;
   align-items: center;
@@ -451,10 +451,12 @@
   display: none;
 }
 
-/* Subtle background texture */
+/* Subtle background texture — inset from top to respect navy header (240px stripe + 10px safety).
+   Prevents wasted K ink under the opaque header in normal render, and prevents binary from
+   printing into the header zone in body.k-layer (two-pass pre-print) mode. */
 .badge .texture-overlay {
   position: absolute;
-  top: 0;
+  top: 250px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -553,7 +555,7 @@
   font-size: 24px;
   line-height: 1.6;
   letter-spacing: 3px;
-  color: rgba(0, 0, 0, 0.17);
+  color: rgba(0, 0, 0, 0.22);
   word-break: break-all;
   overflow: hidden;
 }
