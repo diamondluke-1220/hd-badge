@@ -573,10 +573,7 @@ window.RackRenderer = {
       }
     }
 
-    // Randomize device LED animation offsets so they don't blink in sync
-    wrapper.querySelectorAll('.rack-led-blink-gold, .rack-led-slow-blink, .rack-led-blink-blue, .rack-ups-led-bat, .rack-fw-led-act').forEach(led => {
-      led.style.animationDelay = `-${(Math.random() * 6).toFixed(1)}s`;
-    });
+    // (LED animation offsets removed — all LEDs are now JS-driven, no CSS animations)
 
     // Build topology graph (always, needed for packet pathfinding)
     this._graph = this._buildGraph();
@@ -3108,10 +3105,14 @@ window.RackRenderer = {
     // Idle cable traffic — background dots on cables
     this._startIdleTraffic();
 
-    // Port LED batch-toggle — replaces 150+ CSS animations with a single JS interval.
-    // Every 200ms, pick ~20% of active ports and toggle their dim state, creating
-    // a realistic flickering effect with zero CSS animation overhead.
+    // Port LED batch-toggle
     this._startPortLedTimer();
+
+    // UPS LCD page cycling — JS-driven, replaces 8 CSS animations
+    this._startUpsLcdCycle();
+
+    // Fan rotation — JS-driven class toggle, replaces 4 CSS animations
+    this._startFanRotation();
   },
 
   _portLedTimer: null,
@@ -3181,12 +3182,60 @@ window.RackRenderer = {
     this._container?.querySelectorAll('.rack-device-led-dim').forEach(p => p.classList.remove('rack-device-led-dim'));
   },
 
+  // ─── UPS LCD Page Cycling (JS-driven) ──────────────────
+  _upsLcdTimer: null,
+
+  _startUpsLcdCycle() {
+    if (this._upsLcdTimer) clearInterval(this._upsLcdTimer);
+    // Find all UPS LCD screens and set first page active
+    const screens = Array.from(this._container?.querySelectorAll('.rack-ups-lcd-screen') || []);
+    screens.forEach(screen => {
+      const pages = screen.querySelectorAll('.rack-ups-lcd-page');
+      pages.forEach((p, i) => p.classList.toggle('rack-ups-lcd-page-active', i === 0));
+    });
+    let pageIdx = 0;
+    this._upsLcdTimer = setInterval(() => {
+      if (!this._idleActive) return;
+      pageIdx = (pageIdx + 1) % 4;
+      screens.forEach(screen => {
+        const pages = screen.querySelectorAll('.rack-ups-lcd-page');
+        pages.forEach((p, i) => p.classList.toggle('rack-ups-lcd-page-active', i === pageIdx));
+      });
+    }, 4000);
+  },
+
+  _stopUpsLcdCycle() {
+    if (this._upsLcdTimer) { clearInterval(this._upsLcdTimer); this._upsLcdTimer = null; }
+  },
+
+  // ─── Fan Rotation (JS-driven) ─────────────────────────
+  _fanTimer: null,
+  _fanAngle: 0,
+
+  _startFanRotation() {
+    if (this._fanTimer) clearInterval(this._fanTimer);
+    const fans = Array.from(this._container?.querySelectorAll('.rack-fw-fan-1, .rack-fw-fan-2') || []);
+    this._fanAngle = 0;
+    this._fanTimer = setInterval(() => {
+      if (!this._idleActive) return;
+      this._fanAngle = (this._fanAngle + 30) % 360;
+      const transform = `rotate(${this._fanAngle}deg)`;
+      fans.forEach(f => f.style.transform = transform);
+    }, 100);
+  },
+
+  _stopFanRotation() {
+    if (this._fanTimer) { clearInterval(this._fanTimer); this._fanTimer = null; }
+  },
+
   _stopIdleAnimations() {
     this._idleActive = false;
     this._idleTimers.forEach(t => clearTimeout(t));
     this._idleTimers = [];
     this._stopIdleTraffic();
     this._stopPortLedTimer();
+    this._stopUpsLcdCycle();
+    this._stopFanRotation();
   },
 
   // ─── Idle Cable Traffic ─────────────────────────────────
