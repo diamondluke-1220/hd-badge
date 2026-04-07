@@ -404,16 +404,18 @@ body.view-arcade .public-orgchart {
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
-  /* Containment + offscreen render skip:
-     - overflow:hidden + fixed dimensions make paint containment safe.
-     - content-visibility:auto skips layout/paint/style for slots scrolled
-       out of viewport. contain-intrinsic-size matches the fixed slot size
-       so the scrollbar doesn't jump as offscreen slots paint in.
-     Slots are independent — no cross-slot DOM measurement — so this is
-     safe (unlike the rack view where cable port rects are measured). */
+  /* Layout + paint containment: slot internal changes can't reflow the
+     grid or cascade paint outward. Safe because of overflow:hidden +
+     fixed dimensions.
+     NOTE: content-visibility:auto + contain-intrinsic-size were tried
+     here but conflict with view-arcade.js's _autoSizeGrid, which sets
+     slot width/height inline at runtime. Slots near the viewport edge
+     reported the static intrinsic size to flex-wrap instead of the
+     measured inline size, miscounting columns and pushing 2 badges
+     into a third row. Reverted — the arcade grid is designed to have
+     all 28 slots visible at once anyway, so offscreen-skip was a
+     placebo benefit. */
   contain: layout paint;
-  content-visibility: auto;
-  contain-intrinsic-size: 120px 146px;
 }
 .arcade-slot.slot-hidden {
   display: none;
