@@ -363,6 +363,7 @@ window.ArcadeRenderer = {
     const targetCols = Math.ceil(badgeCount / DESIRED_ROWS);
 
     let bestW = maxW;
+    let found = false;
 
     for (let w = maxW; w >= minW; w -= 2) {
       const h = Math.round(w * aspect);
@@ -373,9 +374,21 @@ window.ArcadeRenderer = {
 
       if (totalHeight <= rosterHeight) {
         bestW = w;
+        found = true;
         break;
       }
     }
+
+    // Defensive fallback: if the loop exhausted without finding a width
+    // that satisfies BOTH the column count AND the height fit, force a
+    // width that gives exactly targetCols columns and let the row count
+    // win over the height budget. Without this, the loop would leave
+    // bestW at maxW (10-ish cols, 3 rows) — the original orphan bug.
+    if (!found) {
+      const forcedW = Math.floor((rosterWidth - (targetCols - 1) * gap) / targetCols);
+      bestW = Math.max(minW, Math.min(maxW, forcedW));
+    }
+
     let bestH = Math.round(bestW * aspect);
 
     grid.style.setProperty('--slot-w', bestW + 'px');
