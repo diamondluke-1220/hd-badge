@@ -196,6 +196,26 @@ window.ArcadeRenderer = {
     this._resizeHandler = () => this._autoSizeGrid();
     window.addEventListener('resize', this._resizeHandler);
 
+    // Pause expensive animations when tab is not visible (CPU/battery)
+    this._onVisibilityChange = () => {
+      if (!this._container) return;
+      if (document.visibilityState === 'hidden') {
+        this._stopRotation();
+        if (this._container.getAnimations) {
+          this._container.getAnimations({ subtree: true }).forEach(a => a.pause());
+        }
+      } else if (document.visibilityState === 'visible') {
+        if (this._container.getAnimations) {
+          this._container.getAnimations({ subtree: true }).forEach(a => a.play());
+        }
+        // Resume rotation only if we're idle (not mid-fight, arrival, or locked)
+        if (!this._locked && !this._isVSActive && !this._isArrivalActive) {
+          this._resumeRotation();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', this._onVisibilityChange);
+
     // Attract mode on first load (once per session)
     if (!window._arcadeAttractDone && animationsEnabled()) {
       window._arcadeAttractDone = true;
@@ -1140,6 +1160,11 @@ window.ArcadeRenderer = {
     if (this._resizeHandler) {
       window.removeEventListener('resize', this._resizeHandler);
       this._resizeHandler = null;
+    }
+
+    if (this._onVisibilityChange) {
+      document.removeEventListener('visibilitychange', this._onVisibilityChange);
+      this._onVisibilityChange = null;
     }
 
     if (this._container) {

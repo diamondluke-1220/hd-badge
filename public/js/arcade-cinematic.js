@@ -15,6 +15,11 @@
   // Track last 2 backgrounds to prevent repeats
   _recentBackgrounds: [],
 
+  // Honor OS-level reduced-motion preference for elaborate FX spawns
+  _motionReduced() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  },
+
   _pickOpponent() {
     const t = window._testFight || {};
     const roll = t.opponent === 'boss' ? 0 : t.opponent === 'creature' ? 0.5 : t.opponent === 'intern' ? 0.95 : Math.random();
@@ -1749,6 +1754,13 @@
     const empPortrait = overlay.querySelector('.arcade-vs-left .arcade-vs-portrait-wrap');
     if (!bossPortrait || !empPortrait) return;
 
+    // prefers-reduced-motion: skip the elaborate particle/SVG spawn loops,
+    // but still register the impact so the fight progresses normally.
+    if (this._motionReduced()) {
+      this._specialImpact(overlay, empPortrait, 300);
+      return;
+    }
+
     // Move-specific SFX mapping
     const SPECIAL_SFX = {
       'BUDGET SLASH': 'specialSlash',
@@ -2173,7 +2185,7 @@
 
         const filterId = `laser-glow-${Date.now()}-${b}`;
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        defs.innerHTML = `<filter id="${filterId}"><feGaussianBlur stdDeviation="8" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+        defs.innerHTML = `<filter id="${filterId}"><feGaussianBlur stdDeviation="8" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
 
         // Main beam
         const beam = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -2271,6 +2283,7 @@
   },
 
   _launchLightning(overlay, fromEl, toEl, color) {
+    if (this._motionReduced()) return;
     const overlayRect = overlay.getBoundingClientRect();
     const fromRect = fromEl.getBoundingClientRect();
     const toRect = toEl.getBoundingClientRect();
@@ -2323,7 +2336,7 @@
 
         // SVG filter for glow (unique ID per bolt to avoid collisions)
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-        defs.innerHTML = `<filter id="${filterId}"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+        defs.innerHTML = `<filter id="${filterId}"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
 
         svg.appendChild(defs);
         svg.appendChild(bolt);
@@ -2361,6 +2374,7 @@
   },
 
   _launchMusicNotes(overlay, fromEl, toEl, color) {
+    if (this._motionReduced()) return;
     const overlayRect = overlay.getBoundingClientRect();
     const fromRect = fromEl.getBoundingClientRect();
     const toRect = toEl.getBoundingClientRect();
