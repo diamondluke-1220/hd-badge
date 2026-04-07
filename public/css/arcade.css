@@ -1861,10 +1861,18 @@ body.view-arcade .public-orgchart {
   text-shadow: none;
   transition: color 0.1s, text-shadow 0.1s, transform 0.1s, filter 0.1s;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
-  /* Force uniform box for all arrow glyphs (←→ wider than ↑↓) */
+  /* Force uniform box for all arrow glyphs */
   line-height: 1;
   text-indent: 0;
   overflow: hidden;
+}
+
+/* Press Start 2P doesn't include arrow glyphs (U+2190..2193) so they
+   fall back to the system font, where ←→ render visually smaller than
+   ↑↓. Bump horizontal arrows to match the vertical ones' apparent size. */
+.arcade-qte-arrow[data-dir="left"],
+.arcade-qte-arrow[data-dir="right"] {
+  font-size: clamp(28px, 4.4vw, 52px);
 }
 
 /* Active arrow — current input target */

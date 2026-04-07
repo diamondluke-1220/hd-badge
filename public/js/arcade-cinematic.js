@@ -1305,6 +1305,7 @@
       const arrowEls = sequence.map((dir, i) => {
         const el = document.createElement('div');
         el.className = 'arcade-qte-arrow' + (i === 0 ? ' active' : '');
+        el.dataset.dir = dir;
         el.textContent = ARROW_CHARS[dir];
         arrowsDiv.appendChild(el);
         return el;
