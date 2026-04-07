@@ -1889,6 +1889,20 @@ window.RackRenderer = {
       for (const resolve of this._cableWaiters.values()) resolve();
       this._cableWaiters.clear();
     }
+    // Drain BRS waiters too — wake them all so they self-clean and break
+    // out of their step (busy is now false but the in-flight packet they
+    // would have rendered is gone). Same idempotent pattern as cable.
+    if (this._brsWaiters) {
+      for (const brsId of Object.keys(this._brsWaiters)) {
+        const queue = this._brsWaiters[brsId];
+        if (Array.isArray(queue)) {
+          while (queue.length) queue.shift()();
+        }
+      }
+    }
+    if (this._brsBusy) {
+      for (const k of Object.keys(this._brsBusy)) this._brsBusy[k] = false;
+    }
     // Stop animation loop
     if (this._animFrameId) {
       cancelAnimationFrame(this._animFrameId);
@@ -3677,14 +3691,27 @@ window.RackRenderer = {
         case 'brs-render': {
           const brsId = step.brsId || 'brs-01';
           const brsPause = step.pause || 1500;
-          // Wait for BRS to become free (promise-based, woken when render completes)
+          // Wait for BRS to become free. Uses a FIFO queue per BRS so a
+          // third arrival doesn't overwrite the second's resolve and
+          // strand it (the previous single-slot implementation lost
+          // every waiter except the most recent one). Timeout is 10s,
+          // matching the cable busy-wait, which covers ~6 badges queued
+          // ahead at the 1500ms render duration.
           if (this._brsBusy[brsId]) {
             if (!this._brsWaiters) this._brsWaiters = {};
+            if (!this._brsWaiters[brsId]) this._brsWaiters[brsId] = [];
+            const queue = this._brsWaiters[brsId];
+            let myResolve;
+            const myPromise = new Promise(resolve => { myResolve = resolve; });
+            queue.push(myResolve);
             await Promise.race([
-              new Promise(resolve => { this._brsWaiters[brsId] = resolve; }),
-              this._delay(brsPause + 500),
+              myPromise,
+              this._delay(10000),
             ]);
-            delete this._brsWaiters?.[brsId];
+            // Self-remove from queue if still present (timeout path,
+            // or extra safety after a normal wake)
+            const idx = queue.indexOf(myResolve);
+            if (idx !== -1) queue.splice(idx, 1);
           }
           if (this._brsBusy[brsId]) break; // still busy after timeout — skip
           try {
@@ -3693,8 +3720,13 @@ window.RackRenderer = {
             await this._delay(brsPause);
           } finally {
             this._brsBusy[brsId] = false;
-            // Wake any packet waiting for this BRS
-            if (this._brsWaiters?.[brsId]) { this._brsWaiters[brsId](); delete this._brsWaiters[brsId]; }
+            // Wake the next packet in the FIFO queue (not all of them —
+            // only one packet at a time can hold the BRS lock)
+            const queue = this._brsWaiters?.[brsId];
+            if (queue && queue.length) {
+              const next = queue.shift();
+              next();
+            }
           }
           break;
         }
