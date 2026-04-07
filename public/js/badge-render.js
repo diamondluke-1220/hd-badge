@@ -4,8 +4,6 @@
 const DEPT_ACCESS = {
   'TICKET ESCALATION BUREAU':          { access: 'ALL ACCESS',                css: 'all-access' },
   'RIFF SHREDDING DEPARTMENT':          { access: 'ALL ACCESS',                css: 'all-access' },
-  'DEPT. OF PERCUSSIVE MAINTENANCE':    { access: 'ALL ACCESS',                css: 'all-access' },
-  'INFRASTRUCTURE & POWER CHORDS':      { access: 'ALL ACCESS',                css: 'all-access' },
   'LOW FREQUENCY OPERATIONS':           { access: 'ALL ACCESS',                css: 'all-access' },
   'PRINTER JAMS':                       { access: 'PAPER JAM CLEARANCE',       css: 'paper-jam' },
   'PASSWORD RESET SERVICES':            { access: 'RESET AUTHORIZED',          css: 'reset' },
@@ -18,6 +16,8 @@ const DEPT_ACCESS = {
   'MOSH PIT HR':                        { access: 'PIT APPROVED',              css: 'pit' },
   'ENTERPRISE GUITAR WORSHIP':           { access: 'SHRED CERTIFIED',           css: 'shred' },
   'STAGE DIVE RISK ASSESSMENT':         { access: 'STAGE DIVE AUTHORIZED',           css: 'dive' },
+  'DEPT. OF DOWNSTROKE GOVERNANCE':     { access: 'ALL ACCESS',                css: 'all-access' },
+  'DIVISION OF TEMPO ENFORCEMENT':        { access: 'ALL ACCESS',                css: 'all-access' },
 };
 
 // All access level options — label + CSS class

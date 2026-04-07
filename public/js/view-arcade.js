@@ -96,7 +96,7 @@ window.ArcadeRenderer = {
       "Brace for impact.",
       "That's gonna leave a mark.",
     ],
-    'HD-00004': [ // Todd — VP of Power Distribution
+    'HD-00004': [ // Todd — President of Mutes and Strums
       "Stare Intensifies....",
       "Your access has been revoked.",
       "Lights out.",
@@ -533,7 +533,7 @@ window.ArcadeRenderer = {
     'Luke': { type: 'boss', desc: 'Chief Escalation Officer. Will escalate your ticket to himself, then close it. Band frontman. Please hold.', move: 'TICKET ESCALATION' },
     'Drew': { type: 'boss', desc: "Chief String Tickler. His feedback isn't constructive — it's a 100-watt wall of sound. Wields a Flying V.", move: 'FEEDBACK LOOP' },
     'Henry': { type: 'boss', desc: 'Chief Impact Officer. Hits things professionally. His click track has ended careers and started mosh pits.', move: 'CLICK TRACK OF DOOM' },
-    'Todd': { type: 'boss', desc: 'VP of Power Distribution. Controls the infrastructure. His stare has rebooted servers and crushed spirits.', move: '1000 YARD STARE' },
+    'Todd': { type: 'boss', desc: 'President of Mutes and Strums. Runs the Dept. of Downstroke Governance. His stare has rebooted servers and crushed spirits.', move: '1000 YARD STARE' },
     'Adam': { type: 'boss', desc: 'VP of Bottom Line Operations. The low end is non-negotiable. Cuts budgets and bass lines with equal precision.', move: 'LOW END THEORY' },
   },
 
