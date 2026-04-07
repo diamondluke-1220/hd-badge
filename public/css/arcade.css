@@ -1847,10 +1847,12 @@ body.view-arcade .public-orgchart {
   align-items: center;
 }
 
-/* Individual arrow — bare d-pad style, no box border */
+/* Individual arrow — bare d-pad style, no box border.
+   Visual is a CSS mask-image SVG (single keyboard-arrow shape, rotated
+   per [data-dir]) instead of unicode arrow glyphs, which fell back per
+   glyph through different system fonts and rendered inconsistently
+   (←→ visibly smaller / different shape than ↑↓). */
 .arcade-qte-arrow {
-  font-family: 'Press Start 2P', monospace;
-  font-size: clamp(22px, 3.5vw, 42px);
   width: clamp(44px, 6vw, 64px);
   height: clamp(44px, 6vw, 64px);
   display: flex;
@@ -1860,22 +1862,34 @@ body.view-arcade .public-orgchart {
   border-radius: 0;
   background: none;
   color: rgba(255, 215, 0, 0.3);
-  text-shadow: none;
-  transition: color 0.1s, text-shadow 0.1s, transform 0.1s, filter 0.1s;
+  transition: color 0.1s, transform 0.1s, filter 0.1s;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
-  /* Force uniform box for all arrow glyphs */
-  line-height: 1;
-  text-indent: 0;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
 }
 
-/* Press Start 2P doesn't include arrow glyphs (U+2190..2193) so they
-   fall back to the system font, where ←→ render visually smaller than
-   ↑↓. Bump horizontal arrows to match the vertical ones' apparent size. */
-.arcade-qte-arrow[data-dir="left"],
-.arcade-qte-arrow[data-dir="right"] {
-  font-size: clamp(28px, 4.4vw, 52px);
+.arcade-qte-arrow::before {
+  content: '';
+  display: block;
+  width: 78%;
+  height: 78%;
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M5 16 L25 16 M16 7 L25 16 L16 25' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+          mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M5 16 L25 16 M16 7 L25 16 L16 25' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  -webkit-mask-size: contain;
+          mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+          mask-position: center;
+  transition: transform 0.1s;
 }
+
+/* Rotate the base right-pointing arrow per direction */
+.arcade-qte-arrow[data-dir="right"]::before { transform: rotate(0deg); }
+.arcade-qte-arrow[data-dir="down"]::before  { transform: rotate(90deg); }
+.arcade-qte-arrow[data-dir="left"]::before  { transform: rotate(180deg); }
+.arcade-qte-arrow[data-dir="up"]::before    { transform: rotate(-90deg); }
 
 /* Active arrow — current input target */
 .arcade-qte-arrow.active {

@@ -1292,7 +1292,6 @@
       let resolved = false;
       let step = 0;
 
-      const ARROW_CHARS = { up: '↑', down: '↓', left: '←', right: '→' };
       const KEY_MAP = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
       // Build DOM
@@ -1306,7 +1305,9 @@
         const el = document.createElement('div');
         el.className = 'arcade-qte-arrow' + (i === 0 ? ' active' : '');
         el.dataset.dir = dir;
-        el.textContent = ARROW_CHARS[dir];
+        // Visual is a CSS mask-image SVG selected via [data-dir] —
+        // no textContent needed (was unicode arrows that hit per-glyph
+        // font fallback and rendered inconsistently).
         arrowsDiv.appendChild(el);
         return el;
       });
