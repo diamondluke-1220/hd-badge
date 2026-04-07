@@ -355,16 +355,19 @@ window.ArcadeRenderer = {
     const gap = 4;
 
     // Find largest slot size that fills available space (both width and height)
+    // AND fits the full roster in DESIRED_ROWS rows — no orphans into a 3rd row.
     const minW = 44;
     const maxW = 140;
     const aspect = 146 / 120;
+    const DESIRED_ROWS = 2;
+    const targetCols = Math.ceil(badgeCount / DESIRED_ROWS);
 
     let bestW = maxW;
 
     for (let w = maxW; w >= minW; w -= 2) {
       const h = Math.round(w * aspect);
       const cols = Math.floor((rosterWidth + gap) / (w + gap));
-      if (cols <= 0) continue;
+      if (cols < targetCols) continue; // not enough columns to hit DESIRED_ROWS
       const rows = Math.ceil(badgeCount / cols);
       const totalHeight = rows * (h + gap) - gap;
 
