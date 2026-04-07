@@ -377,18 +377,30 @@ window.ArcadeRenderer = {
     bestW = Math.max(minW, Math.min(maxW, bestW));
     let bestH = Math.round(bestW * aspect);
 
-    // Height-fit shrinkage: if the available height is reliably measured
-    // (above a sanity threshold ruling out the 66px first-paint glitch)
-    // AND the natural 2-row layout overflows it, shrink uniformly so
-    // both rows fit. Aspect ratio is preserved.
+    // Height adjustment: if rosterHeight is reliably measured (above the
+    // sanity threshold ruling out the ~66px first-paint glitch), use it.
+    //   - If the natural 2-row height overflows available, shrink both
+    //     dimensions uniformly to fit (preserves aspect).
+    //   - If there's leftover vertical space, EXPAND slot height (only)
+    //     to fill it. Width stays width-derived. The photo uses
+    //     object-fit:cover so it scales/crops gracefully — the
+    //     object-position:center 30% rule keeps the face anchored.
+    //     Capped at 1.8× the natural aspect height to prevent pathological
+    //     stretching that would crop too much of the headshot.
     const SANITY_MIN_HEIGHT = 200;
+    const MAX_HEIGHT_STRETCH = 1.8;
     if (rosterHeight > SANITY_MIN_HEIGHT) {
-      const naturalHeight = DESIRED_ROWS * bestH + (DESIRED_ROWS - 1) * gap;
-      if (naturalHeight > rosterHeight) {
-        const maxH = Math.floor((rosterHeight - (DESIRED_ROWS - 1) * gap) / DESIRED_ROWS);
-        const shrunkW = Math.round(maxH / aspect);
+      const availPerRow = Math.floor((rosterHeight - (DESIRED_ROWS - 1) * gap) / DESIRED_ROWS);
+      if (availPerRow < bestH) {
+        // Shrink uniformly
+        const shrunkW = Math.round(availPerRow / aspect);
         bestW = Math.max(minW, Math.min(maxW, shrunkW));
         bestH = Math.round(bestW * aspect);
+      } else if (availPerRow > bestH) {
+        // Expand height to use available vertical space, capped to avoid
+        // over-cropping the photo
+        const maxStretchedH = Math.round(bestH * MAX_HEIGHT_STRETCH);
+        bestH = Math.min(availPerRow, maxStretchedH);
       }
     }
 
