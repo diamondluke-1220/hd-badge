@@ -348,8 +348,14 @@ window.ArcadeRenderer = {
     const badgeCount = this._rosterSlots.length;
     if (badgeCount === 0) return;
 
-    // Available space — use viewport height minus roster's top position for true available height
-    const rosterWidth = roster.clientWidth - 32; // padding
+    // Available space — measure the GRID's content width directly so we
+    // include the grid's own horizontal padding (.arcade-grid has padding:
+    // 0 8px). Previously this was derived from `roster.clientWidth - 32`
+    // which subtracted the roster's padding but missed the grid's, leaving
+    // ~16px of phantom width that pushed 14 columns into 13.
+    const gridStyle = getComputedStyle(grid);
+    const gridPadX = parseFloat(gridStyle.paddingLeft) + parseFloat(gridStyle.paddingRight);
+    const rosterWidth = grid.clientWidth - gridPadX - 1; // -1 for sub-pixel safety
     const rosterTop = roster.getBoundingClientRect().top;
     const rosterHeight = window.innerHeight - rosterTop - 16; // 16px bottom margin
     const gap = 4;
