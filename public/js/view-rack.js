@@ -2698,10 +2698,23 @@ window.RackRenderer = {
 
   _cloudRainTimer: null,
   _cloudRainPool: [],
-  _CLOUD_RAIN_POOL_SIZE: 8,
+  _CLOUD_RAIN_PER_CLOUD: 16,
 
+  // Stable-pool architecture:
+  //   - Pre-create N text elements per cloud, each with its OWN
+  //     randomized duration, delay, position, color, opacity, character.
+  //   - Each gets `animation-iteration-count: infinite` (set in CSS).
+  //   - Negative animation-delay pre-advances each element into its cycle
+  //     so they're spread across phases without waiting for staggered starts.
+  //   - On each iteration, an `animationiteration` listener re-randomizes
+  //     the character + x + color (cheap text/attribute updates, no class
+  //     swap, no reflow). The visual gives random-rain variety without
+  //     any setInterval, no per-recycle reflow, no animation restart cost.
+  // This replaces the previous setInterval+classList swap+forced reflow
+  // pattern, which was a measurable contributor to the rack view CPU
+  // burn even with object pooling already in place.
   _startCloudRain() {
-    if (this._cloudRainTimer) return;
+    if (this._cloudRainPool.length) return;
     if (!this._cableSvg) return;
     const cloudA = this._virtualCoords?.cloudA;
     const cloudB = this._virtualCoords?.cloudB;
@@ -2717,58 +2730,52 @@ window.RackRenderer = {
     const cloudH = 70;  // height of cloud above bottom edge
     const fallDist = cloudH - 5;
 
-    // Pre-create pool of SVG text elements (never added/removed from DOM after this)
     this._cloudRainPool = [];
-    for (let i = 0; i < this._CLOUD_RAIN_POOL_SIZE; i++) {
-      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      txt.setAttribute('font-family', 'monospace');
-      txt.setAttribute('text-anchor', 'middle');
-      txt.classList.add('rack-cloud-rain-digit');
-      txt.style.opacity = '0'; // start hidden
-      svg.appendChild(txt);
-      this._cloudRainPool.push(txt);
-    }
-
-    let poolIdx = 0;
-    let spawnIdx = 0;
-    this._cloudRainTimer = setInterval(() => {
-      const cloud = clouds[spawnIdx % clouds.length];
-      spawnIdx++;
-
-      // Recycle next element from pool
-      const txt = this._cloudRainPool[poolIdx % this._CLOUD_RAIN_POOL_SIZE];
-      poolIdx++;
-
+    for (const cloud of clouds) {
       const cloudTop = cloud.y - cloudH;
-      txt.textContent = Math.random() < 0.5 ? '0' : '1';
-      txt.setAttribute('font-size', `${8 + Math.random() * 5}`);
-      txt.setAttribute('fill', colors[Math.floor(Math.random() * colors.length)]);
-      txt.setAttribute('x', cloud.x + (Math.random() - 0.5) * cloudW * 1.4);
-      txt.setAttribute('y', cloudTop + Math.random() * 10);
+      for (let i = 0; i < this._CLOUD_RAIN_PER_CLOUD; i++) {
+        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        txt.setAttribute('font-family', 'monospace');
+        txt.setAttribute('text-anchor', 'middle');
 
-      const speed = 12 + Math.random() * 20;
-      const duration = fallDist / speed;
-      const opacity = 0.3 + Math.random() * 0.4;
-      txt.style.setProperty('--rain-duration', `${duration.toFixed(2)}s`);
-      txt.style.setProperty('--rain-dist', `${fallDist}px`);
-      txt.style.setProperty('--rain-opacity', `${opacity}`);
+        const duration = 2.5 + Math.random() * 3.5; // 2.5–6s per element
+        const delay = Math.random() * duration;     // distribute across cycle
+        const opacity = 0.3 + Math.random() * 0.4;
 
-      // Restart animation by removing/re-adding the class
-      txt.classList.remove('rack-cloud-rain-digit');
-      // Force reflow to restart animation (void is intentional)
-      void txt.getBBox();
-      txt.classList.add('rack-cloud-rain-digit');
-      txt.style.opacity = '';
-    }, 1500);
+        txt.textContent = Math.random() < 0.5 ? '0' : '1';
+        txt.setAttribute('font-size', (8 + Math.random() * 5).toFixed(1));
+        txt.setAttribute('fill', colors[Math.floor(Math.random() * colors.length)]);
+        txt.setAttribute('x', cloud.x + (Math.random() - 0.5) * cloudW * 1.4);
+        txt.setAttribute('y', cloudTop + Math.random() * 10);
+
+        txt.style.setProperty('--rain-duration', `${duration.toFixed(2)}s`);
+        txt.style.setProperty('--rain-dist', `${fallDist}px`);
+        txt.style.setProperty('--rain-opacity', opacity.toFixed(2));
+        // Negative delay pre-advances the element into its cycle so the
+        // pool starts looking populated immediately instead of fading in.
+        txt.style.animationDelay = `-${delay.toFixed(2)}s`;
+
+        txt.classList.add('rack-cloud-rain-digit');
+
+        // animationiteration fires at the keyframe boundary (opacity 0
+        // at both ends), so re-randomizing here is invisible.
+        txt.addEventListener('animationiteration', () => {
+          txt.textContent = Math.random() < 0.5 ? '0' : '1';
+          txt.setAttribute('x', cloud.x + (Math.random() - 0.5) * cloudW * 1.4);
+          txt.setAttribute('fill', colors[Math.floor(Math.random() * colors.length)]);
+        });
+
+        svg.appendChild(txt);
+        this._cloudRainPool.push(txt);
+      }
+    }
   },
 
   _stopCloudRain() {
-    if (this._cloudRainTimer) {
-      clearInterval(this._cloudRainTimer);
-      this._cloudRainTimer = null;
-    }
-    // Hide pool elements (don't remove — they'll be cleaned up with the SVG)
-    this._cloudRainPool.forEach(el => { el.style.opacity = '0'; el.classList.remove('rack-cloud-rain-digit'); });
+    // Pool elements are removed entirely (parent SVG may persist across
+    // view restarts via visibilitychange). Listeners are GC'd with the
+    // detached nodes.
+    this._cloudRainPool.forEach(el => el.remove());
     this._cloudRainPool = [];
   },
 

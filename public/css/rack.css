@@ -2700,7 +2700,7 @@ body.view-rack .public-orgchart {
 
 /* ─── Cloud Binary Rain (CSS-animated, no JS rAF loop) ─── */
 .rack-cloud-rain-digit {
-  animation: rack-rain-fall var(--rain-duration, 3s) linear forwards;
+  animation: rack-rain-fall var(--rain-duration, 3s) linear infinite;
   will-change: transform, opacity;
 }
 
