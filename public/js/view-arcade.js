@@ -354,42 +354,37 @@ window.ArcadeRenderer = {
     const rosterHeight = window.innerHeight - rosterTop - 16; // 16px bottom margin
     const gap = 4;
 
-    // Find largest slot size that fills available space (both width and height)
-    // AND fits the full roster in DESIRED_ROWS rows — no orphans into a 3rd row.
+    // Sizing strategy: pick the width that fits EXACTLY targetCols
+    // columns. This guarantees DESIRED_ROWS rows regardless of the
+    // measured rosterHeight, which is unreliable during initial layout
+    // (the flex parent hasn't resolved its size yet, so `roster.getBoundingClientRect().top`
+    // is near the bottom of the viewport and rosterHeight comes out as
+    // ~66px on first paint). The previous height-search loop would then
+    // collapse the layout into 1 row of tiny 46px slots.
     const minW = 44;
     const maxW = 140;
     const aspect = 146 / 120;
     const DESIRED_ROWS = 2;
     const targetCols = Math.ceil(badgeCount / DESIRED_ROWS);
 
-    let bestW = maxW;
-    let found = false;
+    let bestW = Math.floor((rosterWidth - (targetCols - 1) * gap) / targetCols);
+    bestW = Math.max(minW, Math.min(maxW, bestW));
+    let bestH = Math.round(bestW * aspect);
 
-    for (let w = maxW; w >= minW; w -= 2) {
-      const h = Math.round(w * aspect);
-      const cols = Math.floor((rosterWidth + gap) / (w + gap));
-      if (cols < targetCols) continue; // not enough columns to hit DESIRED_ROWS
-      const rows = Math.ceil(badgeCount / cols);
-      const totalHeight = rows * (h + gap) - gap;
-
-      if (totalHeight <= rosterHeight) {
-        bestW = w;
-        found = true;
-        break;
+    // Height-fit shrinkage: if the available height is reliably measured
+    // (above a sanity threshold ruling out the 66px first-paint glitch)
+    // AND the natural 2-row layout overflows it, shrink uniformly so
+    // both rows fit. Aspect ratio is preserved.
+    const SANITY_MIN_HEIGHT = 200;
+    if (rosterHeight > SANITY_MIN_HEIGHT) {
+      const naturalHeight = DESIRED_ROWS * bestH + (DESIRED_ROWS - 1) * gap;
+      if (naturalHeight > rosterHeight) {
+        const maxH = Math.floor((rosterHeight - (DESIRED_ROWS - 1) * gap) / DESIRED_ROWS);
+        const shrunkW = Math.round(maxH / aspect);
+        bestW = Math.max(minW, Math.min(maxW, shrunkW));
+        bestH = Math.round(bestW * aspect);
       }
     }
-
-    // Defensive fallback: if the loop exhausted without finding a width
-    // that satisfies BOTH the column count AND the height fit, force a
-    // width that gives exactly targetCols columns and let the row count
-    // win over the height budget. Without this, the loop would leave
-    // bestW at maxW (10-ish cols, 3 rows) — the original orphan bug.
-    if (!found) {
-      const forcedW = Math.floor((rosterWidth - (targetCols - 1) * gap) / targetCols);
-      bestW = Math.max(minW, Math.min(maxW, forcedW));
-    }
-
-    let bestH = Math.round(bestW * aspect);
 
     grid.style.setProperty('--slot-w', bestW + 'px');
     grid.style.setProperty('--slot-h', bestH + 'px');
