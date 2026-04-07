@@ -91,6 +91,10 @@ body.view-rack .public-orgchart {
   border-radius: var(--radius-md);
   overflow: visible;
   position: relative;
+  /* Layout containment: rack-internal layout (device additions, hover state)
+     cannot reflow the page. overflow:visible is required for cross-rack
+     cables, so paint containment is intentionally omitted. */
+  contain: layout;
 }
 
 .rack-frame-label {
@@ -176,6 +180,11 @@ body.view-rack .public-orgchart {
   box-sizing: border-box;
   overflow: visible;
   flex-shrink: 0;
+  /* Layout containment: a device's internal state changes (LED toggles,
+     popups, hover states) cannot reflow ancestors or siblings. Cannot use
+     `paint` containment — overflow:visible is required for SVG cables and
+     port packets that extend beyond device bounds. */
+  contain: layout;
 }
 
 /* Rack ears — brushed metal L-bracket mounting tabs */

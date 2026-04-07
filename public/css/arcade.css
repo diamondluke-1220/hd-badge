@@ -381,6 +381,8 @@ body.view-arcade .public-orgchart {
   max-width: 100%;
   width: 100%;
   padding: 0 8px;
+  /* Layout containment: slot rearrangements stay inside the grid. */
+  contain: layout;
 }
 
 /* ============================================================
@@ -402,6 +404,16 @@ body.view-arcade .public-orgchart {
   position: relative;
   overflow: hidden;
   flex-shrink: 0;
+  /* Containment + offscreen render skip:
+     - overflow:hidden + fixed dimensions make paint containment safe.
+     - content-visibility:auto skips layout/paint/style for slots scrolled
+       out of viewport. contain-intrinsic-size matches the fixed slot size
+       so the scrollbar doesn't jump as offscreen slots paint in.
+     Slots are independent — no cross-slot DOM measurement — so this is
+     safe (unlike the rack view where cable port rects are measured). */
+  contain: layout paint;
+  content-visibility: auto;
+  contain-intrinsic-size: 120px 146px;
 }
 .arcade-slot.slot-hidden {
   display: none;
