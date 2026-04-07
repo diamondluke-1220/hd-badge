@@ -2256,7 +2256,13 @@ window.RackRenderer = {
 
     while (this._wfqRunning && this._container && this._cableSvg) {
       this._wfqTick();
-      await this._delay(this._WFQ_TICK_MS);
+      // Faster ticks during initial fill so the staggered cross-division
+      // fanout (capped at MAX_DISPATCH_PER_INITIAL_TICK in _wfqTick) doesn't
+      // take 40+ seconds. Falls back to the normal cadence after all
+      // divisions reach panel cap.
+      const divs = Object.keys(this._DIV_TOPOLOGY);
+      const allFilled = divs.every(d => this._wfqInitialFillComplete[d]);
+      await this._delay(allFilled ? this._WFQ_TICK_MS : 2500);
     }
   },
 
@@ -2334,9 +2340,21 @@ window.RackRenderer = {
     const ordered = [...unfilled, ...filled];
 
     // ── Step 3: Fill empty panel slots ────────────────────────
+    // During initial fill (before all divs hit panel cap) we limit
+    // dispatches per tick to MAX_DISPATCH_PER_INITIAL_TICK to prevent
+    // all 5 divisions from kicking off upstream traversals simultaneously
+    // — that's the startup CPU spike. After all divs reach steady state,
+    // only ~1 eviction-driven fill happens per tick anyway, so the limit
+    // is a no-op. Tick interval is also shortened during initial fill
+    // (see _startWfq) so the staggered fanout finishes promptly.
+    const allFilled = divs.every(d => this._wfqInitialFillComplete[d]);
+    const MAX_DISPATCH_PER_INITIAL_TICK = 2;
+    let dispatchedThisTick = 0;
+
     for (const div of ordered) {
       if (this._inFlightCount >= this._MAX_IN_FLIGHT) break;
       if (this._divInFlight[div] >= this._MAX_PER_DIV) continue;
+      if (!allFilled && dispatchedThisTick >= MAX_DISPATCH_PER_INITIAL_TICK) break;
 
       const panelContents = this._getPanelContents(div);
       const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
@@ -2371,6 +2389,8 @@ window.RackRenderer = {
         this._inFlightCount--;
         this._divInFlight[div]--;
       });
+
+      dispatchedThisTick++;
     }
   },
 
