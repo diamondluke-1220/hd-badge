@@ -567,6 +567,17 @@ export function updateBadge(employeeId: string, token: string, input: {
   return result.changes > 0;
 }
 
+/**
+ * Read-only check: does (employeeId, token) match a visible badge?
+ * Used by the cookie-auth recovery endpoint to validate without mutating.
+ */
+export function verifyBadgeToken(employeeId: string, token: string): boolean {
+  const badge = getBadge(employeeId);
+  if (!badge || !badge.is_visible) return false;
+  if (!badge.delete_token) return false;
+  return badge.delete_token === hashToken(token);
+}
+
 export function softDeleteBadge(employeeId: string, token: string): boolean {
   const result = stmts.softDelete.run({ $id: employeeId, $token: hashToken(token) });
   return result.changes > 0;

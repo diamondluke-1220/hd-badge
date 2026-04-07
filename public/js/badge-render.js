@@ -48,6 +48,10 @@ const ACCESS_LEVELS = [
 const ACCESS_CSS = {};
 ACCESS_LEVELS.forEach(a => { ACCESS_CSS[a.label] = a.css; });
 
+// Fan-selectable access levels — excludes ALL ACCESS (band-only, server enforces).
+// Use this anywhere fans pick or are shown access levels (popover, randomizers).
+const FAN_ACCESS_LEVELS = ACCESS_LEVELS.filter(a => a.label !== 'ALL ACCESS');
+
 // Real waveform data — extracted from actual Help Desk MP3s (RMS amplitude, 60 bars)
 const WAVEFORMS = {
   'PLEASE HOLD':        { duration: '2:49', data: [0.877,0.891,0.874,0.765,0.801,0.829,0.844,0.876,0.95,0.918,0.868,0.919,0.9,0.954,0.914,0.941,0.898,0.887,0.892,0.854,0.52,0.92,0.952,0.971,0.87,0.932,0.928,1.0,0.879,0.98,0.95,0.909,0.909,0.886,0.903,0.966,0.915,0.86,0.829,0.803,0.836,0.81,0.795,0.836,0.96,0.904,0.923,0.912,0.93,0.893,0.923,0.934,0.969,0.861,0.834,0.847,0.794,0.459,0.282,0.063] },
@@ -202,11 +206,21 @@ function updateBadge(data) {
     autoShrink(titleEl, 28);
   }
 
-  // Employee ID + Issued date (locked IDs are never regenerated)
+  // Employee ID + Issued date (locked IDs are never regenerated).
+  // Prefer the server-assigned ID from state when present — this is what
+  // makes the preview reflect HD-XXXXX after submit. Without this, the
+  // duplicate-id problem (#badge source vs #badgePreviewClone) prevents
+  // the submit handler's getElementById() from reaching the source element.
   const idEl = document.getElementById('idField');
-  if (idEl && !idEl.dataset.set && !idEl.dataset.locked) {
-    idEl.textContent = generateEmployeeId();
-    idEl.dataset.set = '1';
+  if (idEl) {
+    if (data._editingBadgeId) {
+      idEl.textContent = data._editingBadgeId;
+      idEl.dataset.set = '1';
+      idEl.dataset.locked = '1';
+    } else if (!idEl.dataset.set && !idEl.dataset.locked) {
+      idEl.textContent = generateEmployeeId();
+      idEl.dataset.set = '1';
+    }
   }
   const issuedEl = document.getElementById('issuedField');
   if (issuedEl && !issuedEl.dataset.set) {

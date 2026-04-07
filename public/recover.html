@@ -108,15 +108,21 @@
     return;
   }
 
-  // Verify the token works by testing against the API
-  fetch(`/api/badge/${encodeURIComponent(id)}?token=${encodeURIComponent(token)}`, {
-    method: 'HEAD',
-  }).then(() => {
-    // Store the credentials in localStorage
-    localStorage.setItem('hd-badge', JSON.stringify({
-      employeeId: id,
-      deleteToken: token,
-    }));
+  // Validate token server-side and receive HttpOnly auth cookie
+  fetch(`/api/badge/${encodeURIComponent(id)}/recover`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ token }),
+  }).then(async (resp) => {
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || !data.success) {
+      throw new Error(data.error || 'Recovery failed');
+    }
+
+    // Cookie is now set by the server. Also store the employeeId in
+    // localStorage so the badge editor auto-loads it on next visit.
+    localStorage.setItem('hd-badge', JSON.stringify({ employeeId: id }));
 
     card.innerHTML = `
       <div class="recover-icon">&#9989;</div>

@@ -79,6 +79,7 @@ export function createTestApp(): TestContext {
     getClientIp: (c: any) => c.req.header('x-forwarded-for') || '127.0.0.1',
     markPortalCleared: (_ip: string) => {},
     broadcastNewBadge: (_badge: any) => {},
+    broadcastSSE: (_event: string, _data: any) => {},
     decodeBase64Image: (dataUrl: string): Buffer | null => {
       const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
       if (!match) return null;
@@ -148,6 +149,14 @@ export function publicRequest(app: Hono, method: string, path: string, body?: an
     ...(body ? { body: JSON.stringify(body) } : {}),
   };
   return app.request(path, opts);
+}
+
+/** Extract hd_token cookie value from a response's Set-Cookie header */
+export function extractTokenCookie(res: Response): string | null {
+  const setCookie = res.headers.get('set-cookie');
+  if (!setCookie) return null;
+  const match = setCookie.match(/hd_token=([^;]+)/);
+  return match ? match[1] : null;
 }
 
 /** Valid badge creation payload */

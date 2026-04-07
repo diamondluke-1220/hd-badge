@@ -42,6 +42,7 @@ RUN SHORT_SHA=$(echo "$GIT_SHA" | cut -c1-8) && \
 RUN mkdir -p /app/data/photos /app/data/badges /app/data/thumbs /app/data/headshots
 
 # Default environment
+ENV NODE_ENV=production
 ENV PORT=3030
 ENV ADMIN_LOCAL_ONLY=0
 ENV TRUST_PROXY=1

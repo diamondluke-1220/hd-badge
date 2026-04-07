@@ -1,12 +1,42 @@
 // ─── Public API Routes ────────────────────────────────────
 // Badge creation, retrieval, images, org chart.
 
-import type { Hono } from 'hono';
+import type { Hono, Context } from 'hono';
+import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
-import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore } from '../db';
+import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore, verifyBadgeToken } from '../db';
+
+// ─── Auth Cookie Helpers ─────────────────────────────────
+// hd_token cookie holds the plaintext delete_token (HttpOnly, server only).
+// Server hashes it on lookup; cookie is the only place plaintext lives client-side.
+const TOKEN_COOKIE = 'hd_token';
+const TOKEN_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
+
+function setBadgeCookie(c: Context, token: string): void {
+  setCookie(c, TOKEN_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: TOKEN_COOKIE_MAX_AGE,
+  });
+}
+
+function clearBadgeCookie(c: Context): void {
+  deleteCookie(c, TOKEN_COOKIE, { path: '/' });
+}
+
+/**
+ * Read the badge auth token from the hd_token HttpOnly cookie.
+ * Pre-cookie clients are migrated via auto-promote-on-load in app.js +
+ * the /api/badge/:id/recover endpoint, so cookie is the only auth source.
+ */
+function getBadgeToken(c: Context): string | null {
+  return getCookie(c, TOKEN_COOKIE) || null;
+}
 import { checkRateLimit, checkGameScoreRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
@@ -166,10 +196,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
       }
 
-      // Clean up previous badge from same device (hard-delete only if token is valid)
-      if (body.previousBadgeId && body.previousToken) {
+      // Clean up previous badge from same device (hard-delete only if cookie auth is valid).
+      // Pre-cookie clients auto-promote on page load before reaching this path.
+      const previousToken = getCookie(c, TOKEN_COOKIE);
+      if (body.previousBadgeId && previousToken) {
         // softDeleteBadge verifies the hashed token — use it as auth check
-        const tokenValid = softDeleteBadge(body.previousBadgeId, body.previousToken);
+        const tokenValid = softDeleteBadge(body.previousBadgeId, previousToken);
         if (tokenValid) {
           // Token matched — now fully remove the soft-deleted badge
           hardDeleteBadge(body.previousBadgeId);
@@ -241,10 +273,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       // Discord webhook — notify badge-feed channel (fire-and-forget)
       notifyDiscord(result.employeeId, cleanName, cleanDept, cleanTitle).catch(() => {});
 
+      // Set HttpOnly auth cookie — only place the plaintext token lives client-side
+      setBadgeCookie(c, result.deleteToken);
+
       return c.json({
         success: true,
         employeeId: result.employeeId,
-        deleteToken: result.deleteToken,
         message: 'Welcome to Help Desk LLC.',
       });
     } catch (err: any) {
@@ -310,10 +344,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Invalid request body.' }, 400);
     }
 
-    const { token, name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
+    const { name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
 
+    // Auth: HttpOnly cookie only. Pre-cookie clients auto-promote on page load.
+    const token = getBadgeToken(c);
     if (!token) {
-      return c.json({ success: false, error: 'Delete token required for edits.' }, 400);
+      return c.json({ success: false, error: 'Authentication required. Please refresh the page or recover your badge.' }, 401);
     }
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
@@ -403,6 +439,9 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       if (!success) {
         return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
       }
+
+      // Auth succeeded — refresh cookie Max-Age (extends session by 1 year)
+      setBadgeCookie(c, token);
 
       // Write new photo if provided
       if (photoBuffer) {
@@ -586,16 +625,20 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
   app.delete('/api/badge/:id', (c) => {
     const id = c.req.param('id');
-    const token = c.req.query('token');
 
+    // Auth: HttpOnly cookie only. Pre-cookie clients auto-promote on page load.
+    const token = getBadgeToken(c);
     if (!token) {
-      return c.json({ success: false, error: 'Delete token required.' }, 400);
+      return c.json({ success: false, error: 'Authentication required. Please refresh the page or recover your badge.' }, 401);
     }
 
     const success = softDeleteBadge(id, token);
     if (!success) {
       return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
     }
+
+    // Badge deleted — clear the auth cookie so the user is fully logged out
+    clearBadgeCookie(c);
 
     // Clean up all associated files — user asked for deletion
     const files = [
@@ -610,6 +653,45 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
 
     return c.json({ success: true, message: 'Your badge has been shredded.' });
+  });
+
+  // ─── Recovery: Token → Cookie ─────────────────────────────
+  // Admin-issued recovery URLs land on /recover?id=...&token=..., the page
+  // POSTs here to actually validate the token against the DB hash and set
+  // an HttpOnly cookie. Replaces the old "trust the URL, hope for the best"
+  // localStorage-write approach. Rate-limited to prevent UUID brute force.
+
+  app.post('/api/badge/:id/recover', async (c) => {
+    const ip = getClientIp(c);
+    const rateCheck = checkRateLimit(ip);
+    if (!rateCheck.allowed) {
+      log('warn', 'rate-limit', `Recover blocked ${ip}: ${rateCheck.message}`);
+      return c.json({ success: false, error: rateCheck.message }, 429);
+    }
+
+    const id = c.req.param('id');
+    let body: any;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+    }
+
+    const token = body?.token;
+    if (!token || typeof token !== 'string') {
+      return c.json({ success: false, error: 'Recovery token required.' }, 400);
+    }
+
+    if (!verifyBadgeToken(id, token)) {
+      // Generic error — don't leak whether the badge exists
+      log('warn', 'recover', `Failed recovery attempt for ${id} from ${ip}`);
+      return c.json({ success: false, error: 'Recovery link invalid or expired.' }, 403);
+    }
+
+    // Token valid — issue HttpOnly cookie. User is now authenticated.
+    setBadgeCookie(c, token);
+    log('info', 'recover', `Recovered badge ${id} for ${ip}`);
+    return c.json({ success: true, employeeId: id });
   });
 
   // ─── Org Chart ───────────────────────────────────────────

@@ -90,17 +90,97 @@ const CLICK_MAP = [
 ];
 
 let _discoveryDone = false;
+let _suppressAutoDiscover = false; // page-load handler manages discover-pulse for new users
+let _firstLoadDemoTimers = [];
+
+/**
+ * First-load tutorial: cycle each editable field through 3 random values
+ * during its discovery pulse window (3.6s per field, value flips at start,
+ * middle, end). The user sees the highlight AND multiple values flash by,
+ * teaching "this is editable" + "there are LOTS of options" in one motion.
+ * Skips name and photo — those stay empty as CTAs. Cancels on first user click.
+ */
+function _scheduleFirstLoadDemo() {
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  // Pick N distinct items from an array (avoids back-to-back duplicates)
+  const pickN = (arr, n) => {
+    if (arr.length <= n) return arr.slice().sort(() => Math.random() - 0.5);
+    const out = [];
+    const used = new Set();
+    while (out.length < n) {
+      const idx = Math.floor(Math.random() * arr.length);
+      if (!used.has(idx)) { used.add(idx); out.push(arr[idx]); }
+    }
+    return out;
+  };
+
+  // Slot-machine feel: 3 quick value flips clustered at the START of each
+  // field's pulse (within ~400ms), then the field locks in for the remaining
+  // ~3.2s of its highlight. Spin → land → admire.
+  // Pulse offsets match app.css:230-236 .discover-pulse keyframes (3.6s each).
+  const CYCLE_OFFSETS = [0, 180, 360];
+
+  // Pre-generate 3 distinct values per field so each cycle looks different
+  const deptCycle = pickN(DEPARTMENTS, 3);
+  const titleCycle = pickN(TITLES, 3);
+  const accessCycle = pickN(FAN_ACCESS_LEVELS, 3);
+  const songCycle = pickN(SONG_LIST, 3);
+  const captionCycle = pickN(WAVEFORM_CAPTIONS, 3);
+
+  // Top-down badge order: access → dept → title → song → caption.
+  // startMs is relative to when this function is called (page-load handler
+  // calls it after the 1.4s hint intro). Values match CSS pulse delays
+  // in app.css for the matching .discover-pulse selectors.
+  const fields = [
+    { startMs: 0, cycle: accessCycle, apply: (v) => {
+        state.accessLevel = (v && v.label) || v;
+      }
+    },
+    { startMs: 800, cycle: deptCycle, apply: (v) => {
+        state.department = v.name;
+      }
+    },
+    { startMs: 1600, cycle: titleCycle, apply: (v) => { state.title = v; } },
+    { startMs: 2400, cycle: songCycle, apply: (v) => {
+        state.song = v;
+        state.waveStyle = state.waveStyle === 'barcode' ? 'sticker' : 'barcode';
+      }
+    },
+    { startMs: 3200, cycle: captionCycle, apply: (v) => { state.caption = v; } },
+  ];
+
+  for (const field of fields) {
+    field.cycle.forEach((value, i) => {
+      const t = setTimeout(() => {
+        field.apply(value);
+        refreshPreview();
+      }, field.startMs + CYCLE_OFFSETS[i]);
+      _firstLoadDemoTimers.push(t);
+    });
+  }
+}
+
+function _cancelFirstLoadDemo() {
+  for (const t of _firstLoadDemoTimers) clearTimeout(t);
+  _firstLoadDemoTimers = [];
+  // Also drop the intro class so the hint snaps to its normal state immediately
+  const hint = document.getElementById('editHint');
+  if (hint) hint.classList.remove('intro');
+}
 
 function attachBadgeClickHandlers() {
   const previewArea = document.getElementById('badgePreviewArea');
   if (!previewArea) return;
 
-  // One-time discovery pulse — staggered outline flash across all editable elements
-  if (!_discoveryDone) {
+  // One-time discovery pulse — staggered outline flash across all editable elements.
+  // For new users (no existing badge), the page-load handler drives this manually
+  // so it can be sequenced with the hint intro animation. Returning users still
+  // get the auto-fire path here.
+  if (!_discoveryDone && !_suppressAutoDiscover) {
     _discoveryDone = true;
     previewArea.classList.add('discover-pulse');
-    // Remove after animations complete (~2.4s delay + 3×1.2s anim = ~6s)
-    setTimeout(() => previewArea.classList.remove('discover-pulse'), 6500);
+    // Remove after last pulse ends: 4.8s delay + 0.7s duration = 5.5s, plus buffer
+    setTimeout(() => previewArea.classList.remove('discover-pulse'), 6000);
   }
 
   CLICK_MAP.forEach(({ selector, field }) => {
@@ -113,6 +193,9 @@ function attachBadgeClickHandlers() {
         const hint = document.getElementById('editHint');
         if (hint) hint.classList.add('hidden');
         previewArea.classList.remove('discover-pulse');
+        // Stop any pending first-load demo randomizations so the user
+        // doesn't see the field they just clicked change under them
+        _cancelFirstLoadDemo();
         showPopover(el, field);
       });
     }
@@ -367,13 +450,14 @@ function buildTitlePopover() {
 }
 
 function buildAccessPopover() {
-  const cards = ACCESS_LEVELS.map(a => {
+  // Fans never see ALL ACCESS — band-only, server-enforced
+  const cards = FAN_ACCESS_LEVELS.map(a => {
     const sel = state.accessLevel === a.label ? ' selected' : '';
     const colorClass = a.css ? ` card-access-${a.css}` : '';
     return `<button class="card${sel}${colorClass}" data-value="${esc(a.label)}">${esc(a.label)}</button>`;
   }).join('');
 
-  const isPreset = ACCESS_LEVELS.some(a => a.label === state.accessLevel);
+  const isPreset = FAN_ACCESS_LEVELS.some(a => a.label === state.accessLevel);
   const customVal = isPreset ? '' : state.accessLevel;
 
   return `
@@ -848,8 +932,9 @@ async function submitBadge(photoPublic) {
       caption: state.caption,
       waveStyle: state.waveStyle,
       photoPublic,
-      ...(isEdit ? { token: stored.deleteToken } : {}),
-      ...(!isEdit && stored.employeeId ? { previousBadgeId: stored.employeeId, previousToken: stored.deleteToken } : {}),
+      // Auth: HttpOnly hd_token cookie is auto-sent by the browser.
+      // The server validates it and rejects requests without a valid cookie.
+      ...(!isEdit && stored.employeeId ? { previousBadgeId: stored.employeeId } : {}),
     };
     // Only send photo field if user uploaded a new one (avoids erasing existing photo on edit)
     if (state.photoUrl) {
@@ -864,6 +949,7 @@ async function submitBadge(photoPublic) {
     const resp = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify(body),
     });
 
@@ -871,9 +957,10 @@ async function submitBadge(photoPublic) {
 
     if (data.success) {
       if (!isEdit) {
+        // Auth token is now in an HttpOnly cookie set by the server.
+        // localStorage only holds the public employee ID for auto-load UX.
         localStorage.setItem('hd-badge', JSON.stringify({
           employeeId: data.employeeId,
-          deleteToken: data.deleteToken,
         }));
       }
 
@@ -987,11 +1074,15 @@ async function removeBadge() {
   const stored = localStorage.getItem('hd-badge');
   if (!stored) return;
 
-  const { employeeId, deleteToken } = JSON.parse(stored);
+  const { employeeId } = JSON.parse(stored);
   if (!confirm('Remove your badge from the org chart? This cannot be undone.')) return;
 
   try {
-    const resp = await fetch(`/api/badge/${employeeId}?token=${deleteToken}`, { method: 'DELETE' });
+    // Auth via HttpOnly hd_token cookie (auto-sent by browser).
+    const resp = await fetch(`/api/badge/${employeeId}`, {
+      method: 'DELETE',
+      credentials: 'same-origin',
+    });
     const data = await resp.json();
     if (data.success) {
       localStorage.removeItem('hd-badge');
@@ -1234,7 +1325,7 @@ function sudoRandomize() {
   const dept = pick(DEPARTMENTS);
   state.department = dept.name;
   state.title = pick(TITLES);
-  state.accessLevel = DEPT_ACCESS[dept.name]?.access || pick(ACCESS_LEVELS).label;
+  state.accessLevel = DEPT_ACCESS[dept.name]?.access || pick(FAN_ACCESS_LEVELS).label;
   state.song = pick(SONG_LIST);
   state.waveStyle = pick(['barcode', 'sticker']);
   state.caption = pick(WAVEFORM_CAPTIONS);
@@ -1542,12 +1633,38 @@ if (window.location.pathname === '/orgchart') {
   placeholder.className = 'view-dropdown-placeholder';
   document.querySelector('.app-header').appendChild(placeholder);
 
+  // Scrub stale localStorage keys from removed features
+  localStorage.removeItem('hd-codex'); // arcade boss-discovery, replaced in arcade overhaul
+  // FOLLOWUP: when game-engine.js is removed (see hdbadge-backlog), also scrub
+  // 'hd_game_badge_id' and 'hd_tutorial_seen' here.
+
   const storedBadge = localStorage.getItem('hd-badge');
   let existingId = null;
+  let legacyToken = null;
   if (storedBadge) {
     try {
-      existingId = JSON.parse(storedBadge).employeeId;
+      const parsed = JSON.parse(storedBadge);
+      existingId = parsed.employeeId;
+      legacyToken = parsed.deleteToken || null;
     } catch { /* ignore corrupt data */ }
+  }
+
+  // Auto-promote: if localStorage holds a legacy plaintext token (from before
+  // the cookie migration), exchange it for an HttpOnly cookie now and scrub
+  // the plaintext from localStorage. This is fire-and-forget — the existing
+  // editor flow keeps working whether this succeeds or not.
+  if (existingId && legacyToken) {
+    fetch(`/api/badge/${encodeURIComponent(existingId)}/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ token: legacyToken }),
+    }).then(async (r) => {
+      if (r.ok) {
+        // Cookie is set. Strip the plaintext token from localStorage forever.
+        localStorage.setItem('hd-badge', JSON.stringify({ employeeId: existingId }));
+      }
+    }).catch(() => { /* offline or transient — try again next visit */ });
   }
 
   const idEl = document.getElementById('idField');
@@ -1613,6 +1730,33 @@ if (window.location.pathname === '/orgchart') {
     idEl.textContent = 'HD-?????';
     idEl.dataset.set = '1';
     idEl.dataset.locked = '1'; // Prevent randomization — server assigns real ID
+
+    // Tutorial sequence: hint intro (700ms) → discover-pulse + slot machine.
+    // Suppress the auto-fire of discover-pulse in attachBadgeClickHandlers so
+    // we can sequence it manually after the hint intro lands.
+    _suppressAutoDiscover = true;
+
+    const hint = document.getElementById('editHint');
+    if (hint) hint.classList.add('intro');
+
+    setTimeout(() => {
+      // Intro done — drop the intro class so hintPulse infinite animation resumes
+      if (hint) hint.classList.remove('intro');
+
+      // Now fire the discovery pulse cascade. CSS delays start counting from
+      // this moment, so timings line up with slot machine.
+      const previewArea = document.getElementById('badgePreviewArea');
+      if (previewArea) {
+        _discoveryDone = true;
+        previewArea.classList.add('discover-pulse');
+        // Last pulse: delay 4.8s + duration 0.7s = 5.5s, plus buffer
+        setTimeout(() => previewArea.classList.remove('discover-pulse'), 6000);
+      }
+
+      // Slot machine: cycles each editable field through 3 random values
+      // synchronized with its discovery pulse window. Tutorial via demonstration.
+      _scheduleFirstLoadDemo();
+    }, 1400); // matches hintIntro animation duration in app.css
   }
 
   document.getElementById('issuedField').textContent = generateIssuedDate();

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { createTestApp, cleanup, publicRequest, validBadgePayload } from '../helpers/setup';
+import { createTestApp, cleanup, publicRequest, validBadgePayload, extractTokenCookie } from '../helpers/setup';
 
 let ctx: ReturnType<typeof createTestApp>;
 
@@ -18,7 +18,10 @@ describe('Badge CRUD', () => {
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.employeeId).toMatch(/^HD-\d{5}$/);
-    expect(json.deleteToken).toBeTruthy();
+    // Auth token is in HttpOnly cookie, NOT in JSON response
+    expect(json.deleteToken).toBeUndefined();
+    const setCookie = res.headers.get('set-cookie') || '';
+    expect(setCookie).toContain('hd_token=');
   });
 
   it('rejects badge with missing name', async () => {
@@ -72,14 +75,19 @@ describe('Badge CRUD', () => {
     expect(res.status).toBe(404);
   });
 
-  it('deletes badge with correct token', async () => {
+  it('deletes badge with correct cookie', async () => {
     const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
       validBadgePayload({ name: 'Delete Me' }),
       { 'x-forwarded-for': '10.99.0.3' }
     );
-    const { employeeId, deleteToken } = await createRes.json();
+    const { employeeId } = await createRes.json();
+    const token = extractTokenCookie(createRes);
+    expect(token).toBeTruthy();
 
-    const delRes = await publicRequest(ctx.app, 'DELETE', `/api/badge/${employeeId}?token=${deleteToken}`);
+    const delRes = await publicRequest(ctx.app, 'DELETE', `/api/badge/${employeeId}`,
+      undefined,
+      { cookie: `hd_token=${token}` }
+    );
     expect(delRes.status).toBe(200);
 
     // Badge should now be not found (hidden)
@@ -87,14 +95,139 @@ describe('Badge CRUD', () => {
     expect(getRes.status).toBe(404);
   });
 
-  it('rejects delete with wrong token', async () => {
-    // Use a band member which always exists
-    const res = await publicRequest(ctx.app, 'DELETE', '/api/badge/HD-00001?token=wrong-token');
+  it('rejects delete with wrong cookie', async () => {
+    const res = await publicRequest(ctx.app, 'DELETE', '/api/badge/HD-00001',
+      undefined,
+      { cookie: 'hd_token=wrong-token' }
+    );
     expect(res.status).toBe(403);
   });
 
-  it('rejects delete without token', async () => {
+  it('rejects delete without cookie', async () => {
     const res = await publicRequest(ctx.app, 'DELETE', '/api/badge/HD-00001');
+    expect(res.status).toBe(401);
+  });
+
+  // ─── Cookie auth ──────────────────────────────────────────
+
+  it('POST /api/badge sets hd_token HttpOnly cookie on success', async () => {
+    const res = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Cookie Set' }),
+      { 'x-forwarded-for': '10.99.0.10' }
+    );
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get('set-cookie') || '';
+    expect(setCookie).toContain('hd_token=');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Lax');
+  });
+
+  it('PUT /api/badge/:id with cookie auth succeeds', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Cookie Edit' }),
+      { 'x-forwarded-for': '10.99.0.11' }
+    );
+    const { employeeId } = await createRes.json();
+    const token = extractTokenCookie(createRes);
+
+    const res = await publicRequest(ctx.app, 'PUT', `/api/badge/${employeeId}`,
+      { ...validBadgePayload({ name: 'Cookie Edit Updated' }) },
+      { 'x-forwarded-for': '10.99.0.11', cookie: `hd_token=${token}` }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+  });
+
+  it('PUT /api/badge/:id with body token is rejected (no backward compat)', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Body Edit Reject' }),
+      { 'x-forwarded-for': '10.99.0.12' }
+    );
+    const { employeeId } = await createRes.json();
+    const token = extractTokenCookie(createRes);
+
+    // Body token without cookie must NOT be honored
+    const res = await publicRequest(ctx.app, 'PUT', `/api/badge/${employeeId}`,
+      { ...validBadgePayload({ name: 'Should Fail' }), token },
+      { 'x-forwarded-for': '10.99.0.12' }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('PUT /api/badge/:id with no token returns 401', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'No Token Edit' }),
+      { 'x-forwarded-for': '10.99.0.13' }
+    );
+    const { employeeId } = await createRes.json();
+
+    const res = await publicRequest(ctx.app, 'PUT', `/api/badge/${employeeId}`,
+      validBadgePayload({ name: 'Should Fail' }),
+      { 'x-forwarded-for': '10.99.0.13' }
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('PUT /api/badge/:id refreshes the cookie on success', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Refresh Cookie' }),
+      { 'x-forwarded-for': '10.99.0.18' }
+    );
+    const { employeeId } = await createRes.json();
+    const token = extractTokenCookie(createRes);
+
+    const res = await publicRequest(ctx.app, 'PUT', `/api/badge/${employeeId}`,
+      validBadgePayload({ name: 'Refreshed Name' }),
+      { 'x-forwarded-for': '10.99.0.18', cookie: `hd_token=${token}` }
+    );
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.get('set-cookie') || '';
+    expect(setCookie).toContain('hd_token=');
+  });
+
+  it('POST /api/badge/:id/recover with valid token sets cookie', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Recover Test' }),
+      { 'x-forwarded-for': '10.99.0.15' }
+    );
+    const { employeeId } = await createRes.json();
+    const token = extractTokenCookie(createRes);
+
+    const res = await publicRequest(ctx.app, 'POST', `/api/badge/${employeeId}/recover`,
+      { token },
+      { 'x-forwarded-for': '10.99.0.15' }
+    );
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.success).toBe(true);
+    expect(json.employeeId).toBe(employeeId);
+    const setCookie = res.headers.get('set-cookie') || '';
+    expect(setCookie).toContain('hd_token=');
+    expect(setCookie).toContain('HttpOnly');
+  });
+
+  it('POST /api/badge/:id/recover with invalid token returns 403', async () => {
+    const createRes = await publicRequest(ctx.app, 'POST', '/api/badge',
+      validBadgePayload({ name: 'Recover Bad' }),
+      { 'x-forwarded-for': '10.99.0.16' }
+    );
+    const { employeeId } = await createRes.json();
+
+    const res = await publicRequest(ctx.app, 'POST', `/api/badge/${employeeId}/recover`,
+      { token: 'definitely-not-the-real-token' },
+      { 'x-forwarded-for': '10.99.0.16' }
+    );
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+  });
+
+  it('POST /api/badge/:id/recover requires token in body', async () => {
+    const res = await publicRequest(ctx.app, 'POST', '/api/badge/HD-00001/recover',
+      {},
+      { 'x-forwarded-for': '10.99.0.17' }
+    );
     expect(res.status).toBe(400);
   });
 
