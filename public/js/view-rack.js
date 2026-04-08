@@ -1612,7 +1612,7 @@ window.RackRenderer = {
 
   _packetClipId: 0, // incrementing ID for unique clip-path references
 
-  _createBadgePacket(badge, radius = 20) {
+  _createBadgePacket(badge, radius = 24) {
     // Round portrait photo with division-colored ring — travels along cables
     if (!this._cableSvg) return null;
     const divTheme = getDivisionForDept(badge.department, badge.isBandMember);
@@ -1640,15 +1640,6 @@ window.RackRenderer = {
     img.setAttribute('clip-path', `url(#${id})`);
     img.setAttribute('preserveAspectRatio', 'xMidYMid slice');
     g.appendChild(img);
-
-    // Glow layer — larger semi-transparent circle behind the ring (no filter needed)
-    const glow = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    glow.setAttribute('r', radius + 4);
-    glow.setAttribute('fill', 'none');
-    glow.setAttribute('stroke', ringColor);
-    glow.setAttribute('stroke-width', '3');
-    glow.setAttribute('opacity', '0.3');
-    g.appendChild(glow);
 
     // Ring border
     const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
