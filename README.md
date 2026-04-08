@@ -45,7 +45,7 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 - Search, filters (date/division/dept/photo/status), payment/print tracking, content flagging
 - Two-tier profanity filter (hard-block hate speech, soft-flag edgy content)
 - Photo upload with auto-render (badge re-rendered immediately after upload)
-- Badge recovery — admin reissues token, generates recovery link for fans who lost localStorage
+- Badge recovery — admin reissues token, generates recovery link for fans who lost their cookie (cleared storage, new device, etc.)
 - Analytics dashboard, CSV export (formula injection protected), system logs
 - Toast notifications (no alert() dialogs), row click-to-highlight, toggle action feedback
 - Demo mode + presentation mode controls
@@ -63,7 +63,7 @@ Built for merch tables — runs on a tablet or laptop at shows, optionally behin
 
 - **Runtime:** [Bun](https://bun.sh)
 - **Server:** [Hono](https://hono.dev)
-- **Database:** SQLite (bun:sqlite, WAL mode, 5 migrations)
+- **Database:** SQLite (bun:sqlite, WAL mode, 9 migrations)
 - **Badge Rendering:** [Playwright](https://playwright.dev) (server-side, warm page reuse)
 - **Image Processing:** [sharp](https://sharp.pixelplumbing.com) (thumbnails, headshots, corner rounding)
 - **Client-side:** Vanilla JS, Cropper.js
@@ -268,8 +268,9 @@ graph LR
 |---|---|---|---|
 | `/api/badge` | POST | Rate limited | Create badge → Playwright render |
 | `/api/badge/:id` | GET | Public | Badge metadata (name, dept, title, caption, etc.) |
-| `/api/badge/:id` | PUT | Delete token | Edit badge → re-render + quiet SSE update |
-| `/api/badge/:id` | DELETE | Delete token | Self-service badge removal + file cleanup |
+| `/api/badge/:id` | PUT | HttpOnly cookie (`hd_token`) | Edit badge → re-render + quiet SSE update |
+| `/api/badge/:id` | DELETE | HttpOnly cookie (`hd_token`) | Self-service badge removal + file cleanup |
+| `/api/badge/:id/recover` | POST | Raw delete token (body) | Validate token against DB hash, set `hd_token` cookie (used by recovery links) |
 | `/api/badge/:id/image` | GET | Public | Serve badge PNG (respects photo privacy) |
 | `/api/badge/:id/thumb` | GET | Public | 320px thumbnail (lazy-generated, cached) |
 | `/api/badge/:id/headshot` | GET | Public | 200px headshot (lazy-generated, privacy-aware) |
@@ -289,6 +290,8 @@ graph LR
 
 ## Security
 
+- HttpOnly `hd_token` cookie for badge edit/delete auth (Secure flag in production, SameSite=Lax, auto-migrates legacy localStorage tokens on first load then scrubs plaintext)
+- Delete tokens stored as SHA-256 hashes (`hashToken()`); raw token returned to user once on creation, never stored
 - Timing-safe admin token comparison (crypto.timingSafeEqual)
 - Brute force protection (5 fails = 15min lockout, cleared on success)
 - Photo upload magic byte validation (JPEG/PNG only) + max dimension check
