@@ -17,7 +17,7 @@ window.RackRenderer = {
   // ─── Phase 3: Pool State ───────────────────────────────────
   _badgePool: [],         // all non-exec badges, grouped by divTheme
   _divInFlight: {},       // divTheme → count of concurrent animations (max _MAX_PER_DIV)
-  _MAX_PER_DIV: 2,       // max concurrent ingress per division
+  _MAX_PER_DIV: 1,       // serialize ingress per division — beam path and switchport LED are shared, two concurrent ingresses in one div collide visually
 
   // ─── WFQ Scheduler State ─────────────────────────────────
   // Weighted Fair Queuing with tick-driven eviction. No state machine, no TTL timers.
@@ -941,7 +941,7 @@ window.RackRenderer = {
 
     // Row of switch ports — all start dark, light up as badges arrive (or pre-lit for existing badges)
     const totalPorts = device.totalPorts || 12;
-    const employeePorts = device.portCount; // already capped at 12
+    const employeePorts = device.portCount; // capped upstream per device (12 or 24)
     const themeSlug = device.theme.replace('_', '');
     // Seed from theme name for deterministic cross-switch group distribution
     const switchSeed = Array.from(device.theme).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
@@ -1015,8 +1015,8 @@ window.RackRenderer = {
   },
 
   _renderPatchPanel(device) {
-    // 1U = 12 ports. Show first 12 employees, rest handled by pool rotation (Phase 3).
-    const totalPorts = 12;
+    // 12 ports per U row. _custom is 2U → 24 ports; standard panels are 1U → 12.
+    const totalPorts = (device.uSize || 1) * 12;
     const filledCount = Math.min(device.employees.length, totalPorts);
     const el = document.createElement('div');
     el.className = `rack-device rack-device-patch rack-device-${device.uSize}u`;
@@ -2396,7 +2396,11 @@ window.RackRenderer = {
 
       const panelContents = this._getPanelContents(div);
       const cap = this._DIV_TOPOLOGY[div]?.panelCap || 12;
-      if (panelContents.length >= cap) continue;
+      // Reserve slots for in-flight ingresses: DOM hasn't caught up yet,
+      // so count queued-but-not-landed badges against capacity to prevent
+      // double-booking the same division in a single tick or across ticks.
+      const pending = this._divInFlight[div] || 0;
+      if (panelContents.length + pending >= cap) continue;
 
       // Find a badge from this div's pool not currently on panel
       const divPool = this._wfqDivPools[div] || [];
@@ -2407,8 +2411,21 @@ window.RackRenderer = {
       // Dispatch ingress animation
       this._divInFlight[div]++;
       this._inFlightCount++;
-      const weight = this._wfqWeight[div] || 0.1;
-      this._wfqVirtualTime[div] += 1 / weight;
+      // WFQ virtual-time cost:
+      //  - While a division is still doing initial fill, weight by empty-slot
+      //    count — more empty slots = smaller cost = more rounds. This makes
+      //    Independent Contractors (24 slots) win more rounds than 12-slot
+      //    divs until it catches up, instead of being starved by pool-size WFQ.
+      //  - Once initial fill is complete, fall back to standard pool-fraction
+      //    WFQ for steady-state rotation fairness.
+      if (this._wfqInitialFillComplete[div]) {
+        const weight = this._wfqWeight[div] || 0.1;
+        this._wfqVirtualTime[div] += 1 / weight;
+      } else {
+        const emptyBefore = cap - panelContents.length; // includes the slot we're about to fill
+        const fillWeight = Math.max(emptyBefore, 1) / cap;
+        this._wfqVirtualTime[div] += 1 / fillWeight;
+      }
 
       const badge = candidate.badge;
       const fillDiv = div; // capture for closure
@@ -2492,7 +2509,13 @@ window.RackRenderer = {
 
     // 2. Switch port LED → amber → red
     if (portEl) {
-      const portIdx = Array.from(portEl.parentNode.children).filter(c => !c.classList.contains('rack-port-empty')).indexOf(portEl);
+      // Global index across the whole patch panel (both rows), matching
+      // switch port numbering. Previously row-relative → wrong port on row 2.
+      const panelEl = portEl.closest('.rack-device-patch');
+      const allPorts = panelEl
+        ? Array.from(panelEl.querySelectorAll('.rack-port, .rack-port-empty'))
+        : [];
+      const portIdx = allPorts.indexOf(portEl);
       const switchPort = switchEl?.querySelector(`[data-switch-port="${portIdx}"]`);
       if (switchPort) {
         switchPort.classList.add('rack-conn-port-shutdown');
@@ -3782,9 +3805,15 @@ window.RackRenderer = {
           // and use its sibling-index for BOTH the switch port LED and the
           // beam source. 1:1 network jack ↔ patch panel port mapping.
           const emptyPort = panel?.querySelector('.rack-port-empty');
+          // Global slot index across ALL rows of the patch panel (0..N-1),
+          // matching switch port numbering. Must not be row-relative — _custom
+          // is 2 rows × 12, so row-relative indexing collapses slots 12-23 to 0-11.
+          const allPorts = panel
+            ? Array.from(panel.querySelectorAll('.rack-port, .rack-port-empty'))
+            : [];
           const slotIdx = emptyPort
-            ? Array.from(emptyPort.parentNode.children).indexOf(emptyPort)
-            : (panel?.querySelectorAll('.rack-port').length || 0) - 1;
+            ? allPorts.indexOf(emptyPort)
+            : allPorts.length - 1;
 
           let srcCoords = null;
           if (sw) {
