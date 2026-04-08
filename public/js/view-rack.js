@@ -3833,6 +3833,10 @@ window.RackRenderer = {
           }
 
           if (srcCoords && destCoords) {
+            // Strip the division-colored ring border before beam-down so the
+            // portrait rides the beam clean. clipPath's inner <circle> is
+            // scoped out by :scope > circle (direct children only).
+            pkt.el?.querySelectorAll(':scope > circle').forEach(c => c.remove());
             await this._beamDown(pkt, srcCoords.x, srcCoords.y, destCoords.x, destCoords.y, 2000);
           }
           break;
