@@ -465,8 +465,14 @@ body.view-rack .public-orgchart {
   position: relative;
 }
 
-.rack-fw-fan-1, .rack-fw-fan-2 {
-  /* JS-driven rotation via class toggle — no CSS animation */
+/* Restored to CSS-driven animations (previously JS-toggled during CPU
+   optimization probe; measured impact was negligible, 2 animations are
+   trivially composited). */
+.rack-fw-fan-1 {
+  animation: rack-fan-spin 3s linear infinite;
+}
+.rack-fw-fan-2 {
+  animation: rack-fan-spin 3.4s linear infinite;
 }
 
 /* Fan center hub */
@@ -591,9 +597,16 @@ body.view-rack .public-orgchart {
   opacity: 0.8;
 }
 
-/* Wifi arcs — JS-driven opacity toggle via device LED groups */
-.rack-wifi-arc-1, .rack-wifi-arc-2, .rack-wifi-arc-3 {
-  opacity: 1;
+/* Wifi arcs — restored to staggered CSS pulse for the "radiating signal"
+   look. Three composited opacity animations. */
+.rack-wifi-arc-1 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite;
+}
+.rack-wifi-arc-2 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite 0.4s;
+}
+.rack-wifi-arc-3 {
+  animation: rack-wifi-pulse 3s ease-in-out infinite 0.8s;
 }
 
 @keyframes rack-wifi-pulse {

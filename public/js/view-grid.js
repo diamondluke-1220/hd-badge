@@ -356,9 +356,9 @@ window.GridRenderer = {
             byDept[b.department].push(b);
           });
 
-          // Separate 2+ member groups from solo badges
-          const grouped = [];   // depts with 2+ members (get sub-headers)
-          const ungrouped = []; // solo dept badges (flow into grid without header)
+          // Separate 2+ member groups from solo badges (within this page only)
+          const grouped = [];
+          const ungrouped = [];
           Object.entries(byDept).forEach(([dept, members]) => {
             if (members.length >= 2) {
               grouped.push({ dept, members });
@@ -367,49 +367,98 @@ window.GridRenderer = {
             }
           });
 
-          // Only render the section if there are any badges
           if (grouped.length === 0 && ungrouped.length === 0) return;
 
-          const section = document.createElement('div');
-          section.className = 'division-section';
+          // Find-or-create the _custom section (merge across pages instead
+          // of stacking duplicate section headers on Load More).
+          let section = content.querySelector(`.division-section > .division-header.${div.css}`)?.parentElement;
+          if (!section) {
+            section = document.createElement('div');
+            section.className = 'division-section';
 
-          const header = document.createElement('div');
-          header.className = `division-header ${div.css}`;
-          header.innerHTML = `
-            <div class="division-header-name">${esc(div.name)}</div>
-            <div class="division-header-count">${badges.length} member${badges.length !== 1 ? 's' : ''}</div>
-          `;
-          section.appendChild(header);
+            const header = document.createElement('div');
+            header.className = `division-header ${div.css}`;
+            header.innerHTML = `
+              <div class="division-header-name">${esc(div.name)}</div>
+              <div class="division-header-count">0 members</div>
+            `;
+            section.appendChild(header);
 
-          const connector = document.createElement('div');
-          connector.className = 'division-connector';
-          section.appendChild(connector);
-
-          // Render 2+ member departments with sub-headers
-          grouped.forEach(({ dept, members }) => {
-            const subHeader = document.createElement('div');
-            subHeader.className = 'custom-dept-subheader';
-            subHeader.innerHTML = `${esc(dept)} <span class="custom-dept-count">${members.length}</span>`;
-            section.appendChild(subHeader);
-
-            const grid = document.createElement('div');
-            grid.className = 'badge-grid';
-            members.forEach(b => grid.appendChild(this._createBadgeCard(b)));
-            section.appendChild(grid);
-          });
-
-          // Render solo badges in a flat grid (no sub-header)
-          if (ungrouped.length > 0) {
-            const grid = document.createElement('div');
-            grid.className = 'badge-grid';
-            ungrouped.forEach(b => grid.appendChild(this._createBadgeCard(b)));
-            section.appendChild(grid);
+            const connector = document.createElement('div');
+            connector.className = 'division-connector';
+            section.appendChild(connector);
+            content.appendChild(section);
           }
 
-          content.appendChild(section);
+          // Merge 2+ member departments into existing sub-headers or create new.
+          // New sub-headers insert BEFORE any existing flat grid so sub-grouped
+          // depts always render above the ungrouped tail.
+          const flatGrid = section.querySelector('.badge-grid.custom-flat-grid');
+          grouped.forEach(({ dept, members }) => {
+            const existingSub = Array.from(section.querySelectorAll('.custom-dept-subheader'))
+              .find(el => el.dataset.dept === dept);
+            if (existingSub) {
+              const grid = existingSub.nextElementSibling;
+              if (grid && grid.classList.contains('badge-grid')) {
+                members.forEach(b => grid.appendChild(this._createBadgeCard(b)));
+                const total = grid.querySelectorAll('.badge-grid-card').length;
+                existingSub.innerHTML = `${esc(dept)} <span class="custom-dept-count">${total}</span>`;
+              }
+            } else {
+              const subHeader = document.createElement('div');
+              subHeader.className = 'custom-dept-subheader';
+              subHeader.dataset.dept = dept;
+              subHeader.innerHTML = `${esc(dept)} <span class="custom-dept-count">${members.length}</span>`;
+
+              const grid = document.createElement('div');
+              grid.className = 'badge-grid';
+              members.forEach(b => grid.appendChild(this._createBadgeCard(b)));
+
+              if (flatGrid) {
+                section.insertBefore(subHeader, flatGrid);
+                section.insertBefore(grid, flatGrid);
+              } else {
+                section.appendChild(subHeader);
+                section.appendChild(grid);
+              }
+            }
+          });
+
+          // Merge solo badges into existing flat grid or create one
+          if (ungrouped.length > 0) {
+            let fg = flatGrid;
+            if (!fg) {
+              fg = document.createElement('div');
+              fg.className = 'badge-grid custom-flat-grid';
+              section.appendChild(fg);
+            }
+            ungrouped.forEach(b => fg.appendChild(this._createBadgeCard(b)));
+          }
+
+          // Update division header total count from actual DOM cards
+          const totalCount = section.querySelectorAll('.badge-grid-card').length;
+          const countEl = section.querySelector('.division-header-count');
+          if (countEl) {
+            countEl.textContent = `${totalCount} member${totalCount !== 1 ? 's' : ''}`;
+          }
         } else {
-          const section = this._createDivisionSection(div, badges);
-          content.appendChild(section);
+          // Regular division: find-or-create section, append to existing grid
+          let section = content.querySelector(`.division-section > .division-header.${div.css}`)?.parentElement;
+          if (!section) {
+            section = this._createDivisionSection(div, badges);
+            content.appendChild(section);
+          } else {
+            const grid = section.querySelector('.badge-grid');
+            if (grid) {
+              badges.forEach(b => grid.appendChild(this._createBadgeCard(b)));
+              // Update division header count from DOM
+              const totalCount = section.querySelectorAll('.badge-grid-card').length;
+              const countEl = section.querySelector('.division-header-count');
+              if (countEl) {
+                countEl.textContent = `${totalCount} member${totalCount !== 1 ? 's' : ''}`;
+              }
+            }
+          }
         }
       });
     } else {

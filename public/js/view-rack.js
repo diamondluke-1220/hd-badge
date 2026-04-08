@@ -192,19 +192,19 @@ window.RackRenderer = {
       countEl.textContent = `${ports.length}`;
     }
 
-    // Light up corresponding switch port above the patch panel
+    // Light up corresponding switch port above the patch panel.
+    // Use the placed port's ACTUAL sibling index (1:1 with switch port),
+    // not a filled-count proxy — during rotation the placed slot may be
+    // anywhere in the panel (wherever eviction left a gap), not the tail.
     const divThemeEsc = CSS.escape(divTheme);
     const sw = this._container.querySelector(`.rack-device-switch[data-theme="${divThemeEsc}"]`);
     if (sw) {
-      const filledPorts = panel.querySelectorAll('.rack-port:not(.rack-port-empty)').length;
-      // Ports are 0-indexed (port 0 = first employee). Badge N maps to switch port N-1.
-      const switchPort = sw.querySelector(`[data-switch-port="${filledPorts - 1}"]`);
+      const slotIdx = Array.from(portEl.parentNode.children).indexOf(portEl);
+      const switchPort = sw.querySelector(`[data-switch-port="${slotIdx}"]`);
       if (switchPort && !switchPort.classList.contains('rack-conn-port-active')) {
         switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-        // Assign to a port animation group based on existing data attribute
-        const portIdx = parseInt(switchPort.dataset.switchPort || '0', 10);
         const seed = Array.from(divThemeEsc).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
-        switchPort.classList.add(`rack-port-group-${((Math.abs(seed) * 7 + portIdx * 3) % 8)}`);
+        switchPort.classList.add(`rack-port-group-${((Math.abs(seed) * 7 + slotIdx * 3) % 8)}`);
       }
     }
 
@@ -1157,6 +1157,9 @@ window.RackRenderer = {
       queueLed: el.querySelector('.rack-brs-led-queue'),
       rendering: false,
       jobCount: 0,
+      // Timer handles for re-entry safety (see triggerBRSRender fix)
+      idleTimeout: null,
+      fadeTimeouts: [],
     });
 
     // Backward compat — keep single-device refs for BRS-01
@@ -1187,7 +1190,22 @@ window.RackRenderer = {
    */
   triggerBRSRender(badge, duration, brsId = 'brs-01') {
     const dev = this._brsDevices.get(brsId);
-    if (!dev || !dev.bars || dev.rendering) return;
+    if (!dev || !dev.bars) return;
+
+    // Re-entry: if a previous render's fade-to-idle is still pending, cancel
+    // it and reset the visual state so the new render can take over cleanly.
+    // The prior single-flight guard (`if (dev.rendering) return`) silently
+    // dropped second arrivals when the lock was released 1500ms into a ~2500ms
+    // total visual cycle, which manifested as BRS "skips" for queued badges.
+    if (dev.idleTimeout) {
+      clearTimeout(dev.idleTimeout);
+      dev.idleTimeout = null;
+    }
+    if (dev.fadeTimeouts && dev.fadeTimeouts.length) {
+      dev.fadeTimeouts.forEach(t => clearTimeout(t));
+      dev.fadeTimeouts = [];
+    }
+
     dev.rendering = true;
     dev.jobCount++;
 
@@ -1244,8 +1262,12 @@ window.RackRenderer = {
     playhead.style.transition = `left ${renderMs}ms linear`;
     playhead.style.left = '100%';
 
-    // When sweep completes, fade to idle
-    setTimeout(() => this._brsToIdle(playhead, brsId), renderMs + 200);
+    // When sweep completes, fade to idle — store timeout ref so a re-entrant
+    // triggerBRSRender call can cancel it and take over cleanly.
+    dev.idleTimeout = setTimeout(() => {
+      dev.idleTimeout = null;
+      this._brsToIdle(playhead, brsId);
+    }, renderMs + 200);
   },
 
   _brsToIdle(playhead, brsId = 'brs-01') {
@@ -1255,16 +1277,17 @@ window.RackRenderer = {
     // Hide playhead
     if (playhead) playhead.classList.remove('rack-brs-playhead-active');
 
-    // Fade bars down
+    // Fade bars down — track timeouts so re-entry can cancel mid-fade
+    dev.fadeTimeouts = [];
     dev.bars.forEach((bar, i) => {
-      setTimeout(() => { bar.style.height = '4%'; }, i * 15);
+      dev.fadeTimeouts.push(setTimeout(() => { bar.style.height = '4%'; }, i * 15));
     });
 
-    setTimeout(() => {
+    dev.fadeTimeouts.push(setTimeout(() => {
       dev.header.textContent = 'IDLE';
       dev.renderLed.classList.remove('rack-brs-led-active');
       dev.rendering = false;
-    }, dev.bars.length * 15 + 200);
+    }, dev.bars.length * 15 + 200));
   },
 
   _renderVPN() {
@@ -1803,9 +1826,10 @@ window.RackRenderer = {
       return;
     }
 
-    // Throttle to ~30fps — even with cheap lerp, halving frame count saves GPU compositing
+    // 60fps cap — smoother cable/badge motion. JS work is <5% of frame budget
+    // per profiling (2026-04-07), so doubling tick rate is affordable.
     const elapsed = this._lastAnimTime ? (timestamp - this._lastAnimTime) : 16;
-    if (this._lastAnimTime && elapsed < 33) {
+    if (this._lastAnimTime && elapsed < 16) {
       this._animFrameId = requestAnimationFrame(t => this._animLoop(t));
       return;
     }
@@ -2837,6 +2861,15 @@ window.RackRenderer = {
         void txt.getBBox();
         txt.classList.add('rack-cloud-rain-digit');
         txt.style.opacity = '';
+        // Threat rain is a one-shot precursor, not ambient — the shared
+        // .rack-cloud-rain-digit CSS uses `animation-iteration-count: infinite`
+        // for cloud rain. Override to 1 here and clean up on animationend so
+        // the red digits don't loop silently after the probe fires.
+        txt.style.animationIterationCount = '1';
+        txt.addEventListener('animationend', () => {
+          txt.classList.remove('rack-cloud-rain-digit');
+          txt.style.opacity = '0';
+        }, { once: true });
 
         spawned++;
         if (spawned < this._THREAT_RAIN_POOL_SIZE) {
@@ -3161,7 +3194,6 @@ window.RackRenderer = {
   _portLedGroupCache: null,
   _storageLedCache: null,
   _deviceLedCache: null,
-  _fanAngle: 0,
   _upsLcdPageIdx: 0,
 
   _startDeviceEffectsTimer() {
@@ -3185,15 +3217,14 @@ window.RackRenderer = {
     const deviceLeds = Array.from(this._container?.querySelectorAll(
       '.rack-led-blink-gold, .rack-led-blink-blue, .rack-led-slow-blink, ' +
       '.rack-wifi-led-wlan, .rack-wifi-led-eth, .rack-wifi-led-act, ' +
-      '.rack-wifi-arc-1, .rack-wifi-arc-2, .rack-wifi-arc-3, ' +
+      // wifi arcs are now CSS-animated, no JS toggle
       '.rack-brs-led-render.rack-brs-led-active, .rack-brs-led-queue, ' +
       '.rack-ups-led-bat'
     ) || []);
     for (let g = 0; g < 4; g++) {
       this._deviceLedCache[g] = deviceLeds.filter((_, i) => i % 4 === g);
     }
-    // Cache fans and UPS screens
-    this._fanEls = Array.from(this._container?.querySelectorAll('.rack-fw-fan-1, .rack-fw-fan-2') || []);
+    // Cache UPS screens (fans are now CSS-animated, no cache needed)
     this._upsScreens = Array.from(this._container?.querySelectorAll('.rack-ups-lcd-screen') || []);
     this._upsLcdPageIdx = 0;
     this._upsScreens.forEach(screen => {
@@ -3202,7 +3233,6 @@ window.RackRenderer = {
     });
 
     this._deviceEffectsTick = 0;
-    this._fanAngle = 0;
 
     // Single 2s timer handles everything — slow enough to let GPU idle between ticks
     this._deviceEffectsTimer = setInterval(() => {
@@ -3227,9 +3257,8 @@ window.RackRenderer = {
         this._deviceLedCache[dg]?.forEach(p => p.classList.toggle('rack-device-led-dim', !dDim));
       }
 
-      // Fan rotation: 15° per tick = full rotation in ~19s (subtle spin)
-      this._fanAngle = (this._fanAngle + 15) % 360;
-      this._fanEls.forEach(f => f.style.transform = `rotate(${this._fanAngle}deg)`);
+      // Fan rotation: now CSS-driven (.rack-fw-fan-1/2 use rack-fan-spin
+      // keyframe). JS tick no longer touches fan transforms.
 
       // UPS LCD page: cycle every 3 ticks (6s)
       if (this._deviceEffectsTick % 3 === 0) {
@@ -3248,7 +3277,6 @@ window.RackRenderer = {
     this._portLedGroupCache = null;
     this._storageLedCache = null;
     this._deviceLedCache = null;
-    this._fanEls = null;
     this._upsScreens = null;
     this._container?.querySelectorAll('.rack-port-led-dim').forEach(p => p.classList.remove('rack-port-led-dim'));
     this._container?.querySelectorAll('.rack-storage-led-dim').forEach(p => p.classList.remove('rack-storage-led-dim'));
@@ -3698,41 +3726,48 @@ window.RackRenderer = {
         case 'brs-render': {
           const brsId = step.brsId || 'brs-01';
           const brsPause = step.pause || 1500;
-          // Wait for BRS to become free. Uses a FIFO queue per BRS so a
-          // third arrival doesn't overwrite the second's resolve and
-          // strand it (the previous single-slot implementation lost
-          // every waiter except the most recent one). Timeout is 10s,
-          // matching the cable busy-wait, which covers ~6 badges queued
-          // ahead at the 1500ms render duration.
+          // Wait for BRS via FIFO queue with ATOMIC lock hand-off.
+          // When a renderer finishes, it transfers the busy flag directly
+          // to the next waiter instead of clearing + signaling. This closes
+          // a race where a fresh arrival could see busy=false between the
+          // clear and the next waiter's re-check, steal the lock, and force
+          // the legitimate next-in-line waiter to skip the render entirely.
+          // The `wokenByQueue` flag distinguishes "woken from queue"
+          // (proceed — we already hold the lock) from "timeout" (skip).
+          let wokenByQueue = false;
           if (this._brsBusy[brsId]) {
             if (!this._brsWaiters) this._brsWaiters = {};
             if (!this._brsWaiters[brsId]) this._brsWaiters[brsId] = [];
             const queue = this._brsWaiters[brsId];
             let myResolve;
-            const myPromise = new Promise(resolve => { myResolve = resolve; });
+            const myPromise = new Promise(resolve => {
+              myResolve = () => { wokenByQueue = true; resolve(); };
+            });
             queue.push(myResolve);
             await Promise.race([
               myPromise,
               this._delay(10000),
             ]);
-            // Self-remove from queue if still present (timeout path,
-            // or extra safety after a normal wake)
+            // Self-remove from queue if still present (timeout path)
             const idx = queue.indexOf(myResolve);
             if (idx !== -1) queue.splice(idx, 1);
           }
-          if (this._brsBusy[brsId]) break; // still busy after timeout — skip
+          // Skip only on true timeout. If woken from queue, we already
+          // hold the busy lock (transferred by the previous renderer).
+          if (!wokenByQueue && this._brsBusy[brsId]) break;
           try {
-            this._brsBusy[brsId] = true;
+            this._brsBusy[brsId] = true; // idempotent if handed off
             this.triggerBRSRender(badge, brsPause, brsId);
             await this._delay(brsPause);
           } finally {
-            this._brsBusy[brsId] = false;
-            // Wake the next packet in the FIFO queue (not all of them —
-            // only one packet at a time can hold the BRS lock)
+            // Atomic hand-off: if anyone is waiting, pass the lock without
+            // clearing busy so a new arrival can't race in. Otherwise release.
             const queue = this._brsWaiters?.[brsId];
             if (queue && queue.length) {
               const next = queue.shift();
-              next();
+              next(); // _brsBusy stays true — next waiter owns it
+            } else {
+              this._brsBusy[brsId] = false;
             }
           }
           break;
@@ -3742,28 +3777,33 @@ window.RackRenderer = {
           const dt = step.divTheme;
           const panel = this._container.querySelector(`[data-panel-key="${CSS.escape(dt)}"]`);
           const sw = this._container.querySelector(`.rack-device-switch[data-theme="${CSS.escape(dt)}"]`);
-          const filled = panel?.querySelectorAll('.rack-port:not(.rack-port-empty)').length || 0;
+
+          // Find the slot the badge will actually land in (first empty port)
+          // and use its sibling-index for BOTH the switch port LED and the
+          // beam source. 1:1 network jack ↔ patch panel port mapping.
+          const emptyPort = panel?.querySelector('.rack-port-empty');
+          const slotIdx = emptyPort
+            ? Array.from(emptyPort.parentNode.children).indexOf(emptyPort)
+            : (panel?.querySelectorAll('.rack-port').length || 0) - 1;
 
           let srcCoords = null;
           if (sw) {
-            const switchPort = sw.querySelector(`[data-switch-port="${filled}"]`);
+            const switchPort = sw.querySelector(`[data-switch-port="${slotIdx}"]`);
             if (switchPort) {
               // Activate the switch port LED as the badge beams down
               if (!switchPort.classList.contains('rack-conn-port-active')) {
                 switchPort.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-                const pIdx = parseInt(switchPort.dataset.switchPort || '0', 10);
                 const sSeed = Array.from(dt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
-                switchPort.classList.add(`rack-port-group-${((Math.abs(sSeed) * 7 + pIdx * 3) % 8)}`);
+                switchPort.classList.add(`rack-port-group-${((Math.abs(sSeed) * 7 + slotIdx * 3) % 8)}`);
               }
               this._triggerFlash(switchPort, 'rack-trigger-switch-flash', 800);
-              srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
+              srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${slotIdx}"]`);
             }
           }
           if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
 
           let destCoords = null;
-          const empty = panel?.querySelector('.rack-port-empty');
-          if (empty) {
+          if (emptyPort) {
             destCoords = this._getPortCoords(this._container, `[data-panel-key="${CSS.escape(dt)}"] .rack-port-empty`);
           }
           if (!destCoords && panel) {
@@ -4455,27 +4495,31 @@ window.RackRenderer = {
             const dt = step.divTheme;
             const panel = this._container.querySelector(`[data-panel-key="${CSS.escape(dt)}"]`);
             const sw = this._container.querySelector(`.rack-device-switch[data-theme="${CSS.escape(dt)}"]`);
-            const filled = panel?.querySelectorAll('.rack-port:not(.rack-port-empty)').length || 0;
+
+            // Use actual target slot's sibling-index for 1:1 switch port ↔
+            // patch panel port mapping (see same fix in _executeRoute case).
+            const empty = panel?.querySelector('.rack-port-empty');
+            const slotIdx = empty
+              ? Array.from(empty.parentNode.children).indexOf(empty)
+              : (panel?.querySelectorAll('.rack-port').length || 0) - 1;
 
             let srcCoords = null;
             if (sw) {
-              const port = sw.querySelector(`[data-switch-port="${filled}"]`);
+              const port = sw.querySelector(`[data-switch-port="${slotIdx}"]`);
               if (port) {
                 // Activate switch port LED during beam-down
                 if (!port.classList.contains('rack-conn-port-active')) {
                   port.classList.add('rack-conn-port-active', 'rack-conn-port-dual');
-                  const pI = parseInt(port.dataset.switchPort || '0', 10);
                   const sS = Array.from(dt).reduce((h, c) => ((h << 5) - h + c.charCodeAt(0)) | 0, 0);
-                  port.classList.add(`rack-port-group-${((Math.abs(sS) * 7 + pI * 3) % 8)}`);
+                  port.classList.add(`rack-port-group-${((Math.abs(sS) * 7 + slotIdx * 3) % 8)}`);
                 }
                 this._triggerFlash(port, 'rack-trigger-switch-flash', 800);
-                srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${filled}"]`);
+                srcCoords = this._getPortCoords(this._container, `.rack-device-switch[data-theme="${CSS.escape(dt)}"] [data-switch-port="${slotIdx}"]`);
               }
             }
             if (!srcCoords) srcCoords = this._virtualCoords?.switchBottom[dt];
 
             let destCoords = null;
-            const empty = panel?.querySelector('.rack-port-empty');
             if (empty) destCoords = this._getPortCoords(this._container, `[data-panel-key="${CSS.escape(dt)}"] .rack-port-empty`);
             if (!destCoords && panel) {
               const pr = panel.getBoundingClientRect();
