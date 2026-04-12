@@ -292,8 +292,15 @@ let _placeholderDataUrl: string | null = null;
   }
 }
 
-/** Server-side badge render via Playwright + Sharp corner clipping */
-async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean }): Promise<Buffer> {
+/** Server-side badge render via Playwright + Sharp corner clipping.
+ *  Options:
+ *   - withPhoto: include photo (default true)
+ *   - print: flat 600 DPI print export (no corner rounding, white bg)
+ *   - klayer: K-layer pre-print for two-pass printing (body.k-layer CSS)
+ *   - colorlayer: color pass for two-pass printing (body.color-layer CSS)
+ *   - calibration: drift measurement grid (body.k-calibration CSS, standalone)
+ */
+async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
   const page = await getWarmPage();
 
   const id = badge.employee_id;
@@ -307,7 +314,13 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
     photoDataUrl = _placeholderDataUrl;
   }
 
-  await page.evaluate(({ badge, photoDataUrl, isPrint }) => {
+  await page.evaluate(({ badge, photoDataUrl, isPrint, isKLayer, isColorLayer, isCalibration }) => {
+    // Toggle layer body classes — must reset every render since warm page is reused
+    document.body.classList.remove('k-layer', 'color-layer', 'k-calibration');
+    if (isKLayer) document.body.classList.add('k-layer');
+    if (isColorLayer) document.body.classList.add('color-layer');
+    if (isCalibration) document.body.classList.add('k-calibration');
+
     const previewArea = document.getElementById('badgePreviewArea');
     if (previewArea) previewArea.innerHTML = '';
 
@@ -357,7 +370,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
       waveStyle: badge.wave_style || 'barcode',
       caption: badge.caption || 'SCAN TO FILE COMPLAINT',
     });
-  }, { badge, photoDataUrl, isPrint: !!options?.print });
+  }, { badge, photoDataUrl, isPrint: !!options?.print, isKLayer: !!options?.klayer, isColorLayer: !!options?.colorlayer, isCalibration: !!options?.calibration });
 
   if (includePhoto) {
     await page.waitForFunction(() => {
@@ -371,9 +384,11 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
   const badgeEl = await page.$('#badge');
   if (!badgeEl) throw new Error('Badge element not found');
 
-  const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !options?.print });
+  // Flat print modes (print/klayer/calibration) all want solid white bg and no corner rounding
+  const isFlatPrint = !!(options?.print || options?.klayer || options?.colorlayer || options?.calibration);
+  const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !isFlatPrint });
 
-  if (options?.print) {
+  if (isFlatPrint) {
     // Set DPI metadata so the image maps correctly to CR80 card size
     return await sharp(Buffer.from(pngBuf))
       .withMetadata({ density: 600 })
@@ -510,6 +525,25 @@ function handleSSEDirect(clientIp: string): Response {
   });
 }
 
+/** Render any local HTML page as a 600 DPI CR80 PNG (standalone, no warm page) */
+async function renderPageScreenshot(path: string, selector: string): Promise<Buffer> {
+  const serverPort = Number(process.env.PORT) || 3000;
+  const browser = await getBrowser();
+  const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
+  try {
+    await page.goto(`http://localhost:${serverPort}${path}`, { waitUntil: 'networkidle' });
+    const el = await page.$(selector);
+    if (!el) throw new Error(`Element ${selector} not found on ${path}`);
+    const pngBuf = await el.screenshot({ type: 'png', omitBackground: false });
+    return await sharp(Buffer.from(pngBuf))
+      .withMetadata({ density: 600 })
+      .png()
+      .toBuffer();
+  } finally {
+    await page.close();
+  }
+}
+
 // ─── Route Modules ───────────────────────────────────────
 
 const sharedDeps = {
@@ -518,6 +552,7 @@ const sharedDeps = {
   broadcastSSE,
   decodeBase64Image,
   renderBadgePlaywright,
+  renderPageScreenshot,
   clampField,
   PHOTOS_DIR,
   BADGES_DIR,

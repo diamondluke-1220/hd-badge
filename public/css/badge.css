@@ -236,10 +236,8 @@
   width: 100%;
   margin-top: 0;
   flex: 1;
-  background: rgba(255, 255, 255, 0.92);
   padding: 28px 36px;
   margin-top: 20px;
-  border-radius: 8px;
   position: relative;
   z-index: 1;
 }
@@ -451,14 +449,16 @@
   display: none;
 }
 
-/* Subtle background texture — inset from top to respect navy header (240px stripe + 10px safety).
-   Prevents wasted K ink under the opaque header in normal render, and prevents binary from
-   printing into the header zone in body.k-layer (two-pass pre-print) mode. */
+/* Binary security strip — left edge, vertical. Matches K-layer strip position
+   but offset 4px down+right with navy color to create a "shadow" of the K resin
+   binary when two-pass printed. In single-pass (screen) mode, shows as a subtle
+   navy strip along the left edge. */
 .badge .texture-overlay {
   position: absolute;
   top: 250px;
   left: 0;
-  right: 0;
+  right: auto;
+  width: 96px;
   bottom: 0;
   overflow: hidden;
   pointer-events: none;
@@ -547,15 +547,196 @@
     "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 ";
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 6px;
+  padding-top: 5px;
+  width: 80px;
   bottom: 0;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  font-size: 24px;
-  line-height: 1.6;
-  letter-spacing: 3px;
-  color: rgba(0, 0, 0, 0.22);
+  font-size: 28px;
+  line-height: 1.4;
+  letter-spacing: 2px;
+  color: rgba(26, 32, 44, 0.35);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: scale(-1, -1);
+  word-spacing: 8px;
   word-break: break-all;
   overflow: hidden;
+}
+
+/* K-layer preview — simulates the black resin strip position in screen mode */
+.badge .texture-overlay::after {
+  content:
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+    "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 ";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 80px;
+  bottom: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 28px;
+  line-height: 1.4;
+  letter-spacing: 2px;
+  color: #333;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: scale(-1, -1);
+  word-spacing: 8px;
+  word-break: break-all;
+  overflow: hidden;
+}
+
+/* ─── K-LAYER: monochrome resin pre-print ──────────────────────────────
+   Two-pass printing. body.k-layer renders the K-ribbon pass:
+   - Left edge: binary security strip (vertical, mirrors fine-print on right)
+   - Right edge: fine-print text
+   - Photo frame border
+   All variable color/text elements hidden. No knockouts needed since
+   binary is confined to the left edge strip, not a full-card background.
+*/
+
+body.k-layer {
+  background: #fff;
+}
+body.k-layer .badge {
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+/* Hide all variable color/text elements (geometry preserved) */
+body.k-layer .navy-stripe,
+body.k-layer .name,
+body.k-layer .department,
+body.k-layer .title,
+body.k-layer .employee-id,
+body.k-layer .badge-caption,
+body.k-layer .photo-placeholder-text,
+body.k-layer .info-divider,
+body.k-layer .header-divider,
+body.k-layer .waveform-sticker > *,
+body.k-layer .access-badge,
+body.k-layer .logo-icon,
+body.k-layer .info-section {
+  visibility: hidden !important;
+}
+
+/* Binary security strip — left edge, vertical, mirrors fine-print on right.
+   Converts full-card texture-overlay into a narrow strip. */
+body.k-layer .texture-overlay {
+  top: 250px !important;
+  left: 0 !important;
+  right: auto !important;
+  width: 80px !important;
+  bottom: 0 !important;
+}
+body.k-layer .texture-overlay::before {
+  color: #ddd !important;
+  opacity: 1 !important;
+  font-weight: 600 !important;
+  font-size: 28px !important;
+  letter-spacing: 2px !important;
+  line-height: 1.4 !important;
+  writing-mode: vertical-rl !important;
+  text-orientation: mixed !important;
+  transform: scale(-1, -1) !important;
+  word-spacing: 8px !important;
+}
+/* Hide screen-preview ::after — K-layer only prints ::before */
+body.k-layer .texture-overlay::after {
+  display: none !important;
+}
+
+/* Photo frame: print outline in K, knockout interior for photo overlay */
+body.k-layer .photo-frame {
+  background: #fff !important;
+  border: 6px solid #000 !important;
+}
+body.k-layer .photo-frame img {
+  visibility: hidden !important;
+}
+
+/* Fine-print — right edge, solid black. No knockout needed since binary
+   is on the opposite side now. */
+body.k-layer .fine-print {
+  color: #000 !important;
+  font-size: 38px !important;
+  font-weight: 800 !important;
+  top: 260px !important;
+  bottom: 40px !important;
+  overflow: hidden !important;
+}
+
+/* ─── COLOR-LAYER: second pass over K pre-print ───────────────────────
+   Inverse of k-layer. Hides everything already printed in K (binary,
+   fine-print, photo frame border) and shows all color/variable elements.
+   White bg so non-printed areas stay blank over the K layer beneath.
+*/
+body.color-layer {
+  background: #fff;
+}
+body.color-layer .badge {
+  background: #fff !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+/* Show shadow-offset binary strip — prints color "shadow" over K resin binary */
+body.color-layer .texture-overlay {
+  visibility: visible !important;
+}
+/* Hide screen-preview ::after — color-layer only prints ::before (the shadow) */
+body.color-layer .texture-overlay::after {
+  display: none !important;
+}
+body.color-layer .fine-print {
+  visibility: hidden !important;
+}
+body.color-layer .photo-frame {
+  border-color: transparent !important;
+}
+
+/* ─── K-CALIBRATION: two-pass drift measurement ────────────────────────
+   Standalone test pattern — NOT for production. Prints a 100px black
+   grid across the full card so you can overlay a normal color print
+   and measure registration drift with a ruler/loupe. 100px @ 600 DPI
+   = 4.23mm grid spacing. Use body.k-calibration only (not with k-layer).
+*/
+body.k-calibration {
+  background: #fff;
+}
+body.k-calibration .badge {
+  background: #fff !important;
+  box-shadow: none !important;
+}
+body.k-calibration .badge > *:not(.texture-overlay) {
+  visibility: hidden !important;
+}
+body.k-calibration .texture-overlay {
+  top: 0 !important;
+  background-image:
+    linear-gradient(to right, #000 2px, transparent 2px),
+    linear-gradient(to bottom, #000 2px, transparent 2px);
+  background-size: 100px 100px;
+}
+body.k-calibration .texture-overlay::before {
+  content: none !important;
 }

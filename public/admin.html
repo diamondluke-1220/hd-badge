@@ -1211,6 +1211,8 @@ function showPreview(employeeId, name) {
     <div class="preview-modal-info">${esc(employeeId)} — ${esc(name)}</div>
     <div class="preview-modal-actions">
       <a class="btn-action btn-printed" href="/api/admin/badge/${esc(employeeId)}/print" download="${esc(employeeId)}-print.png" style="text-decoration:none;">&#128424; Download Print</a>
+      <a class="btn-action" href="/api/admin/badge/${esc(employeeId)}/print-klayer" download="${esc(employeeId)}-klayer.png" style="text-decoration:none;">K Layer</a>
+      <a class="btn-action" href="/api/admin/badge/${esc(employeeId)}/print-colorlayer" download="${esc(employeeId)}-colorlayer.png" style="text-decoration:none;">Color Layer</a>
       <button class="btn-action" onclick="renderBadge('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#127912; Re-render</button>
       <button class="btn-action" onclick="uploadPhoto('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#128247; Upload Photo</button>
       <button class="btn-action" onclick="recoverBadge('${esc(employeeId)}')" title="Generate recovery link">&#128273; Recover</button>

@@ -13,7 +13,8 @@ import { startPresentation, stopPresentation, getPresentationState, getPublicSta
 import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
 
 interface AdminDeps {
-  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean }) => Promise<Buffer>;
+  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
+  renderPageScreenshot: (path: string, selector: string) => Promise<Buffer>;
   broadcastSSE: (event: string, data: any) => void;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
@@ -22,7 +23,7 @@ interface AdminDeps {
 }
 
 export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
-  const { renderBadgePlaywright, broadcastSSE, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR } = deps;
+  const { renderBadgePlaywright, renderPageScreenshot, broadcastSSE, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR } = deps;
 
   // ─── Badge Management ────────────────────────────────────
 
@@ -126,6 +127,58 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${id}-print.png"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
+
+  // ─── K-Layer Pre-Print (dev-only, two-pass printing test) ───
+  // Monochrome K-ribbon pass: binary + photo frame + fine-print + knockouts.
+  // Designed to be pre-printed on blank cards, then color-printed over at show time.
+  app.get('/api/admin/badge/:id/print-klayer', async (c) => {
+    const id = c.req.param('id');
+    const badge = getBadge(id);
+    if (!badge) {
+      return c.json({ success: false, error: 'Badge not found.' }, 404);
+    }
+    const buf = await renderBadgePlaywright(badge, { klayer: true });
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': `attachment; filename="${id}-klayer.png"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
+
+  // ─── Color-Layer Print (dev-only, two-pass second pass) ───
+  // Color pass: everything EXCEPT K-layer elements (binary, fine-print, photo frame border).
+  // Print this on a card that already has the K layer.
+  app.get('/api/admin/badge/:id/print-colorlayer', async (c) => {
+    const id = c.req.param('id');
+    const badge = getBadge(id);
+    if (!badge) {
+      return c.json({ success: false, error: 'Badge not found.' }, 404);
+    }
+    const buf = await renderBadgePlaywright(badge, { colorlayer: true });
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': `attachment; filename="${id}-colorlayer.png"`,
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
+
+  // ─── K-Calibration Test Card (dev-only) ───
+  // Gray swatches, binary text at different grays/sizes, fine print readability tests.
+  // Print with K ribbon + Grayscale driver setting to dial in optimal values.
+  app.get('/api/admin/print-calibration', async (c) => {
+    const buf = await renderPageScreenshot('/k-calibration.html', '#card');
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': 'attachment; filename="k-calibration.png"',
         'Cache-Control': 'no-cache',
       },
     });

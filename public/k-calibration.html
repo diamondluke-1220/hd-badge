@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>K-Layer Calibration</title>
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-weight: 600;
+      src: url('/fonts/jetbrains-mono-600.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Barlow';
+      font-weight: 800;
+      src: url('/fonts/barlow-800.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Inter';
+      font-weight: 700;
+      src: url('/fonts/inter-700.woff2') format('woff2');
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #fff; }
+
+    .card {
+      width: 1276px;
+      height: 2026px;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ─── Section labels ─── */
+    .section-label {
+      font-family: 'Barlow', sans-serif;
+      font-weight: 800;
+      font-size: 36px;
+      color: #000;
+      padding: 20px 30px 10px;
+      border-bottom: 3px solid #000;
+      margin: 0 30px 16px;
+    }
+
+    /* ─── Gray swatches ─── */
+    .swatches {
+      display: flex;
+      gap: 8px;
+      padding: 12px 30px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      width: 120px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 600;
+      color: #000;
+    }
+
+    /* ─── Binary text samples ─── */
+    .binary-samples {
+      padding: 8px 30px;
+    }
+    .binary-row {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 6px;
+    }
+    .binary-label {
+      font-size: 22px;
+      font-weight: 600;
+      color: #000;
+      min-width: 80px;
+      text-align: right;
+    }
+    .binary-text {
+      font-weight: 600;
+      font-size: 38px;
+      letter-spacing: 5px;
+      word-spacing: 14px;
+    }
+
+    /* ─── Binary size comparison ─── */
+    .size-samples {
+      padding: 8px 30px;
+    }
+    .size-row {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
+    .size-label {
+      font-size: 22px;
+      font-weight: 600;
+      color: #000;
+      min-width: 80px;
+      text-align: right;
+    }
+
+    /* ─── Fine print samples ─── */
+    .fineprint-samples {
+      padding: 8px 30px;
+    }
+    .fineprint-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .fineprint-label {
+      font-size: 22px;
+      font-weight: 600;
+      color: #000;
+      min-width: 200px;
+      text-align: right;
+    }
+    .fineprint-text {
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ─── Binary + fine print overlay test ─── */
+    .overlay-test {
+      position: relative;
+      margin: 8px 30px;
+      height: 320px;
+      overflow: hidden;
+    }
+    .overlay-binary {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      font-weight: 600;
+      font-size: 38px;
+      letter-spacing: 5px;
+      line-height: 2.0;
+      word-spacing: 14px;
+      word-break: break-all;
+      overflow: hidden;
+    }
+    .overlay-fineprint {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: 800;
+      font-size: 38px;
+      color: #000;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .overlay-fineprint.with-knockout {
+      background: #fff;
+      padding: 16px 20px;
+      box-shadow: 0 0 0 16px #fff;
+    }
+  </style>
+</head>
+<body>
+<div class="card" id="card">
+
+  <!-- Section 1: Gray swatches -->
+  <div class="section-label">GRAY DENSITY (HEX VALUES)</div>
+  <div class="swatches">
+    <div class="swatch" style="background:#555">#555</div>
+    <div class="swatch" style="background:#666">#666</div>
+    <div class="swatch" style="background:#777">#777</div>
+    <div class="swatch" style="background:#888">#888</div>
+    <div class="swatch" style="background:#999">#999</div>
+    <div class="swatch" style="background:#aaa">#aaa</div>
+    <div class="swatch" style="background:#bbb">#bbb</div>
+    <div class="swatch" style="background:#ccc">#ccc</div>
+    <div class="swatch" style="background:#ddd">#ddd</div>
+    <div class="swatch" style="background:#eee">#eee</div>
+  </div>
+
+  <!-- Section 2: Binary at different grays (current size 38px) -->
+  <div class="section-label">BINARY TEXT @ 38px — GRAY LEVELS</div>
+  <div class="binary-samples">
+    <div class="binary-row">
+      <span class="binary-label">#888</span>
+      <span class="binary-text" style="color:#888">01001000 01000101 01001100</span>
+    </div>
+    <div class="binary-row">
+      <span class="binary-label">#999</span>
+      <span class="binary-text" style="color:#999">01001000 01000101 01001100</span>
+    </div>
+    <div class="binary-row">
+      <span class="binary-label">#aaa</span>
+      <span class="binary-text" style="color:#aaa">01001000 01000101 01001100</span>
+    </div>
+    <div class="binary-row">
+      <span class="binary-label">#bbb</span>
+      <span class="binary-text" style="color:#bbb">01001000 01000101 01001100</span>
+    </div>
+    <div class="binary-row">
+      <span class="binary-label">#ccc</span>
+      <span class="binary-text" style="color:#ccc">01001000 01000101 01001100</span>
+    </div>
+    <div class="binary-row">
+      <span class="binary-label">#ddd</span>
+      <span class="binary-text" style="color:#ddd">01001000 01000101 01001100</span>
+    </div>
+  </div>
+
+  <!-- Section 3: Binary at different sizes (at current #bbb) -->
+  <div class="section-label">BINARY TEXT @ #bbb — FONT SIZES</div>
+  <div class="size-samples">
+    <div class="size-row">
+      <span class="size-label">32px</span>
+      <span class="binary-text" style="color:#bbb;font-size:32px">01001000 01000101 01001100 01010000</span>
+    </div>
+    <div class="size-row">
+      <span class="size-label">36px</span>
+      <span class="binary-text" style="color:#bbb;font-size:36px">01001000 01000101 01001100 01010000</span>
+    </div>
+    <div class="size-row">
+      <span class="size-label">38px</span>
+      <span class="binary-text" style="color:#bbb;font-size:38px">01001000 01000101 01001100 01010000</span>
+    </div>
+    <div class="size-row">
+      <span class="size-label">42px</span>
+      <span class="binary-text" style="color:#bbb;font-size:42px">01001000 01000101 01001100 01010000</span>
+    </div>
+    <div class="size-row">
+      <span class="size-label">48px</span>
+      <span class="binary-text" style="color:#bbb;font-size:48px">01001000 01000101 01001100</span>
+    </div>
+  </div>
+
+  <!-- Section 4: Fine print readability -->
+  <div class="section-label">FINE PRINT OVER BINARY — KNOCKOUT vs BARE</div>
+  <div style="padding: 4px 30px; font-size:22px; color:#666">Binary bg @ #bbb / Fine print @ #000 / 38px 800wt</div>
+
+  <!-- With knockout -->
+  <div class="overlay-test">
+    <div class="overlay-binary" style="color:#bbb">01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000</div>
+    <div class="overlay-fineprint with-knockout">PROPERTY OF HELP DESK — WITH KNOCKOUT</div>
+  </div>
+
+  <!-- Without knockout -->
+  <div class="overlay-test">
+    <div class="overlay-binary" style="color:#bbb">01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 01001000 01000101 01001100 01010000 00100000</div>
+    <div class="overlay-fineprint">PROPERTY OF HELP DESK — NO KNOCKOUT</div>
+  </div>
+
+</div>
+</body>
+</html>

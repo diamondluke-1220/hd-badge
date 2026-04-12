@@ -66,7 +66,7 @@ interface PublicDeps {
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
   broadcastSSE: (event: string, data: any) => void;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
-  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
+  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
   clampField: (val: string, field?: string) => string;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
