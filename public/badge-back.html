@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Badge Back — K Layer</title>
+  <style>
+    @font-face {
+      font-family: 'JetBrains Mono';
+      font-weight: 600;
+      src: url('/fonts/jetbrains-mono-600.woff2') format('woff2');
+    }
+    @font-face {
+      font-family: 'Barlow';
+      font-weight: 800;
+      src: url('/fonts/barlow-800.woff2') format('woff2');
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #fff; }
+
+    .card {
+      width: 1276px;
+      height: 2026px;
+      background: #fff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ─── HD Logo ─── */
+    .hd-logo {
+      display: block;
+      margin: 280px auto 0;
+      width: 800px;
+      height: auto;
+    }
+
+    /* ─── Center content ─── */
+    .center-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+      margin-top: 60px;
+    }
+
+    .qr-code {
+      width: 620px;
+      height: 620px;
+      image-rendering: pixelated;
+    }
+
+    .scan-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 36px;
+      color: #000;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    .bandcamp-url {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 28px;
+      color: #666;
+      letter-spacing: 2px;
+    }
+
+    /* ─── Binary strip — left edge (mirrors front left edge when card is flipped) ─── */
+    .binary-strip {
+      position: absolute;
+      top: 250px;
+      left: 0;
+      width: 80px;
+      bottom: 0;
+      overflow: hidden;
+    }
+    .binary-strip::before {
+      content:
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 "
+        "01001000 01000101 01001100 01010000 00100000 01000100 01000101 01010011 01001011 ";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 80px;
+      bottom: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 28px;
+      line-height: 1.4;
+      letter-spacing: 2px;
+      color: #ddd;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: scale(-1, -1);
+      word-spacing: 8px;
+      word-break: break-all;
+      overflow: hidden;
+    }
+
+    /* ─── Fine print — right edge (mirrors front right edge when card is flipped) ─── */
+    .fine-print {
+      position: absolute;
+      right: 32px;
+      top: 380px;
+      bottom: 200px;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      font-size: 36px;
+      color: #444444;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+<div class="card" id="card">
+
+  <!-- HD Logo -->
+  <img class="hd-logo" src="/images/hd-logo.png" alt="Help Desk">
+
+  <div class="center-content">
+    <img class="qr-code" src="/images/qr-bandcamp.png" alt="QR Code">
+    <div class="scan-label">Scan for Music</div>
+    <div class="bandcamp-url">helpdesk1.bandcamp.com</div>
+  </div>
+
+  <div class="binary-strip"></div>
+
+  <div class="fine-print">
+    Property of Help Desk Inc. &bull; Not Valid for Parking &bull; No Refunds on Morale
+  </div>
+
+</div>
+</body>
+</html>

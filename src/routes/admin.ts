@@ -184,6 +184,19 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     });
   });
 
+  // ─── Badge Back (K-layer only, QR code to Bandcamp) ───
+  // Identical for all badges — pre-print a stack with K ribbon.
+  app.get('/api/admin/print-badge-back', async (c) => {
+    const buf = await renderPageScreenshot('/badge-back.html', '#card');
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': 'attachment; filename="badge-back-klayer.png"',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
+
   app.post('/api/admin/badge/:id/flag', (c) => {
     const success = toggleFlagged(c.req.param('id'));
     if (!success) {
