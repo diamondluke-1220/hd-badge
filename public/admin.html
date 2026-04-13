@@ -91,6 +91,12 @@
       <button class="pq-btn pq-btn-batch" id="batchPrintBtn" onclick="batchPrintDownload()" style="margin-left:auto;">&#128230; Download All (ZIP)</button>
       <button class="pq-btn pq-btn-rerender" onclick="rerenderAll()">&#8635; Re-render All Badges</button>
     </div>
+    <div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #333;margin-bottom:8px;align-items:center;">
+      <span style="font-size:13px;color:#999;">Print Templates:</span>
+      <button class="pq-btn" onclick="staticDownload('print-klayer', 'klayer-front.png', this)">K-Layer Front</button>
+      <button class="pq-btn" onclick="staticDownload('print-badge-back', 'badge-back.png', this)">Badge Back (QR)</button>
+      <button class="pq-btn" onclick="staticDownload('print-calibration', 'k-calibration.png', this)">K Calibration</button>
+    </div>
     <div id="printQueueGrid" class="pq-grid">
       <div class="pq-empty">No badges in print queue. Mark badges as paid to add them.</div>
     </div>
@@ -734,6 +740,29 @@ async function pqDownload(id, btn) {
   btn.innerHTML = '&#128424; Print';
 }
 
+async function staticDownload(endpoint, filename, btn) {
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
+  try {
+    const resp = await fetch(`/api/admin/${endpoint}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new Error('Download failed');
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showToast(`Failed to download ${filename}. Try again.`, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = label;
+}
+
 async function adminDownload(id, type, btn) {
   const label = btn.innerHTML;
   btn.disabled = true;
@@ -1234,7 +1263,6 @@ function showPreview(employeeId, name) {
     <div class="preview-modal-info">${esc(employeeId)} — ${esc(name)}</div>
     <div class="preview-modal-actions">
       <button class="btn-action btn-printed" onclick="adminDownload('${esc(employeeId)}', 'print', this)">&#128424; Download Print</button>
-      <button class="btn-action" onclick="adminDownload('${esc(employeeId)}', 'print-klayer', this)">K Layer</button>
       <button class="btn-action" onclick="adminDownload('${esc(employeeId)}', 'print-colorlayer', this)">Color Layer</button>
       <button class="btn-action" onclick="renderBadge('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#127912; Re-render</button>
       <button class="btn-action" onclick="uploadPhoto('${esc(employeeId)}');document.getElementById('previewModal').remove();">&#128247; Upload Photo</button>

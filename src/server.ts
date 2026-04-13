@@ -86,6 +86,7 @@ const PHOTOS_DIR = join(DATA_DIR, 'photos');
 const BADGES_DIR = join(DATA_DIR, 'badges');
 const THUMBS_DIR = join(DATA_DIR, 'thumbs');
 const HEADSHOTS_DIR = join(DATA_DIR, 'headshots');
+const PRINTS_DIR = join(DATA_DIR, 'prints');
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const THUMB_WIDTH = 320;
 const HEADSHOT_WIDTH = 200;
@@ -95,6 +96,7 @@ mkdirSync(PHOTOS_DIR, { recursive: true });
 mkdirSync(BADGES_DIR, { recursive: true });
 mkdirSync(THUMBS_DIR, { recursive: true });
 mkdirSync(HEADSHOTS_DIR, { recursive: true });
+mkdirSync(PRINTS_DIR, { recursive: true });
 
 // Initialize database
 initDb(join(DATA_DIR, 'badges.db'));
@@ -558,6 +560,7 @@ const sharedDeps = {
   BADGES_DIR,
   THUMBS_DIR,
   HEADSHOTS_DIR,
+  PRINTS_DIR,
   ADMIN_TOKEN,
   THUMB_WIDTH,
   HEADSHOT_WIDTH,
@@ -607,6 +610,31 @@ import { isShowMode } from './rate-limit';
 if (isShowMode()) {
   console.log(`🎸 SHOW MODE active — relaxed rate limits (50/hr, 200/day)`);
 }
+
+// ─── Pre-render static print assets (K-layer front + badge back) ───
+// These are identical for all badges — render once at startup.
+(async () => {
+  try {
+    const klayerPath = join(PRINTS_DIR, 'klayer-front.png');
+    const backPath = join(PRINTS_DIR, 'badge-back.png');
+    // Use a placeholder badge for K-layer (all variable content is hidden)
+    // K-layer hides all variable content, so any badge works as template
+    const allIds = listAllBadgeIds();
+    const templateId = allIds[0] || 'HD-00001';
+    const placeholderBadge = { employee_id: templateId, name: 'Template', department: '', title: '' };
+    const klayerBuf = await renderBadgePlaywright(placeholderBadge, { klayer: true });
+    writeFileSync(klayerPath, klayerBuf);
+    log('info', 'server', `Pre-rendered K-layer front → ${klayerPath}`);
+
+    const backBuf = await renderPageScreenshot('/badge-back.html', '#card');
+    writeFileSync(backPath, backBuf);
+    log('info', 'server', `Pre-rendered badge back → ${backPath}`);
+
+    console.log(`🖨️  Print assets ready in ${PRINTS_DIR}`);
+  } catch (e: any) {
+    log('error', 'server', `Failed to pre-render print assets: ${e.message}`);
+  }
+})();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => { await closeBrowser(); closeDb(); process.exit(0); });

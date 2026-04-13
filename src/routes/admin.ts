@@ -3,7 +3,7 @@
 
 import type { Hono } from 'hono';
 import { join } from 'path';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, readFileSync } from 'fs';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge, reissueToken } from '../db';
@@ -20,10 +20,11 @@ interface AdminDeps {
   BADGES_DIR: string;
   THUMBS_DIR: string;
   HEADSHOTS_DIR: string;
+  PRINTS_DIR: string;
 }
 
 export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
-  const { renderBadgePlaywright, renderPageScreenshot, broadcastSSE, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR } = deps;
+  const { renderBadgePlaywright, renderPageScreenshot, broadcastSSE, PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR, PRINTS_DIR } = deps;
 
   // ─── Badge Management ────────────────────────────────────
 
@@ -132,26 +133,40 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     });
   });
 
-  // ─── K-Layer Pre-Print (dev-only, two-pass printing test) ───
-  // Monochrome K-ribbon pass: binary + photo frame + fine-print + knockouts.
-  // Designed to be pre-printed on blank cards, then color-printed over at show time.
-  app.get('/api/admin/badge/:id/print-klayer', async (c) => {
-    const id = c.req.param('id');
-    const badge = getBadge(id);
-    if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+  // ─── Static Print Assets (pre-rendered at startup) ───
+  // K-layer front and badge back are identical for all badges.
+  // Served from data/prints/ as static files.
+  app.get('/api/admin/print-klayer', async (c) => {
+    const filePath = join(PRINTS_DIR, 'klayer-front.png');
+    if (!existsSync(filePath)) {
+      return c.json({ success: false, error: 'K-layer not yet rendered. Restart server.' }, 404);
     }
-    const buf = await renderBadgePlaywright(badge, { klayer: true });
+    const buf = readFileSync(filePath);
     return new Response(buf, {
       headers: {
         'Content-Type': 'image/png',
-        'Content-Disposition': `attachment; filename="${id}-klayer.png"`,
+        'Content-Disposition': 'attachment; filename="klayer-front.png"',
         'Cache-Control': 'no-cache',
       },
     });
   });
 
-  // ─── Color-Layer Print (dev-only, two-pass second pass) ───
+  app.get('/api/admin/print-badge-back', async (c) => {
+    const filePath = join(PRINTS_DIR, 'badge-back.png');
+    if (!existsSync(filePath)) {
+      return c.json({ success: false, error: 'Badge back not yet rendered. Restart server.' }, 404);
+    }
+    const buf = readFileSync(filePath);
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Content-Disposition': 'attachment; filename="badge-back.png"',
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
+
+  // ─── Color-Layer Print (per-badge, two-pass second pass) ───
   // Color pass: everything EXCEPT K-layer elements (binary, fine-print, photo frame border).
   // Print this on a card that already has the K layer.
   app.get('/api/admin/badge/:id/print-colorlayer', async (c) => {
@@ -171,27 +186,12 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   });
 
   // ─── K-Calibration Test Card (dev-only) ───
-  // Gray swatches, binary text at different grays/sizes, fine print readability tests.
-  // Print with K ribbon + Grayscale driver setting to dial in optimal values.
   app.get('/api/admin/print-calibration', async (c) => {
     const buf = await renderPageScreenshot('/k-calibration.html', '#card');
     return new Response(buf, {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': 'attachment; filename="k-calibration.png"',
-        'Cache-Control': 'no-cache',
-      },
-    });
-  });
-
-  // ─── Badge Back (K-layer only, QR code to Bandcamp) ───
-  // Identical for all badges — pre-print a stack with K ribbon.
-  app.get('/api/admin/print-badge-back', async (c) => {
-    const buf = await renderPageScreenshot('/badge-back.html', '#card');
-    return new Response(buf, {
-      headers: {
-        'Content-Type': 'image/png',
-        'Content-Disposition': 'attachment; filename="badge-back-klayer.png"',
         'Cache-Control': 'no-cache',
       },
     });
