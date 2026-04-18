@@ -640,18 +640,22 @@ body.k-layer .info-section {
 }
 
 /* Binary security strip — left edge, vertical, mirrors fine-print on right.
-   Converts full-card texture-overlay into a narrow strip. */
+   Converts full-card texture-overlay into a narrow strip.
+   bottom: 260px clears the HD logo (bottom 36px + height 200px = top at 236px)
+   with ~24px breathing room so the strip never intrudes into the logo box. */
 body.k-layer .texture-overlay {
   top: 250px !important;
   left: 20px !important;
   right: auto !important;
   width: 100px !important;
-  bottom: 0 !important;
+  bottom: 260px !important;
 }
+/* Pure black + heavy weight to match fine-print density. K resin is modulated
+   by input luminance — #ddd deposits too little K to read crisply at this size. */
 body.k-layer .texture-overlay::before {
-  color: #ddd !important;
+  color: #000 !important;
   opacity: 1 !important;
-  font-weight: 600 !important;
+  font-weight: 800 !important;
   font-size: 38px !important;
   letter-spacing: 2px !important;
   line-height: 1.4 !important;
@@ -665,10 +669,13 @@ body.k-layer .texture-overlay::after {
   display: none !important;
 }
 
-/* Photo frame: print outline in K, knockout interior for photo overlay */
+/* Photo frame: print top/left/right in K; bottom border is printed in the
+   color pass so it lines up perfectly with the access badge (same pass =
+   no inter-pass registration drift). */
 body.k-layer .photo-frame {
   background: #fff !important;
   border: 6px solid #000 !important;
+  border-bottom-color: transparent !important;
 }
 body.k-layer .photo-frame img {
   visibility: hidden !important;
@@ -699,19 +706,41 @@ body.color-layer .badge {
   border-radius: 0 !important;
 }
 
-/* Show shadow-offset binary strip — prints color "shadow" over K resin binary */
+/* Binary strip is K-layer only now — registration drift at card size made the
+   offset color "shadow" unreadable. Hide the whole overlay on the color pass. */
 body.color-layer .texture-overlay {
-  visibility: visible !important;
-}
-/* Hide screen-preview ::after — color-layer only prints ::before (the shadow) */
-body.color-layer .texture-overlay::after {
-  display: none !important;
+  visibility: hidden !important;
 }
 body.color-layer .fine-print {
   visibility: hidden !important;
 }
+/* All variable text prints pure black on the color pass. Base styles use
+   #111/#222/#333/#444 for on-screen hierarchy, but on card we want maximum
+   density — retransfer composites gray as CMYK, and issued-date at #444
+   in particular was reading faint on the first test print. */
+body.color-layer .name,
+body.color-layer .department,
+body.color-layer .title,
+body.color-layer .employee-id,
+body.color-layer .issued-date,
+body.color-layer .badge-caption {
+  color: #000 !important;
+}
+/* Green gamut compensation for color pass. Retransfer CMYK can't reach the
+   saturated greens we use on-screen — bright RGB greens clip darker/duller
+   when the driver converts. Boost each green one or two Tailwind steps
+   lighter so the print lands near the screen value after CMYK clipping.
+   Screen preview (non-color-layer) keeps the original darker values. */
+body.color-layer .access-badge.all-access    { background: #22C55E !important; }  /* was #1B6B2A */
+body.color-layer .access-badge.overtime      { background: #22C55E !important; }  /* was #16A34A */
+body.color-layer .access-badge.thought-leader{ background: #166534 !important; }  /* was #14532D */
+body.color-layer .access-badge.gossip        { background: #14B8A6 !important; }  /* was #0D9488 (teal) */
+body.color-layer .status-dot                 { color:      #4ADE80 !important; }  /* was #16A34A */
+/* Bottom of photo frame printed here (not in K) so it shares a pass with the
+   access badge sitting on top of it — perfect alignment, no K line peeking. */
 body.color-layer .photo-frame {
   border-color: transparent !important;
+  border-bottom-color: #000 !important;
 }
 
 /* ─── K-CALIBRATION: two-pass drift measurement ────────────────────────
