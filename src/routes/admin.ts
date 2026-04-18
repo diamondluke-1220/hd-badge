@@ -3,7 +3,7 @@
 
 import type { Hono } from 'hono';
 import { join } from 'path';
-import { existsSync, unlinkSync, readFileSync } from 'fs';
+import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge, reissueToken } from '../db';
@@ -141,8 +141,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     if (!existsSync(filePath)) {
       return c.json({ success: false, error: 'K-layer not yet rendered. Restart server.' }, 404);
     }
-    const buf = readFileSync(filePath);
-    return new Response(buf, {
+    return new Response(Bun.file(filePath), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': 'attachment; filename="klayer-front.png"',
@@ -156,8 +155,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     if (!existsSync(filePath)) {
       return c.json({ success: false, error: 'Badge back not yet rendered. Restart server.' }, 404);
     }
-    const buf = readFileSync(filePath);
-    return new Response(buf, {
+    return new Response(Bun.file(filePath), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': 'attachment; filename="badge-back.png"',
