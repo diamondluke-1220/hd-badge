@@ -40,6 +40,7 @@ function getBadgeToken(c: Context): string | null {
 import { checkRateLimit, checkGameScoreRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
+import { isVoteBannerActive } from '../vote-banner';
 import { log } from '../logger';
 
 // Band-exclusive values — fans cannot use these (enforced on create)
@@ -715,6 +716,16 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
   app.get('/api/orgchart/stats', (c) => {
     return c.json(getStats());
+  });
+
+  // ─── Site Config ─────────────────────────────────────────
+  // Public, unauthenticated. Client reads on boot to decide whether to
+  // render the BOM "Vote for Help Desk" banner. Source of truth for
+  // activeness is src/vote-banner.ts (env override + date window).
+
+  app.get('/api/site-config', (c) => {
+    c.header('Cache-Control', 'public, max-age=60');
+    return c.json({ voteBannerActive: isVoteBannerActive() });
   });
 
   // ─── Game Score Telemetry ─────────────────────────────────
