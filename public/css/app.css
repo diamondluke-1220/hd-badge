@@ -74,6 +74,8 @@ body {
   background: radial-gradient(ellipse at 50% 0%, #1F2030 0%, var(--surface-base) 50%);
   color: var(--text-primary);
   min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ==========================================================
