@@ -299,6 +299,7 @@ function showPopover(targetEl, fieldName) {
     titleEl.id = 'popoverTitle';
     popover.setAttribute('aria-labelledby', 'popoverTitle');
   }
+  injectFieldTag(popover);
   // Live-announce character-counter updates so SR users hear usage as they type.
   popover.querySelectorAll('.char-count').forEach(span => {
     span.setAttribute('aria-live', 'polite');
@@ -372,9 +373,14 @@ function showPopover(targetEl, fieldName) {
   // all 7 fields without dismissing the sheet. Disabled at boundaries.
   attachPopoverNav(popover, fieldName);
 
-  // Auto-focus text input
-  const input = popover.querySelector('.popover-input');
-  if (input) setTimeout(() => input.focus(), 80);
+  // Auto-focus text input — but not on mobile card popovers, where iOS
+  // pops the keyboard, collapses the scroll region, and pushes cards off-screen.
+  const hasCards = popover.querySelector('.card');
+  const isMobile = window.innerWidth <= 640;
+  if (!isMobile || !hasCards) {
+    const input = popover.querySelector('.popover-input');
+    if (input) setTimeout(() => input.focus(), 80);
+  }
 }
 
 function attachPopoverNav(popover, fieldName) {
@@ -933,6 +939,7 @@ function rebuildPopoverContent(fieldName) {
   const scrollTop = body ? body.scrollTop : 0;
 
   popover.innerHTML = buildPopoverContent(fieldName);
+  injectFieldTag(popover);
   attachPopoverEvents(fieldName, popover);
 
   // Restore scroll position
@@ -944,6 +951,20 @@ function rebuildPopoverContent(fieldName) {
   if (closeBtn) closeBtn.addEventListener('click', hidePopover);
   const doneBtn = popover.querySelector('.popover-done');
   if (doneBtn) doneBtn.addEventListener('click', hidePopover);
+}
+
+// Mirror the header title as a compact field tag inside the body. CSS hides
+// the heavy header title on mobile and shows this tag instead, reclaiming
+// ~30px of vertical real estate.
+function injectFieldTag(popover) {
+  const titleEl = popover.querySelector('.popover-title');
+  const body = popover.querySelector('.popover-body');
+  if (!titleEl || !body) return;
+  const tag = document.createElement('span');
+  tag.className = 'popover-field-tag';
+  tag.textContent = titleEl.textContent;
+  tag.setAttribute('aria-hidden', 'true');
+  body.insertBefore(tag, body.firstChild);
 }
 
 // ─── Photo Crop ───────────────────────────────────────────

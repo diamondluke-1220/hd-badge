@@ -103,17 +103,6 @@
 .badge .key-space {
   width: 28px;
 }
-.badge .stripe-accent {
-  display: none;
-}
-.badge .stripe-accent-bottom {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 8px;
-  background: #2E7DFF;
-}
 .badge .stripe-dots {
   display: none;
 }

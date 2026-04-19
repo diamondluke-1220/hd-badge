@@ -429,6 +429,18 @@ body:has(.popover.visible) .edit-hint {
   letter-spacing: 1.0px;
   text-transform: uppercase;
 }
+/* Compact field tag — mirrors the header title; hidden on desktop,
+   shown inside the body on mobile so the big header can collapse away. */
+.popover-field-tag {
+  display: none;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
 .popover-close {
   background: none;
   border: none;
@@ -1703,10 +1715,21 @@ body:has(.popover.visible) .edit-hint {
     border-radius: 2px;
     margin: 8px auto 0;
   }
+  /* Slim header on mobile: title collapses into a small tag inside the body,
+     header keeps only the close × tap target (top-right per iOS convention).
+     Reclaims ~30px of vertical space. */
+  .popover-header {
+    padding: 4px 8px 4px 12px;
+    border-bottom: none;
+    justify-content: flex-end;
+  }
+  .popover-title { display: none; }
+  .popover-field-tag { display: block; }
+
   /* Tighter horizontal padding on mobile — two-column grid has more room.
      No bottom padding: Done button uses negative margin to extend to popover edge. */
   .popover-body {
-    padding: 14px 12px 0;
+    padding: 10px 12px 0;
   }
   .popover-scroll {
     scroll-padding-top: 60px;
@@ -1729,6 +1752,22 @@ body:has(.popover.visible) .edit-hint {
 
   .card-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* Scale down primary CTA pair on mobile — desktop 70px is chunky on 390px viewport. */
+  .fab-group {
+    gap: 8px;
+    padding: 12px 0;
+  }
+  .fab-submit {
+    padding: 11px 20px;
+    font-size: 14px;
+    letter-spacing: 1.2px;
+  }
+  .fab-submit .fab-icon { font-size: 16px; }
+  .fab-reboot {
+    padding: 10px 16px;
+    font-size: 12px;
   }
 
   .fab-submit:hover {
