@@ -1,12 +1,12 @@
 // Help Desk Badge Generator — Canva-Style Click-to-Edit
 
-// ─── Service Worker Registration ──────────────────────────
-// Install a SW that caches the shell for offline resilience + PWA install.
-// Registered on load so it doesn't block first paint. Failures are non-fatal.
+// Unregister any leftover service worker + purge its caches. The badge app
+// briefly shipped a PWA shell; returning visitors may still have it running.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => { /* silent */ });
-  });
+  navigator.serviceWorker.getRegistrations?.().then(regs => regs.forEach(r => r.unregister())).catch(() => {});
+}
+if ('caches' in window) {
+  caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
 }
 
 // ─── Visual Viewport Keyboard Sync ────────────────────────
