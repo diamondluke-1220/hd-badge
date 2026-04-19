@@ -25,5 +25,6 @@
   <Config Name="Admin Local Only" Target="ADMIN_LOCAL_ONLY" Default="0" Description="Set to 1 to restrict admin to localhost only (disable when using Cloudflare Tunnel)" Type="Variable" Display="advanced" Required="false">0</Config>
   <Config Name="Trust Proxy" Target="TRUST_PROXY" Default="1" Description="Trust X-Forwarded-For headers (enable when behind Cloudflare/nginx)" Type="Variable" Display="advanced" Required="false">1</Config>
   <Config Name="Show Mode" Target="SHOW_MODE" Default="0" Description="Set to 1 for relaxed rate limits during live shows" Type="Variable" Display="always" Required="false">0</Config>
+  <Config Name="BOM Vote Banner" Target="BOM_VOTE_OVERRIDE" Default="auto" Description="Force-show or force-hide the 'Vote for Help Desk' banner. Values: auto (date-gated to June 1-30, 2026), on, off" Type="Variable" Display="advanced" Required="false">auto</Config>
   <Config Name="Port" Target="PORT" Default="3000" Description="Internal server port" Type="Variable" Display="advanced" Required="false">3000</Config>
 </Container>
