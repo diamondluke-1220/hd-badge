@@ -1,5 +1,68 @@
 // Help Desk Badge Generator — Canva-Style Click-to-Edit
 
+// ─── Service Worker Registration ──────────────────────────
+// Install a SW that caches the shell for offline resilience + PWA install.
+// Registered on load so it doesn't block first paint. Failures are non-fatal.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => { /* silent */ });
+  });
+}
+
+// ─── Visual Viewport Keyboard Sync ────────────────────────
+// iOS Safari doesn't reflow fixed elements when the software keyboard opens,
+// so bottom-sheet popovers get covered by the keyboard. Track the keyboard
+// height via visualViewport and expose it as a CSS custom property --kb,
+// which the mobile popover rule consumes via bottom: var(--kb, 0).
+// Chrome Android respects `interactive-widget: resizes-content` (set in the
+// viewport meta) and this is harmless there.
+(() => {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const root = document.documentElement;
+  const sync = () => {
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    root.style.setProperty('--kb', `${kb}px`);
+  };
+  vv.addEventListener('resize', sync);
+  vv.addEventListener('scroll', sync);
+  // iOS 26 quirk: offsetTop sometimes doesn't reset to 0 on keyboard dismiss.
+  // Force a resync shortly after focusout as a belt-and-suspenders reset.
+  document.addEventListener('focusout', () => setTimeout(sync, 120));
+  sync();
+})();
+
+// ─── Haptic Feedback ──────────────────────────────────────
+// Cross-platform tactile feedback. iOS Safari ignores navigator.vibrate() —
+// the workaround is a hidden <input type="checkbox" switch>; toggling it
+// triggers the Taptic Engine on iOS 17.4+. Android uses Vibration API directly.
+// Respects prefers-reduced-motion.
+const haptic = (() => {
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  let labelEl = null;
+  function ensureSwitchEl() {
+    if (labelEl || !isIOS || !document.body) return;
+    const switchEl = document.createElement('input');
+    switchEl.type = 'checkbox';
+    switchEl.setAttribute('switch', '');
+    switchEl.setAttribute('aria-hidden', 'true');
+    switchEl.tabIndex = -1;
+    labelEl = document.createElement('label');
+    labelEl.setAttribute('aria-hidden', 'true');
+    labelEl.style.cssText = 'position:absolute;left:-9999px;width:0;height:0;overflow:hidden;pointer-events:none;';
+    labelEl.appendChild(switchEl);
+    document.body.appendChild(labelEl);
+  }
+  return (duration = 10) => {
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    try {
+      ensureSwitchEl();
+      if (isIOS && labelEl) labelEl.click();
+      else if (navigator.vibrate) navigator.vibrate(duration);
+    } catch { /* silent — haptic failure never blocks UX */ }
+  };
+})();
+
 // ─── Focus Trap Utility ──────────────────────────────────
 // Traps Tab focus within a container and closes on Escape.
 // Returns a cleanup function to remove the trap.
@@ -88,6 +151,12 @@ const CLICK_MAP = [
   { selector: '.badge-caption', field: 'caption' },
   { selector: '.waveform-sticker', field: 'song' },
 ];
+
+// Natural editing order for chained Prev/Next navigation across popovers.
+// Name first (primary identity), photo second, then categorical fields, then
+// the expressive ones. Lets users flow through all 7 fields in one gesture
+// continuous session instead of dismissing + re-finding the next badge region.
+const POPOVER_ORDER = ['name', 'photo', 'department', 'title', 'access', 'song', 'caption'];
 
 let _discoveryDone = false;
 let _suppressAutoDiscover = false; // page-load handler manages discover-pulse for new users
@@ -224,6 +293,20 @@ function showPopover(targetEl, fieldName) {
   popover.innerHTML = buildPopoverContent(fieldName);
   container.appendChild(popover);
 
+  // Dialog gets an accessible name from its title (WAI-ARIA dialog pattern).
+  const titleEl = popover.querySelector('.popover-title');
+  if (titleEl) {
+    titleEl.id = 'popoverTitle';
+    popover.setAttribute('aria-labelledby', 'popoverTitle');
+  }
+  // Live-announce character-counter updates so SR users hear usage as they type.
+  popover.querySelectorAll('.char-count').forEach(span => {
+    span.setAttribute('aria-live', 'polite');
+    span.setAttribute('aria-atomic', 'true');
+    const match = span.textContent.match(/^(\d+)\/(\d+)$/);
+    if (match) span.setAttribute('aria-label', `${match[1]} of ${match[2]} characters used`);
+  });
+
   // Prevent clicks inside popover from bubbling to document
   popover.addEventListener('click', (e) => e.stopPropagation());
 
@@ -231,7 +314,21 @@ function showPopover(targetEl, fieldName) {
 
   // Animate in
   requestAnimationFrame(() => {
-    requestAnimationFrame(() => popover.classList.add('visible'));
+    requestAnimationFrame(() => {
+      popover.classList.add('visible');
+      // On mobile, the bottom sheet may cover the field the user is editing.
+      // Scroll the page so the clicked badge element sits comfortably above
+      // the sheet — user sees their edits reflected live without dismissing.
+      if (window.innerWidth <= 640) {
+        const sheetHeight = popover.offsetHeight;
+        const sheetTop = window.innerHeight - sheetHeight;
+        const targetBottom = targetEl.getBoundingClientRect().bottom;
+        const desiredBottom = sheetTop - 20;
+        if (targetBottom > desiredBottom) {
+          window.scrollBy({ top: targetBottom - desiredBottom, behavior: 'smooth' });
+        }
+      }
+    });
   });
 
   attachPopoverEvents(fieldName, popover);
@@ -248,9 +345,113 @@ function showPopover(targetEl, fieldName) {
   const doneBtn = popover.querySelector('.popover-done');
   if (doneBtn) doneBtn.addEventListener('click', hidePopover);
 
+  // Enter key on any popover input commits (feels like the iOS "Done" key,
+  // which the enterkeyhint="done" attribute surfaces on mobile).
+  popover.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('input.popover-input')) {
+      e.preventDefault();
+      hidePopover();
+    }
+  });
+
+  // Fire a short haptic on any tap inside the popover — card selection,
+  // wave-toggle, Done, close, photo-control buttons. Captures at bubble phase
+  // so stopPropagation inside handlers doesn't block it.
+  popover.addEventListener('click', (e) => {
+    if (e.target.closest('.card, .wave-btn, .popover-done, .popover-close, .btn-sm, .popover-disclosure-summary')) {
+      haptic(8);
+    }
+  });
+
+  // Swipe-down-to-dismiss — iOS/Android bottom-sheet convention. Only drag
+  // gestures starting from the top 60px of the sheet (grab handle + header)
+  // count; gestures inside the scroll region remain plain scroll.
+  if (window.innerWidth <= 640) attachSwipeDismiss(popover);
+
+  // Chained Prev/Next nav — Linear/Shortcuts pattern. User can flow through
+  // all 7 fields without dismissing the sheet. Disabled at boundaries.
+  attachPopoverNav(popover, fieldName);
+
   // Auto-focus text input
   const input = popover.querySelector('.popover-input');
   if (input) setTimeout(() => input.focus(), 80);
+}
+
+function attachPopoverNav(popover, fieldName) {
+  const doneBtn = popover.querySelector('.popover-done');
+  if (!doneBtn) return;
+  const idx = POPOVER_ORDER.indexOf(fieldName);
+  if (idx < 0) return;
+
+  const navRow = document.createElement('div');
+  navRow.className = 'popover-nav-row';
+  const total = POPOVER_ORDER.length;
+  navRow.innerHTML = `
+    <button class="popover-nav-arrow popover-nav-prev" aria-label="Previous field" type="button">&larr; Back</button>
+    <span class="popover-nav-position" aria-hidden="true">${idx + 1} of ${total}</span>
+    <button class="popover-nav-arrow popover-nav-next" aria-label="Next field" type="button">Next &rarr;</button>
+  `;
+  doneBtn.parentNode.insertBefore(navRow, doneBtn);
+
+  const prev = navRow.querySelector('.popover-nav-prev');
+  const next = navRow.querySelector('.popover-nav-next');
+  if (idx === 0) prev.disabled = true;
+  if (idx === total - 1) next.disabled = true;
+
+  prev.addEventListener('click', () => _navigatePopover(-1));
+  next.addEventListener('click', () => _navigatePopover(+1));
+}
+
+function _navigatePopover(direction) {
+  if (!activeField) return;
+  const idx = POPOVER_ORDER.indexOf(activeField);
+  const nextField = POPOVER_ORDER[idx + direction];
+  if (!nextField) return;
+  const selectorMap = {};
+  CLICK_MAP.forEach(({ selector, field }) => { selectorMap[field] = selector; });
+  const target = document.getElementById('badgePreviewArea').querySelector(selectorMap[nextField]);
+  if (target) {
+    haptic(6);
+    showPopover(target, nextField);
+  }
+}
+
+function attachSwipeDismiss(popover) {
+  let startY = 0, currentY = 0, dragging = false;
+  const onStart = (e) => {
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = popover.getBoundingClientRect();
+    if (y - rect.top > 60) return; // only from top 60px — grab handle + header
+    startY = y;
+    currentY = y;
+    dragging = true;
+    popover.style.transition = 'none';
+  };
+  const onMove = (e) => {
+    if (!dragging) return;
+    currentY = e.touches ? e.touches[0].clientY : e.clientY;
+    const delta = Math.max(0, currentY - startY);
+    popover.style.transform = `translateY(${delta}px)`;
+    popover.style.opacity = Math.max(0.4, 1 - (delta / popover.offsetHeight)).toString();
+  };
+  const onEnd = () => {
+    if (!dragging) return;
+    dragging = false;
+    popover.style.transition = '';
+    const delta = currentY - startY;
+    const threshold = popover.offsetHeight * 0.25;
+    if (delta > threshold) {
+      haptic(12);
+      hidePopover();
+    } else {
+      popover.style.transform = '';
+      popover.style.opacity = '';
+    }
+  };
+  popover.addEventListener('touchstart', onStart, { passive: true });
+  popover.addEventListener('touchmove', onMove, { passive: true });
+  popover.addEventListener('touchend', onEnd);
+  popover.addEventListener('touchcancel', onEnd);
 }
 
 function hidePopover() {
@@ -372,7 +573,8 @@ function buildNamePopover() {
     <div class="popover-body">
       <div class="popover-input-row">
         <input type="text" class="popover-input" id="popName"
-          placeholder="First name" maxlength="18" autocomplete="off"
+          placeholder="First name" maxlength="18"
+          autocomplete="given-name" autocapitalize="words" enterkeyhint="done"
           value="${esc(val)}">
         <span class="char-count" id="popNameCount">${val.length}/18</span>
       </div>
@@ -412,10 +614,13 @@ function buildDeptPopover() {
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="card-grid">${cards}</div>
+      <div class="popover-scroll">
+        <div class="card-grid">${cards}</div>
+      </div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popDeptCustom"
           placeholder="or type your own" maxlength="31" autocomplete="off"
+          autocapitalize="characters" inputmode="text" enterkeyhint="done"
           value="${esc(customVal)}">
         <span class="char-count" id="popDeptCount">${customVal.length}/31</span>
       </div>
@@ -438,10 +643,13 @@ function buildTitlePopover() {
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="card-grid">${cards}</div>
+      <div class="popover-scroll">
+        <div class="card-grid">${cards}</div>
+      </div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popTitleCustom"
           placeholder="or type your own" maxlength="30" autocomplete="off"
+          autocapitalize="words" inputmode="text" enterkeyhint="done"
           value="${esc(customVal)}">
         <span class="char-count" id="popTitleCount">${customVal.length}/30</span>
       </div>
@@ -460,19 +668,30 @@ function buildAccessPopover() {
   const isPreset = FAN_ACCESS_LEVELS.some(a => a.label === state.accessLevel);
   const customVal = isPreset ? '' : state.accessLevel;
 
+  // Open the disclosure by default if the user has a custom (non-preset) value,
+  // so they can see and edit it immediately. Otherwise it stays collapsed to
+  // keep the preset grid as the primary decision surface.
+  const disclosureOpen = customVal ? ' open' : '';
+
   return `
     <div class="popover-header">
       <span class="popover-title">Access Level</span>
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="card-grid">${cards}</div>
-      <div class="popover-input-row">
-        <input type="text" class="popover-input popover-input-sm" id="popAccessCustom"
-          placeholder="or type your own" maxlength="28" autocomplete="off"
-          value="${esc(customVal)}">
-        <span class="char-count" id="popAccessCount">${customVal.length}/28</span>
+      <div class="popover-scroll">
+        <div class="card-grid">${cards}</div>
       </div>
+      <details class="popover-disclosure"${disclosureOpen}>
+        <summary class="popover-disclosure-summary">Make your own &rarr;</summary>
+        <div class="popover-input-row">
+          <input type="text" class="popover-input popover-input-sm" id="popAccessCustom"
+            placeholder="or type your own" maxlength="28" autocomplete="off"
+            autocapitalize="characters" inputmode="text" enterkeyhint="done"
+            value="${esc(customVal)}">
+          <span class="char-count" id="popAccessCount">${customVal.length}/28</span>
+        </div>
+      </details>
       <button class="popover-done">Done</button>
     </div>`;
 }
@@ -490,14 +709,16 @@ function buildSongPopover() {
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="popover-label">Waveform Style</div>
-      <div class="wave-toggle">
-        <button class="wave-btn${state.waveStyle === 'barcode' ? ' active' : ''}" data-style="barcode">Barcode</button>
-        <button class="wave-btn${state.waveStyle === 'sticker' ? ' active' : ''}" data-style="sticker">Sticker</button>
+      <div class="popover-scroll">
+        <div class="popover-label">Waveform Style</div>
+        <div class="wave-toggle">
+          <button class="wave-btn${state.waveStyle === 'barcode' ? ' active' : ''}" data-style="barcode">Barcode</button>
+          <button class="wave-btn${state.waveStyle === 'sticker' ? ' active' : ''}" data-style="sticker">Sticker</button>
+        </div>
+        <div class="popover-divider"></div>
+        <div class="popover-label">Track</div>
+        <div class="card-grid">${songCards}</div>
       </div>
-      <div class="popover-divider"></div>
-      <div class="popover-label">Track</div>
-      <div class="card-grid">${songCards}</div>
       <button class="popover-done">Done</button>
     </div>`;
 }
@@ -517,10 +738,13 @@ function buildCaptionPopover() {
       <button class="popover-close">&times;</button>
     </div>
     <div class="popover-body">
-      <div class="card-grid">${cards}</div>
+      <div class="popover-scroll">
+        <div class="card-grid">${cards}</div>
+      </div>
       <div class="popover-input-row">
         <input type="text" class="popover-input popover-input-sm" id="popCaptionCustom"
           placeholder="or type your own" maxlength="30" autocomplete="off"
+          autocapitalize="characters" inputmode="text" enterkeyhint="done"
           value="${esc(customVal)}">
         <span class="char-count" id="popCaptionCount">${customVal.length}/30</span>
       </div>
@@ -539,6 +763,7 @@ function attachPopoverEvents(fieldName, popover) {
         const clean = input.value.replace(/[^a-zA-Z\s\-']/g, '').slice(0, 18);
         input.value = clean;
         counter.textContent = `${clean.length}/18`;
+        counter.setAttribute('aria-label', `${clean.length} of 18 characters used`);
         counter.className = 'char-count' + (clean.length >= 18 ? ' full' : clean.length >= 15 ? ' warn' : '');
         state.name = clean.trim() || 'YOUR NAME';
         refreshPreview();
@@ -577,6 +802,7 @@ function attachPopoverEvents(fieldName, popover) {
         const val = input.value.slice(0, 31);
         input.value = val;
         counter.textContent = `${val.length}/31`;
+        counter.setAttribute('aria-label', `${val.length} of 31 characters used`);
         counter.className = 'char-count' + (val.length >= 31 ? ' full' : val.length >= 27 ? ' warn' : '');
         if (val.trim()) {
           state.department = val.trim().toUpperCase();
@@ -612,6 +838,7 @@ function attachPopoverEvents(fieldName, popover) {
         input.value = titled;
         input.setSelectionRange(cursor, cursor);
         counter.textContent = `${titled.length}/30`;
+        counter.setAttribute('aria-label', `${titled.length} of 30 characters used`);
         counter.className = 'char-count' + (titled.length >= 30 ? ' full' : titled.length >= 26 ? ' warn' : '');
         state.title = titled.trim() || TITLES[0];
         popover.querySelectorAll('.card-grid .card').forEach(c => c.classList.remove('selected'));
@@ -635,6 +862,7 @@ function attachPopoverEvents(fieldName, popover) {
         const val = input.value.slice(0, 28);
         input.value = val;
         counter.textContent = `${val.length}/28`;
+        counter.setAttribute('aria-label', `${val.length} of 28 characters used`);
         counter.className = 'char-count' + (val.length >= 28 ? ' full' : val.length >= 24 ? ' warn' : '');
         if (val.trim()) {
           accessManuallySet = true;
@@ -663,6 +891,7 @@ function attachPopoverEvents(fieldName, popover) {
         const val = capInput.value.slice(0, 30);
         capInput.value = val;
         capCounter.textContent = `${val.length}/30`;
+        capCounter.setAttribute('aria-label', `${val.length} of 30 characters used`);
         capCounter.className = 'char-count' + (val.length >= 30 ? ' full' : val.length >= 26 ? ' warn' : '');
         if (val.trim()) {
           state.caption = val.trim().toUpperCase();
@@ -1013,6 +1242,47 @@ function showToast(message, type = 'success', duration = 4000) {
   }, duration);
 }
 
+// Feature-detect Web Share with PNG files. Required on iOS 15+/Android Chrome;
+// desktop Safari's canShare() rejects files so the button is hidden there.
+function _canShareBadgeFile() {
+  if (!navigator.canShare) return false;
+  try {
+    const probe = new File([''], 'badge.png', { type: 'image/png' });
+    return navigator.canShare({ files: [probe] });
+  } catch { return false; }
+}
+
+// Share the rendered badge PNG via the native share sheet. Fetches the image,
+// wraps it in a File, and hands it to navigator.share. Falls back to a plain
+// download if share is unsupported or fails (user cancel swallowed silently).
+async function _shareBadge(employeeId) {
+  const url = `/api/badge/${encodeURIComponent(employeeId)}/image`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('fetch failed');
+    const blob = await resp.blob();
+    const file = new File([blob], `helpdesk-badge-${employeeId}.png`, { type: 'image/png' });
+    const payload = {
+      files: [file],
+      title: `Help Desk Badge ${employeeId}`,
+      text: `Filed my paperwork at Help Desk Inc. — ${employeeId}`
+    };
+    if (navigator.canShare && navigator.canShare(payload)) {
+      await navigator.share(payload);
+      return;
+    }
+    throw new Error('canShare rejected payload');
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // user cancelled share — no-op
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `helpdesk-badge-${employeeId}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
 function showSubmitSuccess(employeeId) {
   // Remove existing success banner
   const existing = document.getElementById('submitSuccess');
@@ -1021,9 +1291,13 @@ function showSubmitSuccess(employeeId) {
   const banner = document.createElement('div');
   banner.id = 'submitSuccess';
   banner.className = 'submit-success';
+  const shareBtnHtml = _canShareBadgeFile()
+    ? `<button class="submit-success-share" id="shareBadgeBtn">Share Badge</button>`
+    : '';
   banner.innerHTML = `
     <div class="submit-success-text">Welcome aboard, <strong>${esc(employeeId)}</strong>! Your badge is on the org chart.</div>
     <div class="submit-success-actions">
+      ${shareBtnHtml}
       <a class="submit-success-download" href="/api/badge/${esc(employeeId)}/image" download="helpdesk-badge-${esc(employeeId)}.png">Download Badge</a>
       <button class="submit-success-dismiss" id="successDismissBtn">Dismiss</button>
     </div>
@@ -1044,6 +1318,9 @@ function showSubmitSuccess(employeeId) {
     banner.classList.remove('visible');
     setTimeout(() => banner.remove(), 200);
   });
+
+  const shareBtn = document.getElementById('shareBadgeBtn');
+  if (shareBtn) shareBtn.addEventListener('click', () => _shareBadge(employeeId));
 
   // Switch button to "Save Changes" now that they have a badge
   const submitLabel = document.getElementById('submitBadgeLabel');
@@ -1342,10 +1619,14 @@ function sudoRandomize() {
   refreshPreview();
 }
 
-document.getElementById('rebootBtn').addEventListener('click', sudoRandomize);
+document.getElementById('rebootBtn').addEventListener('click', () => {
+  haptic(12);
+  sudoRandomize();
+});
 
 // Download & Print FABs
 document.getElementById('submitBadgeBtn').addEventListener('click', () => {
+  haptic(15);
   if (state.name === 'YOUR NAME') {
     showToast('Tap your name on the badge to get started.', 'error');
     return;
