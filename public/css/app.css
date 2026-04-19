@@ -290,19 +290,13 @@ body:has(.popover.visible) .edit-hint {
   50%  { outline-color: transparent; }
   100% { outline-color: transparent; }
 }
-/* Sequential per-element pulses, top-down order on the badge:
-   access → department → title → song (waveform) → caption → name → photo.
-   Single 0.7s pulse per element, 0.8s stagger = ~100ms gap between.
-   JS slot machine timers in app.js _scheduleFirstLoadDemo must match
-   these delays. Slot machine fires on access through caption (5 fields);
-   name and photo pulse at the end as user CTAs (no slot machine). */
-#badgePreviewArea.discover-pulse .access-badge     { animation: discoverPulse 0.7s ease-out 0s    1 both; }
-#badgePreviewArea.discover-pulse .department       { animation: discoverPulse 0.7s ease-out 0.8s  1 both; }
-#badgePreviewArea.discover-pulse .title            { animation: discoverPulse 0.7s ease-out 1.6s  1 both; }
-#badgePreviewArea.discover-pulse .waveform-sticker { animation: discoverPulse 0.7s ease-out 2.4s  1 both; }
-#badgePreviewArea.discover-pulse .badge-caption    { animation: discoverPulse 0.7s ease-out 3.2s  1 both; }
-#badgePreviewArea.discover-pulse .name             { animation: discoverPulse 0.7s ease-out 4.0s  1 both; }
-#badgePreviewArea.discover-pulse .photo-frame      { animation: discoverPulse 0.7s ease-out 4.8s  1 both; }
+/* Per-element pulse class — driven by JS schedulePulse() rather than CSS
+   descendant selectors, because refreshPreview() clones the badge and would
+   otherwise retrigger the 0s-delay rule on every clone (causing the access
+   badge to flash continuously during the slot-machine window). */
+#badgePreviewArea .pulsing {
+  animation: discoverPulse 0.7s ease-out 0s 1 both;
+}
 
 /* ==========================================================
    5b. BADGE PREVIEW HOVER STATES

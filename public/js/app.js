@@ -135,6 +135,13 @@ function refreshPreview() {
   clone.id = 'badgePreviewClone';
   previewArea.appendChild(clone);
 
+  // If a discovery pulse is mid-window when the DOM gets replaced, re-apply
+  // the class to the new clone so the pulse remains visible.
+  if (_activePulse) {
+    const el = previewArea.querySelector(_activePulse.selector);
+    if (el) el.classList.add('pulsing');
+  }
+
   attachBadgeClickHandlers();
   // Only reanchor if no popover is actively open (prevents sliding while typing)
   if (!activeField) reanchorPopover();
@@ -161,6 +168,41 @@ const POPOVER_ORDER = ['name', 'photo', 'department', 'title', 'access', 'song',
 let _discoveryDone = false;
 let _suppressAutoDiscover = false; // page-load handler manages discover-pulse for new users
 let _firstLoadDemoTimers = [];
+let _activePulse = null; // {selector} of the element currently in its pulse window, or null
+
+// Schedule a .pulsing class add/remove on one element at a given start offset
+// (ms from now). refreshPreview() reapplies the class to the new clone if the
+// pulse is active when DOM is replaced — otherwise the slot machine's
+// mid-cycle refreshes would kill the pulse visually.
+function schedulePulse(selector, startMs, durationMs = 700) {
+  const tOn = setTimeout(() => {
+    _activePulse = { selector };
+    const el = document.querySelector('#badgePreviewArea ' + selector);
+    if (el) el.classList.add('pulsing');
+  }, startMs);
+  const tOff = setTimeout(() => {
+    _activePulse = null;
+    const el = document.querySelector('#badgePreviewArea ' + selector);
+    if (el) el.classList.remove('pulsing');
+  }, startMs + durationMs);
+  _firstLoadDemoTimers.push(tOn, tOff);
+}
+
+// Timeline used by both new-user (with slot machine) and returning-user paths.
+// Offsets match the original CSS discovery-pulse cascade in app.css.
+const PULSE_TIMELINE = [
+  { selector: '.access-badge',     startMs: 0 },
+  { selector: '.department',       startMs: 800 },
+  { selector: '.title',            startMs: 1600 },
+  { selector: '.waveform-sticker', startMs: 2400 },
+  { selector: '.badge-caption',    startMs: 3200 },
+  { selector: '.name',             startMs: 4000 },
+  { selector: '.photo-frame',      startMs: 4800 },
+];
+
+function scheduleDiscoveryPulses() {
+  PULSE_TIMELINE.forEach(p => schedulePulse(p.selector, p.startMs));
+}
 
 /**
  * First-load tutorial: cycle each editable field through 3 random values
@@ -186,7 +228,7 @@ function _scheduleFirstLoadDemo() {
   // Slot-machine feel: 3 quick value flips clustered at the START of each
   // field's pulse (within ~400ms), then the field locks in for the remaining
   // ~3.2s of its highlight. Spin → land → admire.
-  // Pulse offsets match app.css:230-236 .discover-pulse keyframes (3.6s each).
+  // Pulse offsets match PULSE_TIMELINE above (0.7s per field, 0.8s stagger).
   const CYCLE_OFFSETS = [0, 180, 360];
 
   // Pre-generate 3 distinct values per field so each cycle looks different
@@ -198,8 +240,8 @@ function _scheduleFirstLoadDemo() {
 
   // Top-down badge order: access → dept → title → song → caption.
   // startMs is relative to when this function is called (page-load handler
-  // calls it after the 1.4s hint intro). Values match CSS pulse delays
-  // in app.css for the matching .discover-pulse selectors.
+  // calls it after the 1.4s hint intro). Values match PULSE_TIMELINE so the
+  // slot-machine value flip lands inside each field's .pulsing window.
   const fields = [
     { startMs: 0, cycle: accessCycle, apply: (v) => {
         state.accessLevel = (v && v.label) || v;
@@ -235,6 +277,13 @@ function _cancelFirstLoadDemo() {
   // Also drop the intro class so the hint snaps to its normal state immediately
   const hint = document.getElementById('editHint');
   if (hint) hint.classList.remove('intro');
+  // Clear any in-flight pulse so a user who clicks mid-cascade doesn't see
+  // a lingering outline on the previous field.
+  if (_activePulse) {
+    const el = document.querySelector('#badgePreviewArea ' + _activePulse.selector);
+    if (el) el.classList.remove('pulsing');
+    _activePulse = null;
+  }
 }
 
 function attachBadgeClickHandlers() {
@@ -247,9 +296,7 @@ function attachBadgeClickHandlers() {
   // get the auto-fire path here.
   if (!_discoveryDone && !_suppressAutoDiscover) {
     _discoveryDone = true;
-    previewArea.classList.add('discover-pulse');
-    // Remove after last pulse ends: 4.8s delay + 0.7s duration = 5.5s, plus buffer
-    setTimeout(() => previewArea.classList.remove('discover-pulse'), 6000);
+    scheduleDiscoveryPulses();
   }
 
   CLICK_MAP.forEach(({ selector, field }) => {
@@ -261,7 +308,6 @@ function attachBadgeClickHandlers() {
         // Hide hint and stop pulse on first interaction
         const hint = document.getElementById('editHint');
         if (hint) hint.classList.add('hidden');
-        previewArea.classList.remove('discover-pulse');
         // Stop any pending first-load demo randomizations so the user
         // doesn't see the field they just clicked change under them
         _cancelFirstLoadDemo();
@@ -2033,9 +2079,9 @@ if (window.location.pathname === '/orgchart') {
     idEl.dataset.set = '1';
     idEl.dataset.locked = '1'; // Prevent randomization — server assigns real ID
 
-    // Tutorial sequence: hint intro (700ms) → discover-pulse + slot machine.
-    // Suppress the auto-fire of discover-pulse in attachBadgeClickHandlers so
-    // we can sequence it manually after the hint intro lands.
+    // Tutorial sequence: hint intro (700ms) → pulse cascade + slot machine.
+    // Suppress the auto-fire in attachBadgeClickHandlers so we can sequence
+    // the cascade manually after the hint intro lands.
     _suppressAutoDiscover = true;
 
     const hint = document.getElementById('editHint');
@@ -2045,15 +2091,11 @@ if (window.location.pathname === '/orgchart') {
       // Intro done — drop the intro class so hintPulse infinite animation resumes
       if (hint) hint.classList.remove('intro');
 
-      // Now fire the discovery pulse cascade. CSS delays start counting from
-      // this moment, so timings line up with slot machine.
-      const previewArea = document.getElementById('badgePreviewArea');
-      if (previewArea) {
-        _discoveryDone = true;
-        previewArea.classList.add('discover-pulse');
-        // Last pulse: delay 4.8s + duration 0.7s = 5.5s, plus buffer
-        setTimeout(() => previewArea.classList.remove('discover-pulse'), 6000);
-      }
+      // Fire the discovery pulse cascade via JS-driven .pulsing class so that
+      // refreshPreview's DOM replacement doesn't retrigger per-element
+      // animations every time the slot machine updates a field.
+      _discoveryDone = true;
+      scheduleDiscoveryPulses();
 
       // Slot machine: cycles each editable field through 3 random values
       // synchronized with its discovery pulse window. Tutorial via demonstration.
