@@ -34,6 +34,29 @@
 
 
 /* ==========================================================
+   Extra @font-face registrations
+   badge.css only registers JetBrains Mono weight 600, but several
+   badge elements (caption, employee-id, title, etc.) request weight 700.
+   Without these, mobile Safari falls back to system Courier which has
+   wider glyph metrics and breaks the fixed 800px caption width.
+   The .woff2 files already exist in /fonts — just need to register them.
+   ========================================================== */
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-700.woff2') format('woff2');
+}
+
+/* ==========================================================
    0. DESIGN TOKENS
    ========================================================== */
 :root {
