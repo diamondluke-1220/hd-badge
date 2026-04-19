@@ -188,7 +188,9 @@ function updateBadge(data) {
   // Name
   const nameEl = document.getElementById('nameField');
   if (nameEl) {
+    const isPlaceholder = !name || name === 'YOUR NAME';
     nameEl.textContent = (name || 'YOUR NAME').toUpperCase();
+    nameEl.classList.toggle('name-placeholder', isPlaceholder);
     autoShrink(nameEl, 32);
   }
 
