@@ -315,9 +315,19 @@ let _placeholderDataUrl: string | null = null;
  *   - calibration: drift measurement grid (body.k-calibration CSS, standalone)
  */
 async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
-  // Queue this render behind any in-flight render on the shared warm page.
-  const run = _renderLock.then(() => renderBadgeInner(badge, options));
-  // Keep the chain alive even if this render rejects — the caller still gets the error.
+  // One render attempt; on failure, drop the (possibly dirty) shared warm page so
+  // the next attempt rebuilds a clean one instead of inheriting the corruption.
+  const attempt = () => renderBadgeInner(badge, options).catch(async (err) => {
+    try { await _warmPage?.close(); } catch { /* already gone */ }
+    _warmPage = null;
+    _warmPageReady = false;
+    throw err;
+  });
+  // Queue behind any in-flight render (the shared page renders one badge at a time),
+  // and retry once on a freshly rebuilt page — transient Playwright hiccups usually
+  // clear on a clean page, which keeps a single failure from leaving a stale image.
+  const run = _renderLock.then(() => attempt().catch(() => attempt()));
+  // Keep the chain alive even if both attempts reject — the caller still gets the error.
   _renderLock = run.then(() => undefined, () => undefined);
   return run;
 }
@@ -628,7 +638,7 @@ if (ADMIN_TOKEN) {
 }
 import { isShowMode } from './rate-limit';
 if (isShowMode()) {
-  console.log(`🎸 SHOW MODE active — relaxed rate limits (50/hr, 200/day)`);
+  console.log(`🎸 SHOW MODE active — relaxed rate limits (300/hr, 800/day)`);
 }
 
 // ─── Pre-render static print assets (K-layer front + badge back) ───

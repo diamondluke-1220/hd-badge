@@ -38,8 +38,9 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const dateTo = c.req.query('dateTo') || undefined;
     const photoParam = c.req.query('hasPhoto');
     const hasPhoto = photoParam === '1' ? true : photoParam === '0' ? false : undefined;
+    const status = c.req.query('status') || undefined;
 
-    const result = listBadges({ page, limit, includeHidden: true, department, division, dateFrom, dateTo, hasPhoto, search });
+    const result = listBadges({ page, limit, includeHidden: true, department, division, dateFrom, dateTo, hasPhoto, search, status });
 
     return c.json({
       badges: result.badges.map(b => serializeBadge(b, { admin: true })),
@@ -384,8 +385,16 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   // ─── Re-render All Badges ──────────────────────────────
 
   app.post('/api/admin/badges/rerender-all', async (c) => {
-    const result = listBadges({ limit: 1000, maxLimit: 1000 });
-    const badges = result.badges;
+    // Gather ALL badges, including hidden ones, paging through the per-call cap so
+    // nothing past the first page (or any hidden badge) is silently skipped.
+    const badges: any[] = [];
+    let page = 1;
+    while (true) {
+      const result = listBadges({ page, limit: 500, maxLimit: 500, includeHidden: true });
+      badges.push(...result.badges);
+      if (page >= result.pages || result.badges.length === 0) break;
+      page++;
+    }
 
     if (badges.length === 0) {
       return c.json({ success: false, error: 'No badges to render.' }, 404);

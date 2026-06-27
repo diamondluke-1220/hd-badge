@@ -337,6 +337,10 @@
   // ─── Chyron ─────────────────────────────────────────────
 
   function startChyron() {
+    // Clear any existing timer first — startChyron is called on every
+    // presentation-state SSE event, so without this each rotation would stack
+    // another interval and the ticker would accelerate over a long show.
+    if (pres.chyronTimer) clearInterval(pres.chyronTimer);
     chyronOverlay.style.display = 'block';
     pres.chyronIndex = 0;
     rotateChyronMessage();
@@ -348,6 +352,10 @@
     if (pres.chyronTimer) {
       clearInterval(pres.chyronTimer);
       pres.chyronTimer = null;
+    }
+    if (pres.chyronFlashTimeout) {
+      clearTimeout(pres.chyronFlashTimeout);
+      pres.chyronFlashTimeout = null;
     }
   }
 
@@ -374,16 +382,21 @@
     // Temporarily show a special message
     const prevTimer = pres.chyronTimer;
     if (prevTimer) clearInterval(prevTimer);
+    // Clear any pending resume timeout so rapid new-badge events don't stack
+    // multiple rotation intervals (each pending timeout would start its own).
+    if (pres.chyronFlashTimeout) clearTimeout(pres.chyronFlashTimeout);
 
     chyronText.classList.remove('chyron-text-enter', 'chyron-text-exit');
     chyronText.textContent = message;
     chyronText.classList.add('chyron-flash');
 
     // Resume normal rotation after 5s
-    setTimeout(() => {
+    pres.chyronFlashTimeout = setTimeout(() => {
       chyronText.classList.remove('chyron-flash');
+      if (pres.chyronTimer) clearInterval(pres.chyronTimer);
       pres.chyronTimer = setInterval(rotateChyronMessage, 8000);
       rotateChyronMessage();
+      pres.chyronFlashTimeout = null;
     }, 5000);
   }
 

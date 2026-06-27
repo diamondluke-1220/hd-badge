@@ -340,6 +340,7 @@ async function loadBadges() {
   const dateFrom = document.getElementById('dateFrom').value;
   const dateTo = document.getElementById('dateTo').value;
   const hasPhoto = document.getElementById('photoFilter').value;
+  const statusFilter = document.getElementById('statusFilter').value;
 
   let url = `/api/admin/badges?page=${currentPage}&limit=50`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
@@ -348,22 +349,16 @@ async function loadBadges() {
   if (dateFrom) url += `&dateFrom=${encodeURIComponent(dateFrom)}`;
   if (dateTo) url += `&dateTo=${encodeURIComponent(dateTo)}`;
   if (hasPhoto) url += `&hasPhoto=${hasPhoto}`;
+  // Status filter is now applied server-side so it spans all pages, not just
+  // the current 50-row page (and pagination/total stay correct).
+  if (statusFilter) url += `&status=${encodeURIComponent(statusFilter)}`;
 
   const data = await apiFetch(url);
   if (data.error) return;
 
   totalPages = data.pages || 1;
 
-  // Client-side status filter
-  let badges = data.badges || [];
-  const statusFilter = document.getElementById('statusFilter').value;
-  if (statusFilter === 'unpaid') badges = badges.filter(b => !b.isPaid);
-  else if (statusFilter === 'paid') badges = badges.filter(b => b.isPaid);
-  else if (statusFilter === 'unprinted') badges = badges.filter(b => !b.isPrinted);
-  else if (statusFilter === 'printed') badges = badges.filter(b => b.isPrinted);
-  else if (statusFilter === 'flagged') badges = badges.filter(b => b.isFlagged);
-
-  renderTable(badges);
+  renderTable(data.badges || []);
   renderPagination();
 }
 

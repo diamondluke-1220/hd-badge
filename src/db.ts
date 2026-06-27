@@ -452,6 +452,7 @@ export function listBadges(options: {
   maxLimit?: number;
   includeHidden?: boolean;
   recentFirst?: boolean;
+  status?: string;
 }): { badges: BadgeRow[]; total: number; page: number; pages: number } {
   const page = options.page || 1;
   const cap = options.maxLimit || 100;
@@ -459,7 +460,7 @@ export function listBadges(options: {
   const offset = (page - 1) * limit;
 
   // Build dynamic WHERE clause for advanced filters
-  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division || options.recentFirst || options.search;
+  const hasAdvancedFilters = options.dateFrom || options.dateTo || options.hasPhoto !== undefined || options.division || options.recentFirst || options.search || options.status;
 
   if (hasAdvancedFilters || (options.includeHidden && options.department)) {
     const conditions: string[] = [];
@@ -503,6 +504,14 @@ export function listBadges(options: {
     } else if (options.hasPhoto === false) {
       conditions.push('has_photo = 0');
     }
+
+    // Paid/printed/flagged status filter — server-side so it applies across all
+    // pages, not just the 50 rows currently visible in the admin table.
+    if (options.status === 'paid') conditions.push('is_paid = 1');
+    else if (options.status === 'unpaid') conditions.push('is_paid = 0');
+    else if (options.status === 'printed') conditions.push('is_printed = 1');
+    else if (options.status === 'unprinted') conditions.push('is_printed = 0');
+    else if (options.status === 'flagged') conditions.push('is_flagged = 1');
 
     if (options.search) {
       // Escape SQL LIKE wildcards in user input
