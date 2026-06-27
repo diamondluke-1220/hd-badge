@@ -39,7 +39,7 @@ setInterval(() => {
 
 function getLimits(): { hourly: number; daily: number } {
   if (showModeActive) {
-    return { hourly: 50, daily: 200 };
+    return { hourly: 300, daily: 800 };
   }
   return { hourly: 10, daily: 20 };
 }

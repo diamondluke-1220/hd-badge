@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
+import { HTTPException } from 'hono/http-exception';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
@@ -21,6 +22,10 @@ let _browser: import('playwright').Browser | null = null;
 let _browserLaunching: Promise<import('playwright').Browser> | null = null;
 let _warmPage: import('playwright').Page | null = null;
 let _warmPageReady = false;
+// Serializes badge renders — the shared warm page can only render one badge at a
+// time. Concurrent renders would interleave on the same DOM and screenshot the
+// wrong badge, so every render queues behind this promise chain.
+let _renderLock: Promise<unknown> = Promise.resolve();
 
 async function getBrowser() {
   if (_browser?.isConnected()) return _browser;
@@ -262,6 +267,13 @@ app.use('/api/admin/*', async (c, next) => {
     const ip = getClientIp(c);
     if (adminFailures.has(ip)) adminFailures.delete(ip);
   } catch (e: any) {
+    // bearerAuth runs the downstream handler inside this try (it awaits next()).
+    // Only a genuine bad/missing token throws HTTPException 401 — let any other
+    // error (e.g. a render failure in a print route) propagate so it isn't
+    // miscounted as a failed login and trip the 5-strike admin lockout.
+    if (!(e instanceof HTTPException) || e.status !== 401) {
+      throw e;
+    }
     const ip = getClientIp(c);
     const now = Date.now();
     const record = adminFailures.get(ip) || { count: 0, firstAttempt: now, lastAttempt: 0 };
@@ -303,6 +315,14 @@ let _placeholderDataUrl: string | null = null;
  *   - calibration: drift measurement grid (body.k-calibration CSS, standalone)
  */
 async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
+  // Queue this render behind any in-flight render on the shared warm page.
+  const run = _renderLock.then(() => renderBadgeInner(badge, options));
+  // Keep the chain alive even if this render rejects — the caller still gets the error.
+  _renderLock = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+async function renderBadgeInner(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
   const page = await getWarmPage();
 
   const id = badge.employee_id;
@@ -424,7 +444,7 @@ interface SSEClient {
 
 const sseClients = new Set<SSEClient>();
 const MAX_SSE_CLIENTS = 500;
-const MAX_SSE_PER_IP = 10;
+const MAX_SSE_PER_IP = 50;
 const sseByIp = new Map<string, number>();
 
 function sseWrite(client: SSEClient, event: string, data: string) {

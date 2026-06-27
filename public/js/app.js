@@ -1211,6 +1211,9 @@ function showPrivacyModal() {
 }
 
 async function submitBadge(photoPublic) {
+  // Guard against double-tap / double-submit (two badges, or two PUTs on edit).
+  if (state._submitting) return;
+  state._submitting = true;
   const loading = document.getElementById('loading');
   const isEdit = !!state._editingBadgeId;
   loading.querySelector('.loading-text').textContent = isEdit ? 'Updating your badge...' : 'Filing your paperwork...';
@@ -1224,7 +1227,7 @@ async function submitBadge(photoPublic) {
       title: state.title,
       song: state.song,
       accessLevel: state.accessLevel,
-      accessCss: ACCESS_CSS[state.accessLevel] || '',
+      accessCss: ACCESS_CSS[state.accessLevel] || 'custom',
       caption: state.caption,
       waveStyle: state.waveStyle,
       photoPublic,
@@ -1283,6 +1286,7 @@ async function submitBadge(photoPublic) {
     console.error('Badge submission failed:', err);
     showToast('Submission failed. Please try again.', 'error');
   } finally {
+    state._submitting = false;
     loading.querySelector('.loading-text').textContent = 'Generating your badge...';
     loading.classList.remove('active');
   }

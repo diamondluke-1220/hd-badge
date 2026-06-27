@@ -558,7 +558,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const active = !isShowMode();
     setShowMode(active);
     if (active) resetRateLimits();
-    log('info', 'show-mode', active ? 'Show mode ON — 50/hr, 200/day limits' : 'Show mode OFF — normal limits');
+    log('info', 'show-mode', active ? 'Show mode ON — 300/hr, 800/day limits' : 'Show mode OFF — normal limits');
     return c.json({ showMode: active });
   });
 
