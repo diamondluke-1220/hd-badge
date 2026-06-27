@@ -353,7 +353,7 @@
 
   function rotateChyronMessage() {
     const messages = pres.chyronMessages.length ? pres.chyronMessages : [
-      'GET YOUR BADGE → hdbadge.nav.computer',
+      'GET YOUR BADGE → badge.helpdesk.band',
       'HELP DESK — Live in Madison, WI',
       'Join the org chart — scan the QR code',
     ];

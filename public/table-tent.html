@@ -220,71 +220,6 @@
       line-height: 1.5;
     }
 
-    .back .divider-line {
-      width: 80%;
-      height: 1px;
-      background: rgba(255,255,255,0.15);
-      margin: 16px 0;
-    }
-
-    .back .fallback-section {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .back .fallback-label {
-      font-size: 9px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.35);
-    }
-
-    .back .fallback-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .back .qr-small {
-      background: white;
-      padding: 8px;
-      border-radius: 6px;
-    }
-    .back .qr-small canvas {
-      display: block;
-    }
-
-    .back .fallback-info {
-      text-align: left;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .back .wifi-name {
-      font-family: 'Barlow', sans-serif;
-      font-weight: 800;
-      font-size: 15px;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-
-    .back .wifi-password {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 10px;
-      color: rgba(255,255,255,0.5);
-      letter-spacing: 0.5px;
-    }
-
-    .back .wifi-hint {
-      font-size: 9px;
-      color: rgba(255,255,255,0.35);
-      line-height: 1.4;
-      max-width: 180px;
-    }
-
     .back .tagline {
       font-family: 'Barlow', sans-serif;
       font-weight: 800;
@@ -348,19 +283,12 @@
     <div class="step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <div class="step-title">No WiFi? Use the Backup</div>
-        <div class="step-desc">Scan the smaller QR to join our local WiFi, then visit the URL shown on back.</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-content">
         <div class="step-title">Customize Your Badge</div>
         <div class="step-desc">Tap any element on your badge to edit. Choose your name, department, title, and theme song.</div>
       </div>
     </div>
     <div class="step">
-      <div class="step-num">4</div>
+      <div class="step-num">3</div>
       <div class="step-content">
         <div class="step-title">Download or Join the Org Chart</div>
         <div class="step-desc">Save your badge, then optionally join the Employee Directory to be listed alongside the team.</div>
@@ -373,32 +301,17 @@
   </div>
 </div>
 
-<!-- BACK — Dual QR: primary URL + fallback WiFi -->
+<!-- BACK — QR to the badge generator -->
 <div class="page-label">Back (faces audience when flipped)</div>
 <div class="panel back">
   <div class="dual-qr-layout">
-    <!-- Primary: Direct URL (works when venue has internet) -->
+    <!-- Direct URL to the public badge generator -->
     <div class="primary-section">
       <div class="section-label">Scan to Get Your Badge</div>
       <div class="primary-title">Badge Generator</div>
       <div class="qr-container" id="qrPrimary"></div>
-      <div class="primary-url">badge.nav.computer</div>
+      <div class="primary-url">badge.helpdesk.band</div>
       <div class="scan-label">Scan with your phone's camera — opens directly in your browser</div>
-    </div>
-
-    <div class="divider-line"></div>
-
-    <!-- Fallback: WiFi QR for offline/local mode -->
-    <div class="fallback-section">
-      <div class="fallback-label">No Internet? Use Local WiFi</div>
-      <div class="fallback-row">
-        <div class="qr-small" id="qrFallback"></div>
-        <div class="fallback-info">
-          <div class="wifi-name">Help Desk Inc</div>
-          <div class="wifi-password">Password: helpdesk2026</div>
-          <div class="wifi-hint">Scan to join WiFi, then visit<br><strong>http://192.168.8.1</strong></div>
-        </div>
-      </div>
     </div>
   </div>
   <div class="tagline">please hold.</div>
@@ -406,11 +319,8 @@
 
 <script src="/lib/qrcode.min.js"></script>
 <script>
-  // ── CONFIGURE THESE PER SHOW ──
-  const BADGE_URL = 'https://badge.nav.computer';       // Cloudflare Tunnel URL
-  const WIFI_SSID = 'Help Desk Inc';                     // Local WiFi SSID
-  const WIFI_PASS = 'helpdesk2026';                      // Local WiFi password
-  const LOCAL_URL = 'http://192.168.8.1';                // Local fallback URL
+  // ── CONFIGURE THIS PER SHOW ──
+  const BADGE_URL = 'https://badge.helpdesk.band';       // Public badge generator URL
   // ──────────────────────────────
 
   function renderQR(data, containerId, cellSize) {
@@ -444,10 +354,6 @@
 
   // Primary QR: Direct URL (large)
   renderQR(BADGE_URL, 'qrPrimary', 5);
-
-  // Fallback QR: WiFi join (smaller)
-  const wifiQR = `WIFI:T:WPA;S:${WIFI_SSID};P:${WIFI_PASS};;`;
-  renderQR(wifiQR, 'qrFallback', 3);
 </script>
 </body>
 </html>

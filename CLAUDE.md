@@ -3,7 +3,7 @@
 ## Project Overview
 
 **Stack:** Bun + Hono + SQLite (WAL mode) + Playwright (server-side badge rendering) + Sharp (image processing)
-**Production:** `badge.helpdesk.band` (also `hdbadge.nav.computer`)
+**Production:** `badge.helpdesk.band`
 **Domain:** `helpdesk.band` — badge app at `badge.`, game at `game.`, root reserved for band site
 
 **Entry Points:**

@@ -29,7 +29,7 @@ const BAND_INTRO_DURATION_MS = 18_000; // 18 seconds per band member
 const BAND_MEMBER_COUNT = 5;           // HD-00001 through HD-00005
 
 const DEFAULT_CHYRON: string[] = [
-  'GET YOUR BADGE → hdbadge.nav.computer',
+  'GET YOUR BADGE → badge.helpdesk.band',
   'HELP DESK — Live in Madison, WI',
   'Join the org chart — scan the QR code at the merch table',
 ];
