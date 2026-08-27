@@ -15,11 +15,11 @@
   "dependencies": {
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
-    "hono": "^4.0.0",
-    "playwright": "^1.58.2",
+    "hono": "^4.13.5",
+    "playwright": "^1.62.1",
     "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.62.1"
   }
 }

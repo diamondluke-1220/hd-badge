@@ -101,7 +101,7 @@ grep -rn 'readFileSync\|writeFileSync' src/routes/ --include='*.ts'
 ## Testing
 
 ```bash
-bun test              # All tests (API + DB) — 45 tests, 0 failures
+bun test              # All tests (API + DB) — 94 tests, 0 failures
 bun run test:api      # API integration tests only
 bun run test:db       # DB unit tests only
 bun run test:e2e      # Playwright E2E smoke tests (10 tests, requires running server)
