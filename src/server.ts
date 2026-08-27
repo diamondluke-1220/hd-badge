@@ -34,11 +34,19 @@ async function getBrowser() {
   _warmPage = null;
   _warmPageReady = false;
   _browserLaunching = (async () => {
-    const { chromium } = await import('playwright');
-    const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    _browser = browser;
-    _browserLaunching = null;
-    return browser;
+    try {
+      const { chromium } = await import('playwright');
+      const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+      _browser = browser;
+      return browser;
+    } finally {
+      // Must clear on the failure path too. Without the finally, one rejected
+      // launch leaves a permanently rejected promise here that every later
+      // caller awaits, and badge rendering never recovers for the life of the
+      // process — _browser stays null, so the isConnected() retry above can
+      // never re-engage either.
+      _browserLaunching = null;
+    }
   })();
   return _browserLaunching;
 }
