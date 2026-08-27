@@ -654,7 +654,10 @@ export function getStats(): {
     const bandMembers = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 1').get() as { count: number }).count;
     const flaggedCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1').get() as { count: number }).count;
     const byDeptRows = stmts.countByDept.all() as { department: string; count: number }[];
-    const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
+    // is_visible = 1 matters: this field ships on the PUBLIC, unauthenticated
+    // /api/orgchart/stats, so without the filter it handed any caller the
+    // employee ID of a badge an admin had just hidden.
+    const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 AND is_visible = 1 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
 
     const newestRow = db.prepare(
       'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'

@@ -193,19 +193,53 @@ app.use('*', async (c, next) => {
 
 // ─── Helpers ─────────────────────────────────────────────
 
-function getClientIp(c: any): string {
-  if (process.env.TRUST_PROXY === '1') {
-    return c.req.header('cf-connecting-ip')
-      || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
-      || 'unknown';
-  }
+/** Socket peer address — who actually opened the connection. Unspoofable. */
+function getPeerIp(c: any): string {
   try {
-    const info = getConnInfo(c);
-    return info.remote.address || 'unknown';
+    return getConnInfo(c).remote.address || 'unknown';
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * Peers whose forwarding headers we honor. Set TRUSTED_PROXY_IPS to the
+ * address(es) the reverse proxy connects from — comma-separated exact IPs, or
+ * a prefix ending in '.' or ':' such as "172.17." for a Docker bridge subnet.
+ * When TRUST_PROXY=1 and this is unset, only loopback peers are trusted.
+ */
+const TRUSTED_PROXY_IPS = (process.env.TRUSTED_PROXY_IPS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+function isTrustedProxy(peer: string): boolean {
+  if (isLocalhost(peer)) return true;
+  return TRUSTED_PROXY_IPS.some(entry =>
+    entry.endsWith('.') || entry.endsWith(':') ? peer.startsWith(entry) : peer === entry
+  );
+}
+
+/**
+ * Resolve the client IP used for rate limiting and the admin lockout.
+ *
+ * Forwarding headers are honored ONLY when the socket peer is a trusted proxy.
+ * Previously cf-connecting-ip was read first and unconditionally whenever
+ * TRUST_PROXY=1 — which the Docker image sets by default — while the container
+ * also listens on :3030 on the host, reachable directly from the LAN. Any such
+ * client could rotate that header per request for a fresh rate-limit key and a
+ * fresh admin-lockout key: the 5-strike brute-force lockout never tripped,
+ * badge creation limits were unbounded, and the per-IP SSE cap was bypassed.
+ */
+function getClientIp(c: any): string {
+  const peer = getPeerIp(c);
+  if (process.env.TRUST_PROXY === '1' && isTrustedProxy(peer)) {
+    return c.req.header('cf-connecting-ip')
+      || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+      || c.req.header('x-real-ip')
+      || peer;
+  }
+  return peer;
 }
 
 function clampField(val: string, field?: string): string {
@@ -229,16 +263,20 @@ function isLocalhost(ip: string): boolean {
   return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
 }
 
-// Restrict /admin HTML page to localhost in local mode
-app.use('/admin', async (c, next) => {
-  if (process.env.ADMIN_LOCAL_ONLY === '1') {
-    const ip = getClientIp(c);
-    if (!isLocalhost(ip)) {
-      return c.text('Not found', 404);
-    }
+// Restrict the /admin HTML page to localhost in local mode.
+// Checks the SOCKET PEER, not the forwarded client IP: a proxy-forwarded
+// "cf-connecting-ip: 127.0.0.1" must never satisfy a localhost-only gate.
+// Registered on both '/admin' and '/admin.html' — the guard used to match only
+// the exact path '/admin', while the static catch-all happily served
+// public/admin.html to anyone.
+const adminPageGuard = async (c: any, next: any) => {
+  if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
+    return c.text('Not found', 404);
   }
   await next();
-});
+};
+app.use('/admin', adminPageGuard);
+app.use('/admin.html', adminPageGuard);
 
 app.use('/api/admin/*', async (c, next) => {
   if (!ADMIN_TOKEN) {
@@ -638,6 +676,14 @@ const port = Number(process.env.PORT) || 3000;
 
 log('info', 'server', `Started on port ${port} (admin=${ADMIN_TOKEN ? 'enabled' : 'disabled'}, local_only=${process.env.ADMIN_LOCAL_ONLY || '0'}, show_mode=${process.env.SHOW_MODE || '0'})`);
 console.log(`🎫 Help Desk Badge Generator running at http://localhost:${port}`);
+if (process.env.TRUST_PROXY === '1' && TRUSTED_PROXY_IPS.length === 0) {
+  console.warn(
+    '⚠️  TRUST_PROXY=1 but TRUSTED_PROXY_IPS is unset — forwarding headers are ' +
+    'honored from loopback peers only. If the reverse proxy reaches this app ' +
+    'from another address, set TRUSTED_PROXY_IPS to it (e.g. TRUSTED_PROXY_IPS=172.17.) ' +
+    'or every client behind it will share one rate-limit key.'
+  );
+}
 if (ADMIN_TOKEN) {
   console.log(`🔐 Admin panel: http://localhost:${port}/admin`);
   console.log(`📺 Presentation: http://localhost:${port}/presentation`);

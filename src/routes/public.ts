@@ -37,7 +37,11 @@ function clearBadgeCookie(c: Context): void {
 function getBadgeToken(c: Context): string | null {
   return getCookie(c, TOKEN_COOKIE) || null;
 }
-import { checkRateLimit, checkGameScoreRateLimit } from '../rate-limit';
+
+/** Valid waveform styles. Anything else is rejected at write time. */
+const WAVE_STYLES = new Set(['barcode', 'sticker']);
+
+import { checkRateLimit, checkEditRateLimit, checkRecoverRateLimit, checkGameScoreRateLimit } from '../rate-limit';
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
 import { isVoteBannerActive } from '../vote-banner';
@@ -101,6 +105,10 @@ async function notifyDiscord(employeeId: string, name: string, dept: string, tit
       body: JSON.stringify({
         username: 'Badge Bot',
         content,
+        // The badge name is unauthenticated user input interpolated straight
+        // into `content`, and "@everyone" fits inside the 18-char name clamp.
+        // Without this, anyone could ping the whole server by naming a badge.
+        allowed_mentions: { parse: [] },
       }),
     });
   } catch (err) {
@@ -115,6 +123,25 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     PHOTOS_DIR, BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR,
     ADMIN_TOKEN, THUMB_WIDTH, HEADSHOT_WIDTH,
   } = deps;
+
+  /**
+   * Constant-time Bearer check used by the image endpoints.
+   *
+   * These routes live outside /api/admin/*, so this is deliberately ONLY a read
+   * gate for hidden-badge images — never a grant of admin capability.
+   *
+   * Compares BYTE lengths. The previous inline check compared UTF-16 string
+   * length against a byte buffer, so a header with non-ASCII characters passed
+   * the length guard and then crashed timingSafeEqual with a RangeError,
+   * turning an unauthenticated request into a 500 and leaking the token length.
+   */
+  function hasAdminBearer(c: Context): boolean {
+    if (!ADMIN_TOKEN) return false;
+    const supplied = Buffer.from(c.req.header('authorization') || '', 'utf8');
+    const expected = Buffer.from(`Bearer ${ADMIN_TOKEN}`, 'utf8');
+    if (supplied.length !== expected.length) return false;
+    return timingSafeEqual(supplied, expected);
+  }
 
   // ─── Badge Creation ──────────────────────────────────────
 
@@ -138,6 +165,23 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
+    }
+
+    // Every text field must actually be a string. isNameClean() and the .trim()
+    // calls below run OUTSIDE the try block, so a numeric or object value threw
+    // a raw TypeError past the handler and returned Hono's plain-text 500
+    // instead of the themed JSON contract every client parses.
+    const requiredText = { name, department, title, song, accessLevel, accessCss };
+    for (const [field, value] of Object.entries(requiredText)) {
+      if (typeof value !== 'string') {
+        return c.json({ success: false, error: 'Missing required fields.' }, 400);
+      }
+    }
+    if (caption !== undefined && typeof caption !== 'string') {
+      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+    }
+    if (waveStyle !== undefined && !WAVE_STYLES.has(waveStyle)) {
+      return c.json({ success: false, error: 'Unrecognized waveform style.' }, 400);
     }
 
     // Check all user-supplied text fields for hate speech
@@ -338,6 +382,16 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   app.put('/api/badge/:id', async (c) => {
     const id = c.req.param('id');
 
+    // Edits were entirely unlimited while costing 1-2 headless-Chrome renders
+    // each, and every render serializes on the process-global _renderLock — so
+    // one client looping PUT could stall badge creation for everyone. Uses its
+    // own bucket so editing your badge never eats the creation quota.
+    const editCheck = checkEditRateLimit(getClientIp(c));
+    if (!editCheck.allowed) {
+      log('warn', 'rate-limit', `Blocked edit from ${getClientIp(c)}: ${editCheck.message}`);
+      return c.json({ success: false, error: editCheck.message }, 429);
+    }
+
     let body: any;
     try {
       body = await c.req.json();
@@ -354,6 +408,23 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
       return c.json({ success: false, error: 'Missing required fields.' }, 400);
+    }
+
+    // Type + allowlist validation, same reasoning as the create path.
+    const requiredText = { name, department, title, song, accessLevel, accessCss };
+    for (const [field, value] of Object.entries(requiredText)) {
+      if (typeof value !== 'string') {
+        return c.json({ success: false, error: 'Missing required fields.' }, 400);
+      }
+    }
+    if (caption !== undefined && typeof caption !== 'string') {
+      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+    }
+    // An unvalidated waveStyle was committed to the DB BEFORE the render, and
+    // any value with whitespace throws in classList.add() — permanently
+    // bricking that badge's render on every subsequent attempt.
+    if (waveStyle !== undefined && !WAVE_STYLES.has(waveStyle)) {
+      return c.json({ success: false, error: 'Unrecognized waveform style.' }, 400);
     }
 
     // Verify badge exists and is visible
@@ -486,18 +557,19 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   app.get('/api/badge/:id/image', (c) => {
     const id = c.req.param('id');
     const badge = getBadge(id);
-    if (!badge) {
+    // Hidden badges must 404 here exactly as they do on GET /api/badge/:id.
+    // Without this, "hide" was cosmetic: the JSON 404'd while the rendered PNG
+    // stayed public, and the SSE broadcast had already handed every viewer the
+    // employee ID needed to fetch it.
+    if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
-    const authHeader = c.req.header('authorization') || '';
-    const expected = `Bearer ${ADMIN_TOKEN}`;
-    const tokenMatch = ADMIN_TOKEN && authHeader.length === expected.length &&
-      timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
-    const isAdmin = !!tokenMatch && c.req.query('full') === '1';
-
+    // The ?full=1 private-photo unlock was removed: nothing in the app ever
+    // sent it, and it was an unlimited, unlogged oracle sitting outside the
+    // admin lockout (right token → full photo, wrong token → -nophoto).
     let imagePath: string;
-    if (!isAdmin && !badge.photo_public && badge.has_photo) {
+    if (!badge.photo_public && badge.has_photo) {
       const noPhotoPath = join(BADGES_DIR, `${id}-nophoto.png`);
       imagePath = existsSync(noPhotoPath) ? noPhotoPath : join(BADGES_DIR, `${id}.png`);
     } else {
@@ -519,7 +591,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   app.get('/api/badge/:id/headshot', async (c) => {
     const id = c.req.param('id');
     const badge = getBadge(id);
-    if (!badge) {
+    if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
@@ -574,7 +646,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   app.get('/api/badge/:id/thumb', async (c) => {
     const id = c.req.param('id');
     const badge = getBadge(id);
-    if (!badge) {
+    if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
@@ -664,7 +736,9 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
   app.post('/api/badge/:id/recover', async (c) => {
     const ip = getClientIp(c);
-    const rateCheck = checkRateLimit(ip);
+    // Own bucket. Sharing the creation bucket meant ten recovery attempts burned
+    // the room's entire badge-creation quota behind a venue NAT.
+    const rateCheck = checkRecoverRateLimit(ip);
     if (!rateCheck.allowed) {
       log('warn', 'rate-limit', `Recover blocked ${ip}: ${rateCheck.message}`);
       return c.json({ success: false, error: rateCheck.message }, 429);
@@ -715,7 +789,11 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   });
 
   app.get('/api/orgchart/stats', (c) => {
-    return c.json(getStats());
+    // Strip internal moderation counts — this endpoint is public and
+    // unauthenticated, and how many badges have been hidden or flagged is
+    // admin-only state. /api/admin/stats still returns the full object.
+    const { hiddenCount, flaggedCount, ...publicStats } = getStats();
+    return c.json(publicStats);
   });
 
   // ─── Site Config ─────────────────────────────────────────
