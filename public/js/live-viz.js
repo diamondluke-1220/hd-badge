@@ -36,9 +36,15 @@ function connectSSE() {
   if (sseSource) { sseSource.close(); }
   sseSource = new EventSource('/api/badges/stream');
 
-  sseSource.onopen = () => {
-    sseRetryDelay = 1000; // reset backoff on successful connection
-  };
+  // Backoff resets on the server's `connected` event, NOT on onopen. onopen
+  // fires as soon as response headers arrive — a server that accepts then drops
+  // the connection (a restart, or a rejection over MAX_SSE_CLIENTS) looks
+  // "successful" every cycle, so resetting here pinned the retry at 1s forever
+  // and hammered a server that was already struggling. presentation.js already
+  // does it this way.
+  sseSource.addEventListener('connected', () => {
+    sseRetryDelay = 1000;
+  });
 
   sseSource.addEventListener('new-badge', (e) => {
     try {
@@ -70,8 +76,19 @@ function connectSSE() {
   };
 }
 
+// Each queued badge costs up to ~16s of animation (headshot preload, terminal
+// scan, progress bar, line-by-line reveal) plus a 5s spotlight, and show mode
+// lets badges arrive far faster than that. Unbounded, the display falls
+// arbitrarily far behind reality — late in a set it celebrates badges made an
+// hour ago. Cap it, dropping the OLDEST, so the board always shows recent hires.
+const LIVE_QUEUE_MAX = 8;
+
 function queueLiveAnimation(badge) {
   liveAnimationQueue.push({ ...badge });
+  if (liveAnimationQueue.length > LIVE_QUEUE_MAX) {
+    const dropped = liveAnimationQueue.splice(0, liveAnimationQueue.length - LIVE_QUEUE_MAX);
+    console.warn(`[live] Animation queue full — skipped ${dropped.length} badge(s) to stay current`);
+  }
   if (!liveIsAnimating) processLiveQueue();
 }
 
@@ -221,6 +238,10 @@ function setAnimationsEnabled(enabled) {
       (ar._intervals || []).forEach(id => clearInterval(id));
       ar._timeouts = [];
       ar._intervals = [];
+      // Clearing _timeouts kills the QTE miss timer, which was the only path
+      // that would have detached its document listeners. Detach them directly,
+      // or pressing 'A' mid-fight leaks them and kills arrow-key scrolling.
+      if (ar._runQteCleanups) ar._runQteCleanups();
       ar._isVSActive = false;
       ar._locked = false;
       // Remove VS overlay if mid-fight

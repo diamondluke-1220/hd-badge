@@ -74,7 +74,12 @@ window.GridRenderer = {
     if (isMobile && orgHeaderTop) {
       const dropdown = document.querySelector('.view-dropdown');
       if (dropdown) {
-        dropdown.dataset.originalParent = 'app-nav';
+        // 'app-header', not 'app-nav' — buildViewSwitcher appends it to
+        // .app-header. Returning it to .app-nav stranded mobile users:
+        // rack.css and reviewboard.css both hide `.app-header > .app-nav`, so
+        // the switcher vanished on entering those views, the 1-4 keys aren't
+        // available on mobile, and only a page reload got you out.
+        dropdown.dataset.originalParent = 'app-header';
         orgHeaderTop.appendChild(dropdown);
       }
     }
@@ -217,10 +222,10 @@ window.GridRenderer = {
 
   destroy() {
     // Return view dropdown to nav if we moved it on mobile
-    const dropdown = this._container?.querySelector('.view-dropdown[data-original-parent="app-nav"]');
+    const dropdown = this._container?.querySelector('.view-dropdown[data-original-parent="app-header"]');
     if (dropdown) {
-      const nav = document.querySelector('.app-nav');
-      if (nav) nav.appendChild(dropdown);
+      const header = document.querySelector('.app-header');
+      if (header) header.appendChild(dropdown);
     }
     // Remove content rendered by init — container itself stays
     if (this._container) {

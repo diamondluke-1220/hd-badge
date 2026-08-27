@@ -244,7 +244,26 @@
 
   // ─── View Rotation ──────────────────────────────────────
 
-  async function handleViewChange(view) {
+  // Tail of the view-change queue. handleViewChange is async and driven by two
+  // independent SSE events (presentation-state and presentation-view-change),
+  // so two could overlap: both destroyed the same current renderer, then both
+  // ran init() on the same container. The one that lost the race stayed FULLY
+  // initialized — WFQ loop, threat timer, device-effects interval, observers —
+  // with pres.currentRenderer pointing at the other, so nothing could ever
+  // destroy it. Two animation loops then fought over the container for the rest
+  // of the show. Serializing removes the overlap entirely.
+  let viewChangeChain = Promise.resolve();
+
+  function handleViewChange(view) {
+    const prior = viewChangeChain;
+    let release;
+    viewChangeChain = new Promise(r => { release = r; });
+    return prior
+      .then(() => handleViewChangeInner(view))
+      .finally(() => release());
+  }
+
+  async function handleViewChangeInner(view) {
     console.log(`[Presentation] View change: ${view}`);
 
     // Destroy current

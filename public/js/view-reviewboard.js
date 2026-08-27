@@ -713,6 +713,7 @@ window.ReviewBoardRenderer = {
   },
 
   async _animateBadgeTilesToDark() {
+    if (this._isTornDown()) return;
     if (!this._badgeCells.length) return;
     const promises = [];
     let idx = 0;
@@ -733,6 +734,7 @@ window.ReviewBoardRenderer = {
   },
 
   async _animateBadgeTilesToColors(colors) {
+    if (this._isTornDown()) return;
     if (!this._badgeCells.length) return;
     const promises = [];
     let idx = 0;
@@ -865,7 +867,22 @@ window.ReviewBoardRenderer = {
 
   // ─── Row Text Helpers ──────────────────────────────────
 
+  /**
+   * True once destroy() has run and the tile grid has been emptied.
+   *
+   * _displayBadgeAnimated is a ~10s chain scheduling several hundred timers,
+   * and it runs ~10 of every 14 seconds — so switching views mid-animation is
+   * the NORMAL case, not an edge case. destroy() sets _cells = [], and every
+   * pending callback then indexed into an empty array and threw. Rather than
+   * track hundreds of timer handles, the accessors they all funnel through bail
+   * out instead.
+   */
+  _isTornDown() {
+    return !this._container || this._cells.length === 0;
+  },
+
   _setRowText(rowIdx, text, startCol) {
+    if (this._isTornDown() || !this._cells[rowIdx]) return;
     startCol = startCol || 0;
     const maxLen = this.COLS - startCol;
     const padded = text.toUpperCase().padEnd(maxLen, ' ').substring(0, maxLen);
@@ -939,6 +956,7 @@ window.ReviewBoardRenderer = {
   },
 
   _clearRowColor(rowIdx) {
+    if (this._isTornDown() || !this._cells[rowIdx]) return;
     for (let c = 0; c < this.COLS; c++) {
       const cell = this._cells[rowIdx][c];
       const flaps = cell.querySelectorAll(this.FLAP_PARTS);
@@ -993,6 +1011,7 @@ window.ReviewBoardRenderer = {
   // ─── Display Badge ─────────────────────────────────────
 
   _displayBadgeInstant(badge) {
+    if (this._isTornDown()) return;
     const name = (badge.name || 'UNKNOWN').toUpperCase();
     const title = (badge.title || 'EMPLOYEE').toUpperCase();
     const div = this._getDivision(badge);
@@ -1087,6 +1106,7 @@ window.ReviewBoardRenderer = {
   },
 
   async _displayBadgeAnimated(badge) {
+    if (this._isTornDown()) return;
     const name = (badge.name || 'UNKNOWN').toUpperCase();
     const title = (badge.title || 'EMPLOYEE').toUpperCase();
     const div = this._getDivision(badge);
@@ -1150,6 +1170,7 @@ window.ReviewBoardRenderer = {
         headerPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
+              if (this._isTornDown() || !this._cells[row]) { resolve(); return; }
               const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
               // Intermediate chars cycle in white; division color applied after landing
               flaps.forEach(el => { el.style.color = '#ffffff'; });
@@ -1187,6 +1208,7 @@ window.ReviewBoardRenderer = {
         skillsPromises.push(
           new Promise(resolve => {
             setTimeout(() => {
+              if (this._isTornDown() || !this._cells[row]) { resolve(); return; }
               const flaps = this._cells[row][col].querySelectorAll(this.FLAP_PARTS);
               // Cycle in white, apply target color after landing
               flaps.forEach(el => { el.style.color = '#ffffff'; });

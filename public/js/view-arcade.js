@@ -17,6 +17,10 @@ window.ArcadeRenderer = {
   _locked: false,
   _intervals: [],
   _timeouts: [],
+  // Detach functions for in-flight QTE document listeners (arcade-cinematic.js).
+  // They cannot ride _timeouts: clearing that array is exactly what used to
+  // strand them attached.
+  _qteCleanups: [],
   _activeTab: 'ALL',
   _gridPanel: null,
   _announcer: null,
@@ -162,6 +166,12 @@ window.ArcadeRenderer = {
     this._rosterPool = [];
     this._selectedBadge = null;
     this._locked = false;
+    // Cancel before discarding. Reassigning the arrays without clearing them
+    // made every previously scheduled timer permanently uncancellable — an
+    // init() without a preceding destroy() orphaned the whole VS beat chain.
+    this._intervals.forEach(clearInterval);
+    this._timeouts.forEach(clearTimeout);
+    this._runQteCleanups();
     this._intervals = [];
     this._timeouts = [];
     this._activeTab = 'ALL';
@@ -873,15 +883,20 @@ window.ArcadeRenderer = {
     const oldSlotEl = this._container.querySelector(`[data-employee-id="${oldBadge.employeeId}"]`);
     if (oldSlotEl) {
       oldSlotEl.classList.add('slot-swap-out');
-      setTimeout(() => {
+      // These were the only bare setTimeouts in this file — every other timer
+      // here is tracked in _timeouts. A roster swap fires after EVERY fight, so
+      // switching views inside the 300ms window ran this against a nulled
+      // _gridPanel and threw. Tracked now, and guarded on teardown.
+      this._timeouts.push(setTimeout(() => {
+        if (!this._container || !this._gridPanel) return;
         oldSlotEl.remove();
         // Add new slot
         const newSlotEl = this._createSlot(newBadge);
         newSlotEl.classList.add('slot-swap-in');
         this._gridPanel.appendChild(newSlotEl);
         this._autoSizeGrid();
-        setTimeout(() => newSlotEl.classList.remove('slot-swap-in'), 500);
-      }, 300);
+        this._timeouts.push(setTimeout(() => newSlotEl.classList.remove('slot-swap-in'), 500));
+      }, 300));
     }
 
     // Update roster state
@@ -1167,12 +1182,30 @@ window.ArcadeRenderer = {
     }
   },
 
+  /**
+   * Detach any QTE document listeners still attached (arcade-cinematic.js).
+   * Safe to call at any time; each cleanup removes itself from the registry.
+   */
+  _runQteCleanups() {
+    while (this._qteCleanups.length) {
+      const fn = this._qteCleanups[0];
+      try { fn(); } catch { /* never let one bad cleanup strand the rest */ }
+      // Defensive: if fn() did not splice itself out, drop it so we terminate.
+      if (this._qteCleanups[0] === fn) this._qteCleanups.shift();
+    }
+  },
+
   destroy() {
     this._intervals.forEach(id => clearInterval(id));
     this._intervals = [];
 
     this._timeouts.forEach(id => clearTimeout(id));
     this._timeouts = [];
+
+    // Must come after the _timeouts sweep: the QTE miss timer lives in that
+    // array, and cancelling it is what used to strand these listeners attached
+    // (killing arrow-key scrolling site-wide via their preventDefault).
+    this._runQteCleanups();
 
     if (this._resizeHandler) {
       window.removeEventListener('resize', this._resizeHandler);

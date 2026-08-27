@@ -1332,7 +1332,19 @@
         document.removeEventListener('keydown', onKey);
         document.removeEventListener('touchstart', onTouchStart);
         document.removeEventListener('touchend', onTouchEnd);
+        // Drop our entry from the registry so repeated QTEs don't grow it.
+        const i = this._qteCleanups.indexOf(cleanup);
+        if (i !== -1) this._qteCleanups.splice(i, 1);
       };
+
+      // cleanup() only ran from succeed() or fail(), and the sole non-input
+      // path to fail() was missTimer — which lives in this._timeouts. So
+      // anything that bulk-clears _timeouts (switching views mid-QTE, or the
+      // 'A' animations toggle) cancelled the one thing that would have detached
+      // these listeners. They then leaked permanently, and because onKey calls
+      // preventDefault() on every arrow key, arrow-key page scrolling stayed
+      // dead site-wide. Registering here lets teardown detach them directly.
+      this._qteCleanups.push(cleanup);
 
       const succeed = () => {
         if (resolved) return;

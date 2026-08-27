@@ -1964,13 +1964,22 @@ function showBadgeDetail(employeeId, name) {
     requestAnimationFrame(() => modal.classList.add('active'));
   });
 
+  // One close path for all three dismissals. Previously only the Escape branch
+  // detached its own document-level keydown listener, so closing via the button
+  // or the backdrop left the listener attached with a closure pinning the
+  // detached modal — which holds a full-size badge <img>. Browsing 50 badges at
+  // a show meant 50 permanent listeners each retaining an image.
+  const onKeydown = (e) => { if (e.key === 'Escape') closeDetail(); };
+  const closeDetail = () => {
+    document.removeEventListener('keydown', onKeydown);
+    modal.remove();
+  };
+
   modal.addEventListener('click', (e) => {
-    if (e.target === modal) { modal.remove(); }
+    if (e.target === modal) closeDetail();
   });
-  modal.querySelector('#detailCloseBtn').addEventListener('click', () => modal.remove());
-  document.addEventListener('keydown', function handler(e) {
-    if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', handler); }
-  });
+  modal.querySelector('#detailCloseBtn').addEventListener('click', closeDetail);
+  document.addEventListener('keydown', onKeydown);
 }
 
 // ─── Init ─────────────────────────────────────────────────
