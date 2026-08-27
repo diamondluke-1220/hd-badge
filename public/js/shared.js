@@ -2,9 +2,24 @@
 // Loaded before all view renderers and app.js on both
 // index.html and presentation.html pages.
 
-/** HTML-escape a string for safe insertion */
+/**
+ * HTML-escape a string for safe insertion.
+ *
+ * The apostrophe MUST stay escaped: the name field permits apostrophes
+ * (app.js input filter), and esc() output lands inside single-quoted JS string
+ * literals in interpolated onclick handlers (view-rack.js). Without it, a name
+ * like  x' onerror='...  breaks out of the literal.
+ *
+ * String() coercion keeps a null/number field from throwing mid-render and
+ * aborting an entire grid or rack pass.
+ */
 function esc(str) {
-  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(str ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
 }
 
 // Fan departments (11 options)

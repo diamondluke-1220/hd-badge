@@ -5,6 +5,7 @@
 
 window.ReviewBoardRenderer = {
   FLAP_PARTS: '.static-top, .static-bottom, .flap-top, .flap-bottom',
+  _generation: 0,          // bumped by destroy(); guards post-await resumption
   _container: null,
   _stats: null,
   _stage: null,
@@ -1283,6 +1284,8 @@ window.ReviewBoardRenderer = {
 
   _startRotation() {
     if (this._allBadges.length === 0) return;
+    // Never stack intervals — _resumeRotation already does this, init() did not.
+    this._stopRotation();
     this._shuffledBadges = hdShuffle(this._allBadges);
     this._rotationIndex = 0;
 
@@ -1579,6 +1582,11 @@ window.ReviewBoardRenderer = {
   // ─── Renderer Interface ────────────────────────────────
 
   async init(container, stats) {
+    // Generation token: destroy() bumps this, so anything resuming after an
+    // await can tell it was torn down mid-init and bail. Without it, the fetch
+    // below could resolve after destroy() and install a 14s rotation interval
+    // that nothing holds a handle to — a permanent error loop on the projector.
+    const generation = ++this._generation;
     this._container = container;
     this._stats = stats;
 
@@ -1693,6 +1701,9 @@ window.ReviewBoardRenderer = {
       this._allBadges = [];
     }
 
+    // Torn down while the fetch was in flight — do not start anything.
+    if (generation !== this._generation) return;
+
     // Start rotation
     if (this._allBadges.length > 0) {
       this._startRotation();
@@ -1726,6 +1737,8 @@ window.ReviewBoardRenderer = {
   },
 
   destroy() {
+    // Invalidate any init() or animation chain still suspended on an await.
+    this._generation++;
     this._stopRotation();
     this._closePacket();
     if (this._resizeHandler) {

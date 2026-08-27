@@ -1721,6 +1721,8 @@ document.getElementById('submitBadgeBtn').addEventListener('click', () => {
 let currentRenderer = null;
 let orgChartContainer = null;
 let orgChartStats = null;
+// Tail of the view-switch queue — see switchView.
+let _switchViewChain = Promise.resolve();
 
 // ─── Renderer Interface ──────────────────────────────────
 // Each view renderer (GridRenderer, RackRenderer, ArcadeRenderer,
@@ -1731,6 +1733,23 @@ let orgChartStats = null;
 //                             remove event listeners (resize, zoom, keyboard),
 //                             clear innerHTML, null all refs
 async function switchView(mode) {
+  // Serialize view switches. This is async and bound straight to the 1-4 keys,
+  // so two quick presses used to interleave: both destroy, both init, and the
+  // renderer that lost the race stayed fully initialized with no reference left
+  // to destroy it — leaving zombie timers running for the life of the page.
+  // Queue behind whatever switch is in flight instead of racing it.
+  const prior = _switchViewChain;
+  let release;
+  _switchViewChain = new Promise(r => { release = r; });
+  await prior;
+  try {
+    await _switchViewInner(mode);
+  } finally {
+    release();
+  }
+}
+
+async function _switchViewInner(mode) {
   // Clean up any active focus trap before switching
   if (_activeFocusTrap) { _activeFocusTrap(); _activeFocusTrap = null; }
 

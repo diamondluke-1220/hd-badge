@@ -3,6 +3,7 @@
 // Dual server rack layout: Root (Core A/B) → Division Switches → Patch Panels → Ports (employees).
 
 window.RackRenderer = {
+  _generation: 0,       // bumped by destroy(); guards post-await resumption
   _container: null,
   _stats: null,
   _allBadges: [],
@@ -37,6 +38,11 @@ window.RackRenderer = {
   _PORTS_PER_ROW: 12,
 
   async init(container, stats) {
+    // See ReviewBoardRenderer.init — destroy() bumps this so work resuming after
+    // the badge fetch can tell it was torn down. Without it, _render() resumes
+    // against a nulled _container and throws, and the rAF chain it schedules
+    // re-arms background timers (threat traffic, cloud rain) with no owner.
+    const generation = ++this._generation;
     this._container = container;
     this._stats = stats;
     this._badgeIndex = {};
@@ -78,6 +84,9 @@ window.RackRenderer = {
       container.innerHTML = '<div class="rack-fallback">Failed to load employee data.</div>';
       return;
     }
+
+    // Torn down while the fetch was in flight — do not render or start timers.
+    if (generation !== this._generation) return;
 
     // Initialize shared stats (ticker, donut)
     initRendererStats(stats);
@@ -237,6 +246,8 @@ window.RackRenderer = {
   },
 
   destroy() {
+    // Invalidate any init() still suspended on the badge fetch.
+    this._generation++;
     // Stop WFQ scheduler (async loop exits at next await)
     this._stopWfq();
     // Safe to reset in-flight flags on full destroy — everything is being torn down
@@ -582,10 +593,17 @@ window.RackRenderer = {
 
     // Zoom to fit first, then render cables (cables need final scaled positions)
     if (this._dualMode) {
+      // Capture the generation: these rAFs are untracked, and a destroy() between
+      // scheduling and firing would otherwise restart the background timers with
+      // no owner left to stop them. The window is ~2 frames normally, unbounded
+      // when the tab is hidden (rAF parks, destroy runs, callbacks fire on return).
+      const renderGeneration = this._generation;
       requestAnimationFrame(() => {
+        if (renderGeneration !== this._generation || !this._container) return;
         this._applyZoomToFit(wrapper);
         // Cables render after zoom so getBoundingClientRect is in final space
         requestAnimationFrame(() => {
+          if (renderGeneration !== this._generation || !this._container) return;
           this._renderCables(wrapper);
           if (!this._reducedMotion) {
             this._startCloudRain();
@@ -1045,6 +1063,8 @@ window.RackRenderer = {
       ${rowsHtml}
     `;
 
+    this._attachPortDelegation(el);
+
     return el;
   },
 
@@ -1415,13 +1435,29 @@ window.RackRenderer = {
     return el;
   },
 
+  // Ports are emitted as an HTML string (they're built inside a larger innerHTML
+  // pass), so the click is handled by delegation on the panel rather than an
+  // inline onclick. An interpolated onclick is unsafe here regardless of esc():
+  // the HTML parser decodes entities BEFORE the JS string literal is parsed, so
+  // an escaped apostrophe still breaks out of the handler. Data goes in
+  // attributes, behavior gets attached in _attachPortDelegation.
   _createPortHtml(badge) {
     return `
       <div class="rack-port" data-employee-id="${esc(badge.employeeId)}"
-           onclick="if(typeof showBadgeDetail==='function')showBadgeDetail('${esc(badge.employeeId)}','${esc(badge.name)}')">
+           data-badge-name="${esc(badge.name)}">
         ${this._portInnerHtml(badge)}
       </div>
     `;
+  },
+
+  _attachPortDelegation(panelEl) {
+    panelEl.addEventListener('click', (e) => {
+      const port = e.target.closest('.rack-port[data-employee-id]');
+      if (!port || !panelEl.contains(port)) return;
+      if (typeof showBadgeDetail === 'function') {
+        showBadgeDetail(port.dataset.employeeId, port.dataset.badgeName || '');
+      }
+    });
   },
 
   _portInnerHtml(badge) {
