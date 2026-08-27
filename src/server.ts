@@ -283,11 +283,12 @@ app.use('/api/admin/*', async (c, next) => {
     return c.json({ success: false, error: 'Admin panel disabled. Set ADMIN_TOKEN env var.' }, 401);
   }
 
-  if (process.env.ADMIN_LOCAL_ONLY === '1') {
-    const ip = getClientIp(c);
-    if (!isLocalhost(ip)) {
-      return c.json({ success: false, error: 'Admin access restricted to localhost.' }, 403);
-    }
+  // Socket peer, not the forwarded client IP — same reasoning as the /admin
+  // page guard. A localhost-only gate must never be satisfiable by a header a
+  // trusted proxy forwarded, or "ADMIN_LOCAL_ONLY=1" would be one spoofed
+  // cf-connecting-ip away from meaning nothing.
+  if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
+    return c.json({ success: false, error: 'Admin access restricted to localhost.' }, 403);
   }
 
   const ip = getClientIp(c);
