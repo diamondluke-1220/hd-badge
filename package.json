@@ -15,9 +15,9 @@
   "dependencies": {
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
-    "hono": "^4.13.5",
+    "hono": "^4.13.20",
     "playwright": "^1.62.1",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1"
