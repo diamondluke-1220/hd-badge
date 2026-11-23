@@ -48,9 +48,14 @@ test.describe('Badge Creation Flow — Desktop', () => {
   });
 
   test('discovery pulse fires on editable elements', async ({ page }) => {
+    // The cascade adds .pulsing to one editable element at a time (PULSE_TIMELINE in
+    // app.js): access badge first, department 0.8s later, then the rest, and clears
+    // every one when it ends (~7s after load, including the 1.4s hint intro).
     await page.goto('/');
-    const previewArea = page.locator('#badgePreviewArea');
-    await expect(previewArea).toHaveClass(/discover-pulse/);
+    const area = page.locator('#badgePreviewArea');
+    await expect(area.locator('.access-badge.pulsing')).toHaveCount(1, { timeout: 5000 });
+    await expect(area.locator('.department.pulsing')).toHaveCount(1, { timeout: 5000 });
+    await expect(area.locator('.pulsing')).toHaveCount(0, { timeout: 10000 });
   });
 
   test('header layout: title left, nav right, stable position', async ({ page }) => {
