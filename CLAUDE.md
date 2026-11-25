@@ -39,7 +39,7 @@
 4. **Validate uploads with Sharp.** All image uploads must pass `sharp(buffer).metadata()` before saving. Only `image/*` MIME types accepted.
 5. **Generic error messages only.** Never leak internal state, file paths, or stack traces in API responses. Use themed messages ("Badge printer is overheating").
 6. **Field clamping.** All user text fields capped at 200 characters via `clampField()`.
-7. **Rate limiting enforced.** Badge creation: 3/hour, 10/day (normal); 10/hour, 50/day (show mode). Admin auth: 5 failures → 15 min lockout.
+7. **Rate limiting enforced.** Badge creation: 10/hour, 20/day (normal); 300/hour, 800/day (show mode). Admin auth: 5 failures → 15 min lockout.
 8. **Print-ready badge export is admin-only.** `/api/admin/badge/:id/print` requires Bearer token. Moved from public routes — print formatting is a paid feature.
 
 ---
@@ -101,7 +101,7 @@ grep -rn 'readFileSync\|writeFileSync' src/routes/ --include='*.ts'
 ## Testing
 
 ```bash
-bun test              # All tests (API + DB) — 94 tests, 0 failures
+bun run test          # All tests (API + DB) — 108 tests, 0 failures
 bun run test:api      # API integration tests only
 bun run test:db       # DB unit tests only
 bun run test:e2e      # Playwright E2E smoke tests (10 tests, requires running server)
