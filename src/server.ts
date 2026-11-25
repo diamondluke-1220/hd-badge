@@ -2,7 +2,9 @@
 // Hono app, security middleware, the Playwright render pool, live updates (SSE)
 // and static files; starts the database and pre-renders print assets
 
-import { Hono } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
+import type { Server } from 'bun';
+import type { RenderableBadge, RenderOptions } from './types';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { HTTPException } from 'hono/http-exception';
@@ -12,7 +14,7 @@ import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import { initDb, closeDb, listAllBadgeIds } from './db';
-import { log } from './logger';
+import { log, errorMessage } from './logger';
 import { initDemo } from './demo';
 import { initPresentation } from './presentation';
 import { registerPublicRoutes } from './routes/public';
@@ -192,7 +194,7 @@ app.use('*', bodyLimit({
 // ─── Helpers ─────────────────────────────────────────────
 
 /** Socket peer address — who actually opened the connection. Unspoofable. */
-function getPeerIp(c: any): string {
+function getPeerIp(c: Context): string {
   try {
     return getConnInfo(c).remote.address || 'unknown';
   } catch {
@@ -231,7 +233,7 @@ function isTrustedProxy(peer: string): boolean {
  * client can set any header it likes; trusting it would give that client a
  * fresh rate-limit and admin-lockout key on every request.
  */
-function getClientIp(c: any): string {
+function getClientIp(c: Context): string {
   return resolveClientIp(getPeerIp(c), (name) => c.req.header(name));
 }
 
@@ -277,7 +279,7 @@ function isLocalhost(ip: string): boolean {
 // "cf-connecting-ip: 127.0.0.1" must never satisfy a localhost-only gate.
 // Registered on both '/admin' and '/admin.html', because the static catch-all
 // would otherwise serve public/admin.html under its file name.
-const adminPageGuard = async (c: any, next: any) => {
+const adminPageGuard = async (c: Context, next: Next) => {
   if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
     return c.text('Not found', 404);
   }
@@ -321,7 +323,7 @@ app.use('/api/admin/*', async (c, next) => {
     // Successful auth — clear failure record
     const ip = getClientIp(c);
     if (adminFailures.has(ip)) adminFailures.delete(ip);
-  } catch (e: any) {
+  } catch (e) {
     // bearerAuth runs the downstream handler inside this try (it awaits next()).
     // Only a genuine bad/missing token throws HTTPException 401 — let any other
     // error (e.g. a render failure in a print route) propagate so it isn't
@@ -369,7 +371,7 @@ let _placeholderDataUrl: string | null = null;
  *   - colorlayer: color pass for two-pass printing (body.color-layer CSS)
  *   - calibration: drift measurement grid (body.k-calibration CSS, standalone)
  */
-async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
+async function renderBadgePlaywright(badge: RenderableBadge, options?: RenderOptions): Promise<Buffer> {
   // One render attempt; on failure, drop the (possibly dirty) shared warm page so
   // the next attempt rebuilds a clean one instead of inheriting the corruption.
   const attempt = () => renderBadgeInner(badge, options).catch(async (err) => {
@@ -387,7 +389,7 @@ async function renderBadgePlaywright(badge: any, options?: { withPhoto?: boolean
   return run;
 }
 
-async function renderBadgeInner(badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }): Promise<Buffer> {
+async function renderBadgeInner(badge: RenderableBadge, options?: RenderOptions): Promise<Buffer> {
   const page = await getWarmPage();
 
   const id = badge.employee_id;
@@ -415,7 +417,7 @@ async function renderBadgeInner(badge: any, options?: { withPhoto?: boolean; pri
     if (idEl) { idEl.textContent = badge.employee_id; idEl.dataset.set = '1'; }
     const issuedEl = document.getElementById('issuedField');
     if (issuedEl) {
-      const d = new Date(badge.created_at);
+      const d = new Date(badge.created_at as string);
       const mm = String(d.getMonth() + 1).padStart(2, '0');
       const dd = String(d.getDate()).padStart(2, '0');
       const yy = String(d.getFullYear()).slice(2);
@@ -528,7 +530,7 @@ function broadcastNewBadge(badge: { employeeId: string; name: string; department
   }
 }
 
-function broadcastSSE(event: string, data: any) {
+function broadcastSSE(event: string, data: unknown) {
   const json = JSON.stringify(data);
   for (const client of sseClients) {
     try {
@@ -721,8 +723,8 @@ if (isShowMode()) {
     log('info', 'server', `Pre-rendered badge back → ${backPath}`);
 
     console.log(`🖨️  Print assets ready in ${PRINTS_DIR}`);
-  } catch (e: any) {
-    log('error', 'server', `Failed to pre-render print assets: ${e.message}`);
+  } catch (e) {
+    log('error', 'server', `Failed to pre-render print assets: ${errorMessage(e)}`);
   }
 })();
 
@@ -733,7 +735,7 @@ process.on('SIGINT', async () => { await closeBrowser(); closeDb(); process.exit
 export default {
   port,
   idleTimeout: 120,
-  fetch(req: Request, server: any): Response | Promise<Response> {
+  fetch(req: Request, server: Server<unknown>): Response | Promise<Response> {
     const url = new URL(req.url);
 
     if (url.pathname === '/api/badges/stream') {

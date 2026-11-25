@@ -508,7 +508,7 @@ export function listBadges(options: {
 
   if (hasAdvancedFilters || (options.includeHidden && options.department)) {
     const conditions: string[] = [];
-    const params: Record<string, any> = {};
+    const params: Record<string, string | number> = {};
 
     if (!options.includeHidden) {
       conditions.push('is_visible = 1');

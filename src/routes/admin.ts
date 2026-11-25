@@ -7,15 +7,17 @@ import { existsSync, unlinkSync } from 'fs';
 import sharp from 'sharp';
 import archiver from 'archiver';
 import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, togglePrinted, toggleFlagged, setHasPhoto, getStats, getAnalytics, getDivisionNames, exportAllBadges, getPrintQueue, serializeBadge, reissueToken } from '../db';
-import { log, getLog } from '../logger';
+import { log, getLog, errorMessage } from '../logger';
+import type { RenderBadge, BroadcastSSE } from '../types';
+import type { BadgeRow } from '../db';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
 import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
 
 interface AdminDeps {
-  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
+  renderBadgePlaywright: RenderBadge;
   renderPageScreenshot: (path: string, selector: string) => Promise<Buffer>;
-  broadcastSSE: (event: string, data: any) => void;
+  broadcastSSE: BroadcastSSE;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
   THUMBS_DIR: string;
@@ -283,8 +285,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
       log('info', 'admin', `Photo uploaded and badge re-rendered for ${id} (${badge.name})`);
       return c.json({ success: true, message: `Photo uploaded and badge re-rendered for ${badge.name}.` });
-    } catch (err: any) {
-      log('error', 'admin', `Photo upload failed for ${id}: ${err.message}`);
+    } catch (err) {
+      log('error', 'admin', `Photo upload failed for ${id}: ${errorMessage(err)}`);
       return c.json({ success: false, error: 'Photo upload failed.' }, 500);
     }
   });
@@ -329,8 +331,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
       log('info', 'admin', `Badge rendered (Playwright) for ${id} (${badge.name})`);
       return c.json({ success: true, message: `Badge rendered for ${badge.name}.` });
-    } catch (err: any) {
-      log('error', 'admin', `Badge render failed for ${id}: ${err.message}`);
+    } catch (err) {
+      log('error', 'admin', `Badge render failed for ${id}: ${errorMessage(err)}`);
       return c.json({ success: false, error: 'Badge render failed.' }, 500);
     }
   });
@@ -357,8 +359,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
           const printBuffer = await renderBadgePlaywright(badge, { print: true });
           const safeName = badge.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
           archive.append(printBuffer, { name: `${badge.employee_id}-${safeName}.png` });
-        } catch (err: any) {
-          log('error', 'admin', `Batch print: render failed for ${badge.employee_id}: ${err.message}`);
+        } catch (err) {
+          log('error', 'admin', `Batch print: render failed for ${badge.employee_id}: ${errorMessage(err)}`);
           // Skip failed badge, continue with rest
         }
       }
@@ -376,8 +378,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
           'Cache-Control': 'no-cache, no-store',
         },
       });
-    } catch (err: any) {
-      log('error', 'admin', `Batch print failed: ${err.message}`);
+    } catch (err) {
+      log('error', 'admin', `Batch print failed: ${errorMessage(err)}`);
       return c.json({ success: false, error: 'Batch print failed.' }, 500);
     }
   });
@@ -387,7 +389,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/badges/rerender-all', async (c) => {
     // Gather ALL badges, including hidden ones, paging through the per-call cap so
     // nothing past the first page (or any hidden badge) is silently skipped.
-    const badges: any[] = [];
+    const badges: BadgeRow[] = [];
     let page = 1;
     while (true) {
       const result = listBadges({ page, limit: 500, maxLimit: 500, includeHidden: true });
@@ -420,8 +422,8 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
         if (existsSync(thumbPath)) unlinkSync(thumbPath);
 
         rendered++;
-      } catch (err: any) {
-        log('error', 'admin', `Re-render failed for ${badge.employee_id}: ${err.message}`);
+      } catch (err) {
+        log('error', 'admin', `Re-render failed for ${badge.employee_id}: ${errorMessage(err)}`);
         failed++;
       }
     }
@@ -445,7 +447,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
     const headers = ['id', 'employee_id', 'name', 'department', 'title', 'song', 'access_level', 'access_css', 'created_at', 'source', 'is_visible', 'has_photo', 'is_band_member', 'photo_public', 'is_paid', 'paid_at', 'is_printed', 'printed_at', 'is_flagged'];
 
-    const escCsv = (val: any): string => {
+    const escCsv = (val: unknown): string => {
       if (val === null || val === undefined) return '';
       let s = String(val);
       // Prevent formula injection in Excel (=, +, -, @, \t can trigger formulas)
@@ -460,7 +462,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
     const lines = [headers.join(',')];
     for (const b of badges) {
-      const row = headers.map(h => escCsv((b as any)[h]));
+      const row = headers.map(h => escCsv(b[h as keyof BadgeRow]));
       lines.push(row.join(','));
     }
 
@@ -543,7 +545,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/presentation/chyron', async (c) => {
     let body: any;
     try { body = await c.req.json(); } catch { body = {}; }
-    const messages = Array.isArray(body.messages) ? body.messages.filter((m: any) => typeof m === 'string' && m.trim()) : [];
+    const messages = Array.isArray(body.messages) ? body.messages.filter((m: unknown) => typeof m === 'string' && m.trim()) : [];
     const result = updateChyron(messages);
     return c.json(result);
   });

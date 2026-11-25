@@ -50,7 +50,7 @@ const state: PresentationState = {
 
 // ─── Broadcast Wiring ────────────────────────────────────
 
-type BroadcastFn = (event: string, data: any) => void;
+type BroadcastFn = (event: string, data: unknown) => void;
 let _broadcast: BroadcastFn = () => {};
 
 export function initPresentation(opts: { broadcast: BroadcastFn }) {

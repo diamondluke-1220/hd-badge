@@ -2,7 +2,7 @@
 // Creates realistic test badges over time to simulate a live show
 
 import { createBadge, listDemoBadgeIds, deleteDemoBadges } from './db';
-import { log } from './logger';
+import { log, errorMessage } from './logger';
 import { join } from 'path';
 import { existsSync, unlinkSync, readFileSync } from 'fs';
 
@@ -210,8 +210,8 @@ function createDemoBadge(): string | null {
     log('info', 'demo', `Badge ${state.created}/${state.total}: ${name} → ${dept.name} (${result.employeeId})`);
 
     return result.employeeId;
-  } catch (err: any) {
-    log('error', 'demo', `Badge creation failed: ${err.message}`);
+  } catch (err) {
+    log('error', 'demo', `Badge creation failed: ${errorMessage(err)}`);
     return null;
   }
 }

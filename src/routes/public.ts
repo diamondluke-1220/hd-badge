@@ -2,6 +2,7 @@
 // Badge creation, retrieval, images, org chart.
 
 import type { Hono, Context } from 'hono';
+import type { RenderBadge, BroadcastSSE } from '../types';
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
@@ -45,7 +46,7 @@ import { checkRateLimit, checkEditRateLimit, checkRecoverRateLimit, checkGameSco
 import { isNameClean, shouldFlag } from '../profanity';
 import { isPresentationActive } from '../presentation';
 import { isVoteBannerActive } from '../vote-banner';
-import { log } from '../logger';
+import { log, errorMessage } from '../logger';
 
 // Band-exclusive values — fans cannot use these (enforced on create)
 const RESERVED_DEPTS = new Set([
@@ -67,11 +68,11 @@ const RESERVED_ACCESS = new Set([
 ]);
 
 interface PublicDeps {
-  getClientIp: (c: any) => string;
+  getClientIp: (c: Context) => string;
   broadcastNewBadge: (badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) => void;
-  broadcastSSE: (event: string, data: any) => void;
+  broadcastSSE: BroadcastSSE;
   decodeBase64Image: (dataUrl: string) => Buffer | null;
-  renderBadgePlaywright: (badge: any, options?: { withPhoto?: boolean; print?: boolean; klayer?: boolean; colorlayer?: boolean; calibration?: boolean }) => Promise<Buffer>;
+  renderBadgePlaywright: RenderBadge;
   clampField: (val: string, field?: string) => string;
   PHOTOS_DIR: string;
   BADGES_DIR: string;
@@ -283,6 +284,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           await Bun.write(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
         }
         badge = getBadge(result.employeeId);
+        if (!badge) throw new Error(`badge ${result.employeeId} missing right after create`);
         badgeBuffer = await renderBadgePlaywright(badge);
         await Bun.write(join(BADGES_DIR, `${result.employeeId}.png`), badgeBuffer);
 
@@ -290,8 +292,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           const noPhotoBuffer = await renderBadgePlaywright(badge, { withPhoto: false });
           await Bun.write(join(BADGES_DIR, `${result.employeeId}-nophoto.png`), noPhotoBuffer);
         }
-      } catch (renderErr: any) {
-        log('error', 'badge', `Render failed for ${result.employeeId}, cleaning up: ${renderErr.message}`);
+      } catch (renderErr) {
+        log('error', 'badge', `Render failed for ${result.employeeId}, cleaning up: ${errorMessage(renderErr)}`);
         hardDeleteBadge(result.employeeId);
         try { unlinkSync(join(PHOTOS_DIR, `${result.employeeId}.jpg`)); } catch { /* ignore */ }
         try { unlinkSync(join(BADGES_DIR, `${result.employeeId}.png`)); } catch { /* ignore */ }
@@ -327,8 +329,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         employeeId: result.employeeId,
         message: 'Welcome to Help Desk LLC.',
       });
-    } catch (err: any) {
-      log('error', 'badge', `Creation failed: ${err.message}`);
+    } catch (err) {
+      log('error', 'badge', `Creation failed: ${errorMessage(err)}`);
       return c.json({ success: false, error: 'Badge creation failed. Please try again.' }, 500);
     }
   });
@@ -547,8 +549,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         employeeId: id,
         message: 'Badge updated successfully.',
       });
-    } catch (err: any) {
-      log('error', 'badge', `Update failed for ${id}: ${err.message}`);
+    } catch (err) {
+      log('error', 'badge', `Update failed for ${id}: ${errorMessage(err)}`);
       return c.json({ success: false, error: 'Badge update failed. Please try again.' }, 500);
     }
   });
@@ -626,8 +628,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           .resize(HEADSHOT_WIDTH)
           .jpeg({ quality: 85 })
           .toFile(headshotPath);
-      } catch (err: any) {
-        console.error(`Headshot generation failed for ${id}:`, err.message);
+      } catch (err) {
+        console.error(`Headshot generation failed for ${id}:`, errorMessage(err));
         const file = Bun.file(photoPath);
         return new Response(file, {
           headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=60' },
@@ -679,8 +681,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           .resize(THUMB_WIDTH)
           .png({ quality: 80 })
           .toFile(thumbPath);
-      } catch (err: any) {
-        console.error(`Thumbnail generation failed for ${id}:`, err.message);
+      } catch (err) {
+        console.error(`Thumbnail generation failed for ${id}:`, errorMessage(err));
         const file = Bun.file(sourcePath);
         return new Response(file, {
           headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=60' },

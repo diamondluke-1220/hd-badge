@@ -29,6 +29,11 @@ export function log(level: LogLevel, category: string, message: string) {
   console.log(`${prefix} [${category}] ${message}`);
 }
 
+/** The message of a thrown value: an Error's message, or the value as text. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export function getLog(): LogEntry[] {
   return [...buffer].reverse();
 }
