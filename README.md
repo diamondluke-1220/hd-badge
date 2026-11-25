@@ -301,7 +301,7 @@ graph LR
 - CSP headers (frame-ancestors 'none', nosniff, DENY)
 - CSV export formula injection prevention
 - Startup orphan file sweep (cleans files with no matching DB record)
-- Soft-delete file cleanup (user deletion removes all associated files)
+- User deletion removes the badge row and all its files
 
 ## License
 
