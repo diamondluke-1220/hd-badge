@@ -101,11 +101,13 @@ grep -rn 'readFileSync\|writeFileSync' src/routes/ --include='*.ts'
 ## Testing
 
 ```bash
-bun run test          # All tests (API + DB) — 108 tests, 0 failures
+bun run test          # API + DB tests (never bare `bun test`: it picks up Playwright specs)
 bun run test:api      # API integration tests only
 bun run test:db       # DB unit tests only
-bun run test:e2e      # Playwright E2E smoke tests (10 tests, requires running server)
+bun run test:e2e      # Playwright E2E tests (starts its own server on 3333)
 bun run lint          # Grep-based lint checks
+bun run typecheck     # tsc --noEmit; CI runs it
+bun scripts/transpile-fingerprint.ts   # hash of each file's transpiled code, for proving a comments-only change
 bun run scripts/fight-sim.ts [count]  # Arcade fight Monte Carlo simulator (default 10k)
 bun run scripts/rack-sim.ts [count]   # Rack packet stress test (default: 50/100/200/500)
 ```
@@ -113,3 +115,8 @@ bun run scripts/rack-sim.ts [count]   # Rack packet stress test (default: 50/100
 **File naming convention:** `.test.ts` = Bun test runner, `.pw.ts` = Playwright runner. This prevents `bun test` from auto-discovering Playwright specs (which require the Playwright runner context).
 
 Test harness uses temp SQLite DBs and mocked Playwright — no browser needed for API/DB tests.
+
+- `tests/helpers/setup.ts` builds an app from the route modules with mocked render and IP functions; `createTestApp(overrides)` replaces any of them (e.g. a failing renderer).
+- `tests/helpers/real-server.ts` boots the real `src/server.ts` in a child process, for its own middleware (body cap, client IP, SSE limits). The request header `x-test-peer` sets the socket address.
+- `tests/api/api-snapshot.test.ts` records every read route and the badge lifecycle. An intended response change is accepted with `bun test tests/api/api-snapshot.test.ts --update-snapshots`.
+- `tests/api/readme-routes.test.ts` fails when a route is missing from, or stale in, the README.

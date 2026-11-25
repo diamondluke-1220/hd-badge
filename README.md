@@ -114,9 +114,12 @@ docker pull ghcr.io/diamondluke-1220/hd-badge:latest
 |----------|---------|-------------|
 | `PORT` | `3000` | Server listen port |
 | `ADMIN_TOKEN` | *(empty)* | Bearer token for admin access |
-| `ADMIN_LOCAL_ONLY` | `1` | Restrict admin to localhost (`0` for Docker/tunnel) |
-| `TRUST_PROXY` | *(unset)* | Trust `X-Forwarded-For` headers (`1` behind proxy) |
+| `ADMIN_LOCAL_ONLY` | off (`start.sh` sets `1`, the Docker image `0`) | `1` restricts the admin page and API to localhost |
+| `TRUST_PROXY` | *(unset; Docker image `1`)* | `1` reads the client IP from forwarding headers, but only from a trusted proxy |
+| `TRUSTED_PROXY_IPS` | *(empty: loopback only)* | Proxy addresses whose forwarding headers are trusted: exact IPs or a prefix ending in `.`, e.g. `172.20.0.` |
 | `SHOW_MODE` | `0` | Relaxed rate limits for live shows |
+| `BADGE_TZ` | `America/Chicago` | Time zone for the stats sparkline's days |
+| `DISCORD_WEBHOOK_URL` | *(empty)* | Posts each new badge to a Discord channel |
 
 ## Project Structure
 
@@ -264,29 +267,76 @@ graph LR
 
 ## API Endpoints
 
+Every route the server registers. `tests/api/readme-routes.test.ts` fails if one is missing here.
+
+### Pages
+
 | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|
-| `/api/badge` | POST | Rate limited | Create badge → Playwright render |
+| `/` | GET | Public | Badge creator |
+| `/orgchart` | GET | Public | Org chart views |
+| `/presentation` | GET | Public | Big-screen presentation view |
+| `/recover` | GET | Public | Recovery link landing page |
+| `/admin` | GET | Localhost when `ADMIN_LOCAL_ONLY=1` | HR dashboard |
+| `/game` | GET | Public | 301 redirect to game.helpdesk.band |
+
+### Public API
+
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/api/badge` | POST | Rate limited | Create badge → Playwright render; replaces the caller's previous badge once the new one is saved |
 | `/api/badge/:id` | GET | Public | Badge metadata (name, dept, title, caption, etc.) |
 | `/api/badge/:id` | PUT | HttpOnly cookie (`hd_token`) | Edit badge → re-render + quiet SSE update |
-| `/api/badge/:id` | DELETE | HttpOnly cookie (`hd_token`) | Self-service badge removal + file cleanup |
+| `/api/badge/:id` | DELETE | HttpOnly cookie (`hd_token`) | Self-service delete: removes the row and its files |
 | `/api/badge/:id/recover` | POST | Raw delete token (body) | Validate token against DB hash, set `hd_token` cookie (used by recovery links) |
-| `/api/badge/:id/image` | GET | Public | Serve badge PNG (respects photo privacy) |
-| `/api/badge/:id/thumb` | GET | Public | 320px thumbnail (lazy-generated, cached) |
-| `/api/badge/:id/headshot` | GET | Public | 200px headshot (lazy-generated, privacy-aware) |
-| `/api/badge/:id/print` | GET | Public | 600 DPI CR80, white bg, square corners |
+| `/api/badge/:id/image` | GET | Public | Badge PNG (respects photo privacy) |
+| `/api/badge/:id/thumb` | GET | Public | 320px thumbnail (generated on first request, cached) |
+| `/api/badge/:id/headshot` | GET | Public | 200px headshot (generated on first request, privacy-aware) |
 | `/api/orgchart` | GET | Public | Paginated badge list (division/dept filters) |
 | `/api/orgchart/stats` | GET | Public | Department counts, newest hire, sparkline |
 | `/api/badges/stream` | GET | Public | SSE live events (new-badge, badge-updated) |
-| `/api/admin/badge/:id/render` | POST | Bearer | Re-render badge via Playwright |
-| `/api/admin/badge/:id/photo` | POST | Bearer | Upload photo → auto re-render |
-| `/api/admin/badge/:id/photo-source` | GET | Bearer | Serve original uploaded photo |
-| `/api/admin/badges` | GET | Bearer | Admin badge list with filters |
-| `/api/admin/demo/start` | POST | Bearer | Generate 5-100 test badges |
-| `/api/admin/demo/cleanup` | POST | Bearer | Remove all demo badges + files |
-| `/api/admin/presentation/start` | POST | Bearer | Start presentation mode |
-| `/api/admin/badge/:id/recover` | POST | Bearer | Reissue delete token for badge recovery |
+| `/api/site-config` | GET | Public | Feature switches for the front end (vote banner) |
+| `/api/game/score` | POST | Rate limited | Arcade game score telemetry |
+| `/api/presentation/status` | GET | Public | Presentation state for the big-screen view |
+
+### Admin API (Bearer token)
+
+| Endpoint | Method | Auth | Purpose |
+|---|---|---|---|
+| `/api/admin/badges` | GET | Bearer | Badge list with filters, search and status |
+| `/api/admin/stats` | GET | Bearer | Totals, hidden and flagged counts |
+| `/api/admin/analytics` | GET | Bearer | Top songs, titles and departments; paid and photo counts |
+| `/api/admin/divisions` | GET | Bearer | Division names for the filter |
 | `/api/admin/export/csv` | GET | Bearer | CSV export (formula injection protected) |
+| `/api/admin/logs` | GET | Bearer | Recent server log lines |
+| `/api/admin/badge/:id` | DELETE | Bearer | Delete a badge |
+| `/api/admin/badge/:id/hide` | POST | Bearer | Toggle visibility |
+| `/api/admin/badge/:id/flag` | POST | Bearer | Toggle the review flag |
+| `/api/admin/badge/:id/paid` | POST | Bearer | Toggle paid |
+| `/api/admin/badge/:id/printed` | POST | Bearer | Toggle printed |
+| `/api/admin/badge/:id/recover` | POST | Bearer | Reissue the delete token (the admin page builds the recovery link from it) |
+| `/api/admin/badge/:id/photo` | POST | Bearer | Upload photo → re-render |
+| `/api/admin/badge/:id/photo-source` | GET | Bearer | Original uploaded photo |
+| `/api/admin/badge/:id/render` | POST | Bearer | Re-render one badge |
+| `/api/admin/badges/rerender-all` | POST | Bearer | Re-render every badge, hidden ones included |
+| `/api/admin/badge/:id/print` | GET | Bearer | 600 DPI CR80 print PNG, white background, square corners |
+| `/api/admin/badge/:id/print-colorlayer` | GET | Bearer | Colour-layer PNG for the card printer |
+| `/api/admin/print-klayer` | GET | Bearer | K-layer front, rendered at startup |
+| `/api/admin/print-badge-back` | GET | Bearer | Badge back, rendered at startup |
+| `/api/admin/print-calibration` | GET | Bearer | K-layer calibration card |
+| `/api/admin/badges/print-queue` | GET | Bearer | Paid and not yet printed badges |
+| `/api/admin/badges/batch-print` | GET | Bearer | ZIP of print PNGs for the whole queue |
+| `/api/admin/demo/start` | POST | Bearer | Generate 5-100 test badges |
+| `/api/admin/demo/stop` | POST | Bearer | Stop generating demo badges |
+| `/api/admin/demo/status` | GET | Bearer | Demo generator state |
+| `/api/admin/demo/cleanup` | POST | Bearer | Remove all demo badges and their files |
+| `/api/admin/presentation/start` | POST | Bearer | Start presentation mode |
+| `/api/admin/presentation/stop` | POST | Bearer | Stop presentation mode |
+| `/api/admin/presentation/status` | GET | Bearer | Presentation state, admin view |
+| `/api/admin/presentation/chyron` | POST | Bearer | Set the scrolling chyron messages |
+| `/api/admin/presentation/skip-intro` | POST | Bearer | Skip the band intro |
+| `/api/admin/show-mode/toggle` | POST | Bearer | Toggle show-mode rate limits |
+| `/api/admin/show-mode/status` | GET | Bearer | Show-mode state |
 
 ## Security
 
@@ -295,8 +345,8 @@ graph LR
 - Timing-safe admin token comparison (crypto.timingSafeEqual)
 - Brute force protection (5 fails = 15min lockout, cleared on success)
 - Photo upload magic byte validation (JPEG/PNG only) + max dimension check
-- Per-IP SSE connection limiting (10 max)
-- Rate limiting with LRU eviction (3/hour, 10/day; relaxed in SHOW_MODE)
+- Per-IP SSE connection limiting (50 per IP, 500 total)
+- Rate limiting with LRU eviction (10/hour, 20/day; 300/hour, 800/day in show mode)
 - Two-tier profanity filter across all text fields including caption and accessCss
 - CSP headers (frame-ancestors 'none', nosniff, DENY)
 - CSV export formula injection prevention
