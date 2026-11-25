@@ -7,6 +7,7 @@ import type { Server } from 'bun';
 import type { RenderableBadge, RenderOptions } from './types';
 import { sweepOrphanFiles } from './badge-files';
 import { fail } from './http';
+import { resolveClientIp, isLocalhost, parseTrustedProxies, type ProxyTrust } from './client-ip';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { HTTPException } from 'hono/http-exception';
@@ -193,49 +194,16 @@ function getPeerIp(c: Context): string {
  * a prefix ending in '.' or ':' such as "172.17." for a Docker bridge subnet.
  * When TRUST_PROXY=1 and this is unset, only loopback peers are trusted.
  */
-const TRUSTED_PROXY_IPS = (process.env.TRUSTED_PROXY_IPS || '')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
+const TRUSTED_PROXY_IPS = parseTrustedProxies(process.env.TRUSTED_PROXY_IPS || '');
 
-/** Bun reports IPv4 peers on a dual-stack socket as ::ffff:a.b.c.d; returns plain a.b.c.d for those, anything else unchanged. */
-function unmapIPv4(ip: string): string {
-  return ip.replace(/^::ffff:(?=\d{1,3}(\.\d{1,3}){3}$)/i, '');
+/** The proxy-trust settings: TRUST_PROXY is read on every request, TRUSTED_PROXY_IPS once at startup. */
+function proxyTrust(): ProxyTrust {
+  return { trustProxy: process.env.TRUST_PROXY === '1', trustedProxies: TRUSTED_PROXY_IPS };
 }
 
-function isTrustedProxy(peer: string): boolean {
-  if (isLocalhost(peer)) return true;
-  return TRUSTED_PROXY_IPS.some(entry =>
-    entry.endsWith('.') || entry.endsWith(':') ? peer.startsWith(entry) : peer === entry
-  );
-}
-
-/**
- * Resolve the client IP used for rate limiting and the admin lockout.
- *
- * Forwarding headers are honored ONLY when the socket peer is a trusted proxy.
- * The container's port is also reachable directly from the LAN, and a direct
- * client can set any header it likes; trusting it would give that client a
- * fresh rate-limit and admin-lockout key on every request.
- */
+/** The client address for rate limiting and the admin lockout (src/client-ip.ts). */
 function getClientIp(c: Context): string {
-  return resolveClientIp(getPeerIp(c), (name) => c.req.header(name));
-}
-
-/**
- * The one client-IP rule, shared by Hono routes and the live stream. Returns
- * the forwarded address only when the socket peer is a trusted proxy;
- * otherwise the peer itself.
- */
-function resolveClientIp(rawPeer: string, header: (name: string) => string | null | undefined): string {
-  const peer = unmapIPv4(rawPeer);
-  if (process.env.TRUST_PROXY === '1' && isTrustedProxy(peer)) {
-    return header('cf-connecting-ip')
-      || header('x-forwarded-for')?.split(',')[0]?.trim()
-      || header('x-real-ip')
-      || peer;
-  }
-  return peer;
+  return resolveClientIp(getPeerIp(c), (name) => c.req.header(name), proxyTrust());
 }
 
 function clampField(val: string, field?: string): string {
@@ -253,11 +221,6 @@ function decodeBase64Image(dataUrl: string): Buffer | null {
 // ─── Admin Auth ─────────────────────────────────────────
 
 const adminFailures = new Map<string, { count: number; firstAttempt: number; lastAttempt: number }>();
-
-/** Check if an IP is localhost (handles IPv4, IPv6, and IPv4-mapped IPv6) */
-function isLocalhost(ip: string): boolean {
-  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip === 'localhost';
-}
 
 // Restrict the /admin HTML page to localhost in local mode.
 // Checks the SOCKET PEER, not the forwarded client IP: a proxy-forwarded
@@ -726,7 +689,7 @@ export default {
     if (url.pathname === '/api/badges/stream') {
       // Per-IP SSE limiting uses the same client-IP rule as every other route.
       const peer = server?.requestIP?.(req)?.address || 'unknown';
-      const ip = resolveClientIp(peer, (name) => req.headers.get(name));
+      const ip = resolveClientIp(peer, (name) => req.headers.get(name), proxyTrust());
       return handleSSEDirect(ip);
     }
     return app.fetch(req, server);
