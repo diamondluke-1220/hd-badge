@@ -6,6 +6,7 @@ import { Hono, type Context, type Next } from 'hono';
 import type { Server } from 'bun';
 import type { RenderableBadge, RenderOptions } from './types';
 import { sweepOrphanFiles } from './badge-files';
+import { fail } from './http';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { HTTPException } from 'hono/http-exception';
@@ -172,7 +173,7 @@ app.use('*', async (c, next) => {
 // Content-Length is capped the same as one that declares its size.
 app.use('*', bodyLimit({
   maxSize: MAX_BODY_SIZE,
-  onError: (c) => c.json({ success: false, error: 'Request too large. Maximum 10 MB.' }, 413),
+  onError: (c) => fail(c, 413, 'Request too large. Maximum 10 MB.'),
 }));
 
 // ─── Helpers ─────────────────────────────────────────────
@@ -274,7 +275,7 @@ app.use('/admin.html', adminPageGuard);
 
 app.use('/api/admin/*', async (c, next) => {
   if (!ADMIN_TOKEN) {
-    return c.json({ success: false, error: 'Admin panel disabled. Set ADMIN_TOKEN env var.' }, 401);
+    return fail(c, 401, 'Admin panel disabled. Set ADMIN_TOKEN env var.');
   }
 
   // Socket peer, not the forwarded client IP — same reasoning as the /admin
@@ -282,7 +283,7 @@ app.use('/api/admin/*', async (c, next) => {
   // trusted proxy forwarded, or "ADMIN_LOCAL_ONLY=1" would be one spoofed
   // cf-connecting-ip away from meaning nothing.
   if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
-    return c.json({ success: false, error: 'Admin access restricted to localhost.' }, 403);
+    return fail(c, 403, 'Admin access restricted to localhost.');
   }
 
   const ip = getClientIp(c);
@@ -290,7 +291,7 @@ app.use('/api/admin/*', async (c, next) => {
   if (record && record.count >= 5) {
     // Locked out for 15 min from the LAST failure (not first)
     if (Date.now() - record.lastAttempt < 15 * 60 * 1000) {
-      return c.json({ success: false, error: 'Too many failed attempts. Try again in 15 minutes.' }, 429);
+      return fail(c, 429, 'Too many failed attempts. Try again in 15 minutes.');
     }
     // Lockout expired — reset
     adminFailures.delete(ip);
@@ -323,7 +324,7 @@ app.use('/api/admin/*', async (c, next) => {
     if (!record.firstAttempt) record.firstAttempt = now;
     adminFailures.set(ip, record);
     log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
-    return c.json({ success: false, error: 'Unauthorized. Invalid or missing admin token.' }, 401);
+    return fail(c, 401, 'Unauthorized. Invalid or missing admin token.');
   }
 });
 
@@ -659,7 +660,7 @@ app.notFound((c) => {
   const accept = c.req.header('accept') || '';
   // API requests and non-HTML requests get JSON
   if (c.req.path.startsWith('/api/') || !accept.includes('text/html')) {
-    return c.json({ success: false, error: 'Not found.' }, 404);
+    return fail(c, 404, 'Not found.');
   }
   // Browser navigation gets the themed 404 page
   return c.html(readFileSync(join('public', '404.html'), 'utf-8'), 404);

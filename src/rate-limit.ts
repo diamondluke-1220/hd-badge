@@ -66,7 +66,10 @@ export function resetRateLimits(): void {
   recoverStore.clear();
 }
 
-export function checkRateLimit(ip: string): { allowed: boolean; message?: string } {
+/** A rate-limit verdict; a refusal always carries the message to show. */
+export type RateCheck = { allowed: true } | { allowed: false; message: string };
+
+export function checkRateLimit(ip: string): RateCheck {
   const now = Date.now();
   const limits = getLimits();
 
@@ -128,7 +131,7 @@ export function checkRateLimit(ip: string): { allowed: boolean; message?: string
  * games can't hit badge creation limits (or vice versa). Limits are more
  * generous since game rounds are short and legitimate players play many.
  */
-export function checkGameScoreRateLimit(ip: string): { allowed: boolean; message?: string } {
+export function checkGameScoreRateLimit(ip: string): RateCheck {
   return checkBucket(gameScoreStore, ip, GAME_SCORE_HOURLY, GAME_SCORE_DAILY, {
     hourly: 'Game score submissions rate limit reached. Try again shortly.',
     daily: 'Daily game score submission limit reached.',
@@ -142,7 +145,7 @@ export function checkGameScoreRateLimit(ip: string): { allowed: boolean; message
  * badge-creation quota. Each edit costs one or two headless-Chrome renders on
  * a single shared render queue, so edits are capped too.
  */
-export function checkEditRateLimit(ip: string): { allowed: boolean; message?: string } {
+export function checkEditRateLimit(ip: string): RateCheck {
   const limits = showModeActive
     ? { hourly: EDIT_HOURLY_SHOW, daily: EDIT_DAILY_SHOW }
     : { hourly: EDIT_HOURLY, daily: EDIT_DAILY };
@@ -159,7 +162,7 @@ export function checkEditRateLimit(ip: string): { allowed: boolean; message?: st
  * whole audience behind one IP, and recovery attempts must not use up the
  * room's creation quota.
  */
-export function checkRecoverRateLimit(ip: string): { allowed: boolean; message?: string } {
+export function checkRecoverRateLimit(ip: string): RateCheck {
   return checkBucket(recoverStore, ip, RECOVER_HOURLY, RECOVER_DAILY, {
     hourly: 'Too many recovery attempts. Try again shortly.',
     daily: 'Daily recovery attempt limit reached.',
@@ -178,7 +181,7 @@ function checkBucket(
   hourlyLimit: number,
   dailyLimit: number,
   messages: { hourly: string; daily: string },
-): { allowed: boolean; message?: string } {
+): RateCheck {
   const now = Date.now();
 
   let entry = bucket.get(ip);

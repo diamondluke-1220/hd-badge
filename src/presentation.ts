@@ -59,7 +59,7 @@ export function initPresentation(opts: { broadcast: BroadcastFn }) {
 
 // ─── Public API ──────────────────────────────────────────
 
-export function startPresentation(opts?: { chyronMessages?: string[] }) {
+export function startPresentation(opts?: { chyronMessages?: string[] }): { error: string } | { success: true; phase: string; bandMembers: number } {
   if (state.active) {
     return { error: 'Presentation already running.' };
   }
@@ -106,7 +106,7 @@ export function startPresentation(opts?: { chyronMessages?: string[] }) {
   return { success: true, phase: 'band_intro', bandMembers: BAND_MEMBER_COUNT };
 }
 
-export function stopPresentation() {
+export function stopPresentation(): { error: string } | { success: true } {
   if (!state.active) {
     return { error: 'No presentation running.' };
   }
@@ -145,7 +145,7 @@ export function updateChyron(messages: string[]) {
   return { success: true };
 }
 
-export function skipBandIntro() {
+export function skipBandIntro(): { error: string } | { success: true } {
   if (!state.active || state.phase !== 'band_intro') {
     return { error: 'Not in band intro phase.' };
   }

@@ -219,7 +219,7 @@ function createDemoBadge(): string | null {
 
 // ─── Public API ──────────────────────────────────────────
 
-export function startDemo(count: number, durationSec: number) {
+export function startDemo(count: number, durationSec: number): { error: string } | { started: true; total: number; durationSec: number } {
   if (state.running) {
     return { error: 'Demo already running.' };
   }
@@ -286,7 +286,7 @@ export function startDemo(count: number, durationSec: number) {
   return { started: true, total, durationSec };
 }
 
-export function stopDemo() {
+export function stopDemo(): { error: string } | { stopped: true; created: number; total: number } {
   if (!state.running) {
     return { error: 'No demo running.' };
   }

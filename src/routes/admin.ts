@@ -11,6 +11,7 @@ import { log, getLog, errorMessage } from '../logger';
 import type { RenderBadge, BroadcastSSE } from '../types';
 import type { BadgeRow } from '../db';
 import { removeBadgeFiles } from '../badge-files';
+import { fail } from '../http';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
 import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
@@ -60,7 +61,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/badge/:id/hide', (c) => {
     const success = toggleVisibility(c.req.param('id'));
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     return c.json({ success: true, message: 'Visibility toggled.' });
   });
@@ -70,7 +71,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
 
     const success = hardDeleteBadge(id);
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     removeBadgeFiles(deps, id);
@@ -81,7 +82,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/badge/:id/paid', (c) => {
     const success = togglePaid(c.req.param('id'));
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     return c.json({ success: true, message: 'Payment status toggled.' });
   });
@@ -89,7 +90,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/badge/:id/printed', (c) => {
     const success = togglePrinted(c.req.param('id'));
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     return c.json({ success: true, message: 'Print status toggled.' });
   });
@@ -115,7 +116,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     const printBuffer = await renderBadgePlaywright(badge, { print: true });
@@ -134,7 +135,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.get('/api/admin/print-klayer', async (c) => {
     const filePath = join(PRINTS_DIR, 'klayer-front.png');
     if (!existsSync(filePath)) {
-      return c.json({ success: false, error: 'K-layer not yet rendered. Restart server.' }, 404);
+      return fail(c, 404, 'K-layer not yet rendered. Restart server.');
     }
     return new Response(Bun.file(filePath), {
       headers: {
@@ -148,7 +149,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.get('/api/admin/print-badge-back', async (c) => {
     const filePath = join(PRINTS_DIR, 'badge-back.png');
     if (!existsSync(filePath)) {
-      return c.json({ success: false, error: 'Badge back not yet rendered. Restart server.' }, 404);
+      return fail(c, 404, 'Badge back not yet rendered. Restart server.');
     }
     return new Response(Bun.file(filePath), {
       headers: {
@@ -166,7 +167,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     const buf = await renderBadgePlaywright(badge, { colorlayer: true });
     return new Response(new Uint8Array(buf), {
@@ -193,7 +194,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/badge/:id/flag', (c) => {
     const success = toggleFlagged(c.req.param('id'));
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     return c.json({ success: true, message: 'Flag status toggled.' });
   });
@@ -204,7 +205,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const newToken = reissueToken(id);
     if (!newToken) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
     log('info', 'admin', `Recovery token reissued for ${id}`);
     return c.json({ success: true, employeeId: id, token: newToken });
@@ -216,18 +217,18 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     try {
       const formData = await c.req.formData();
       const file = formData.get('photo');
       if (!file || !(file instanceof File)) {
-        return c.json({ success: false, error: 'No photo file provided.' }, 400);
+        return fail(c, 400, 'No photo file provided.');
       }
 
       if (!file.type.startsWith('image/')) {
-        return c.json({ success: false, error: 'File must be an image.' }, 400);
+        return fail(c, 400, 'File must be an image.');
       }
 
       const buffer = Buffer.from(await file.arrayBuffer());
@@ -236,7 +237,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
       const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
       if (!isJpeg && !isPng) {
-        return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+        return fail(c, 400, 'Invalid image file. JPEG or PNG only.');
       }
 
       await sharp(buffer)
@@ -279,7 +280,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: true, message: `Photo uploaded and badge re-rendered for ${badge.name}.` });
     } catch (err) {
       log('error', 'admin', `Photo upload failed for ${id}: ${errorMessage(err)}`);
-      return c.json({ success: false, error: 'Photo upload failed.' }, 500);
+      return fail(c, 500, 'Photo upload failed.');
     }
   });
 
@@ -289,12 +290,12 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge || !badge.has_photo) {
-      return c.json({ success: false, error: 'Photo not found.' }, 404);
+      return fail(c, 404, 'Photo not found.');
     }
 
     const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
     if (!existsSync(photoPath)) {
-      return c.json({ success: false, error: 'Photo file not found.' }, 404);
+      return fail(c, 404, 'Photo file not found.');
     }
 
     const file = Bun.file(photoPath);
@@ -309,7 +310,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     try {
@@ -325,7 +326,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: true, message: `Badge rendered for ${badge.name}.` });
     } catch (err) {
       log('error', 'admin', `Badge render failed for ${id}: ${errorMessage(err)}`);
-      return c.json({ success: false, error: 'Badge render failed.' }, 500);
+      return fail(c, 500, 'Badge render failed.');
     }
   });
 
@@ -334,7 +335,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.get('/api/admin/badges/batch-print', async (c) => {
     const badges = getPrintQueue();
     if (badges.length === 0) {
-      return c.json({ success: false, error: 'No badges in print queue (paid + unprinted).' }, 404);
+      return fail(c, 404, 'No badges in print queue (paid + unprinted).');
     }
 
     try {
@@ -372,7 +373,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       });
     } catch (err) {
       log('error', 'admin', `Batch print failed: ${errorMessage(err)}`);
-      return c.json({ success: false, error: 'Batch print failed.' }, 500);
+      return fail(c, 500, 'Batch print failed.');
     }
   });
 
@@ -391,7 +392,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     }
 
     if (badges.length === 0) {
-      return c.json({ success: false, error: 'No badges to render.' }, 404);
+      return fail(c, 404, 'No badges to render.');
     }
 
     log('info', 'admin', `Re-render all started: ${badges.length} badges`);
@@ -488,7 +489,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     const duration = body.duration || 300;
     const result = startDemo(count, duration);
     if ('error' in result) {
-      return c.json({ success: false, error: result.error }, 400);
+      return fail(c, 400, result.error);
     }
     return c.json({ success: true, ...result });
   });
@@ -496,7 +497,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/demo/stop', (c) => {
     const result = stopDemo();
     if ('error' in result) {
-      return c.json({ success: false, error: result.error }, 400);
+      return fail(c, 400, result.error);
     }
     return c.json({ success: true, ...result });
   });
@@ -517,7 +518,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     try { body = await c.req.json(); } catch { body = {}; }
     const result = startPresentation({ chyronMessages: body.chyronMessages });
     if ('error' in result) {
-      return c.json({ success: false, error: result.error }, 400);
+      return fail(c, 400, result.error);
     }
     return c.json(result);
   });
@@ -525,7 +526,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/presentation/stop', (c) => {
     const result = stopPresentation();
     if ('error' in result) {
-      return c.json({ success: false, error: result.error }, 400);
+      return fail(c, 400, result.error);
     }
     return c.json(result);
   });
@@ -545,7 +546,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   app.post('/api/admin/presentation/skip-intro', (c) => {
     const result = skipBandIntro();
     if ('error' in result) {
-      return c.json({ success: false, error: result.error }, 400);
+      return fail(c, 400, result.error);
     }
     return c.json(result);
   });

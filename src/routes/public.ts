@@ -4,6 +4,7 @@
 import type { Hono, Context } from 'hono';
 import type { RenderBadge, BroadcastSSE } from '../types';
 import { removeBadgeFiles } from '../badge-files';
+import { fail } from '../http';
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
@@ -152,20 +153,20 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const rateCheck = checkRateLimit(ip);
     if (!rateCheck.allowed) {
       log('warn', 'rate-limit', `Blocked ${ip}: ${rateCheck.message}`);
-      return c.json({ success: false, error: rateCheck.message }, 429);
+      return fail(c, 429, rateCheck.message);
     }
 
     let body: any;
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
 
     const { name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
 
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
-      return c.json({ success: false, error: 'Missing required fields.' }, 400);
+      return fail(c, 400, 'Missing required fields.');
     }
 
     // Every text field must actually be a string. isNameClean() and the .trim()
@@ -175,21 +176,21 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const requiredText = { name, department, title, song, accessLevel, accessCss };
     for (const [field, value] of Object.entries(requiredText)) {
       if (typeof value !== 'string') {
-        return c.json({ success: false, error: 'Missing required fields.' }, 400);
+        return fail(c, 400, 'Missing required fields.');
       }
     }
     if (caption !== undefined && typeof caption !== 'string') {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
     if (waveStyle !== undefined && !WAVE_STYLES.has(waveStyle)) {
-      return c.json({ success: false, error: 'Unrecognized waveform style.' }, 400);
+      return fail(c, 400, 'Unrecognized waveform style.');
     }
 
     // Check all user-supplied text fields for hate speech
     const textFields = [name, department, title, song, accessLevel, accessCss, ...(caption ? [caption] : [])];
     for (const field of textFields) {
       if (!isNameClean(field)) {
-        return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
+        return fail(c, 400, 'HR has flagged your submission for review.');
       }
     }
 
@@ -198,13 +199,13 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const titleUpper = title.trim().toUpperCase();
     const accessUpper = accessLevel.trim().toUpperCase();
     if (RESERVED_DEPTS.has(deptUpper)) {
-      return c.json({ success: false, error: 'That department is reserved for executive staff.' }, 400);
+      return fail(c, 400, 'That department is reserved for executive staff.');
     }
     if (RESERVED_TITLES.has(titleUpper)) {
-      return c.json({ success: false, error: 'That title is reserved for executive staff.' }, 400);
+      return fail(c, 400, 'That title is reserved for executive staff.');
     }
     if (RESERVED_ACCESS.has(accessUpper)) {
-      return c.json({ success: false, error: 'ALL ACCESS clearance requires executive authorization.' }, 400);
+      return fail(c, 400, 'ALL ACCESS clearance requires executive authorization.');
     }
 
     try {
@@ -217,15 +218,15 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           const isJpeg = photoBuffer[0] === 0xFF && photoBuffer[1] === 0xD8 && photoBuffer[2] === 0xFF;
           const isPng = photoBuffer[0] === 0x89 && photoBuffer[1] === 0x50 && photoBuffer[2] === 0x4E && photoBuffer[3] === 0x47;
           if (!isJpeg && !isPng) {
-            return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+            return fail(c, 400, 'Invalid image file. JPEG or PNG only.');
           }
           try {
             const meta = await sharp(photoBuffer).metadata();
             if (!meta.width || !meta.height || meta.width > 8000 || meta.height > 8000) {
-              return c.json({ success: false, error: 'Image too large. Max 8000x8000 pixels.' }, 400);
+              return fail(c, 400, 'Image too large. Max 8000x8000 pixels.');
             }
           } catch {
-            return c.json({ success: false, error: 'Invalid image file.' }, 400);
+            return fail(c, 400, 'Invalid image file.');
           }
         }
       }
@@ -239,7 +240,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess, cleanCaption].some(f => shouldFlag(f));
 
       if (isPresentationActive() && flagged) {
-        return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
+        return fail(c, 400, 'Badge content requires review. Try again after the show.');
       }
 
       // A badge from the same device is replaced only once the new one is fully
@@ -318,7 +319,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       });
     } catch (err) {
       log('error', 'badge', `Creation failed: ${errorMessage(err)}`);
-      return c.json({ success: false, error: 'Badge creation failed. Please try again.' }, 500);
+      return fail(c, 500, 'Badge creation failed. Please try again.');
     }
   });
 
@@ -336,7 +337,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
 
     if (!badge || !badge.is_visible) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     return c.json({
@@ -379,14 +380,14 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const editCheck = checkEditRateLimit(getClientIp(c));
     if (!editCheck.allowed) {
       log('warn', 'rate-limit', `Blocked edit from ${getClientIp(c)}: ${editCheck.message}`);
-      return c.json({ success: false, error: editCheck.message }, 429);
+      return fail(c, 429, editCheck.message);
     }
 
     let body: any;
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
 
     const { name, department, title, song, accessLevel, accessCss, caption, waveStyle, photo, photoPublic } = body;
@@ -394,45 +395,45 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     // Auth: HttpOnly cookie only. Pre-cookie clients auto-promote on page load.
     const token = getBadgeToken(c);
     if (!token) {
-      return c.json({ success: false, error: 'Authentication required. Please refresh the page or recover your badge.' }, 401);
+      return fail(c, 401, 'Authentication required. Please refresh the page or recover your badge.');
     }
     if (!name || !department || !title || !song || !accessLevel || !accessCss) {
-      return c.json({ success: false, error: 'Missing required fields.' }, 400);
+      return fail(c, 400, 'Missing required fields.');
     }
 
     // Type + allowlist validation, same reasoning as the create path.
     const requiredText = { name, department, title, song, accessLevel, accessCss };
     for (const [field, value] of Object.entries(requiredText)) {
       if (typeof value !== 'string') {
-        return c.json({ success: false, error: 'Missing required fields.' }, 400);
+        return fail(c, 400, 'Missing required fields.');
       }
     }
     if (caption !== undefined && typeof caption !== 'string') {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
     // An unvalidated waveStyle was committed to the DB BEFORE the render, and
     // any value with whitespace throws in classList.add() — permanently
     // bricking that badge's render on every subsequent attempt.
     if (waveStyle !== undefined && !WAVE_STYLES.has(waveStyle)) {
-      return c.json({ success: false, error: 'Unrecognized waveform style.' }, 400);
+      return fail(c, 400, 'Unrecognized waveform style.');
     }
 
     // Verify badge exists and is visible
     const existing = getBadge(id);
     if (!existing || !existing.is_visible) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     // Block edits to band member badges
     if (existing.is_band_member) {
-      return c.json({ success: false, error: 'Executive badges cannot be modified.' }, 403);
+      return fail(c, 403, 'Executive badges cannot be modified.');
     }
 
     // Same validation as creation
     const textFields = [name, department, title, song, accessLevel, accessCss, ...(caption ? [caption] : [])];
     for (const field of textFields) {
       if (!isNameClean(field)) {
-        return c.json({ success: false, error: 'HR has flagged your submission for review.' }, 400);
+        return fail(c, 400, 'HR has flagged your submission for review.');
       }
     }
 
@@ -440,13 +441,13 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const titleUpper = title.trim().toUpperCase();
     const accessUpper = accessLevel.trim().toUpperCase();
     if (RESERVED_DEPTS.has(deptUpper)) {
-      return c.json({ success: false, error: 'That department is reserved for executive staff.' }, 400);
+      return fail(c, 400, 'That department is reserved for executive staff.');
     }
     if (RESERVED_TITLES.has(titleUpper)) {
-      return c.json({ success: false, error: 'That title is reserved for executive staff.' }, 400);
+      return fail(c, 400, 'That title is reserved for executive staff.');
     }
     if (RESERVED_ACCESS.has(accessUpper)) {
-      return c.json({ success: false, error: 'ALL ACCESS clearance requires executive authorization.' }, 400);
+      return fail(c, 400, 'ALL ACCESS clearance requires executive authorization.');
     }
 
     try {
@@ -458,15 +459,15 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
           const isJpeg = photoBuffer[0] === 0xFF && photoBuffer[1] === 0xD8 && photoBuffer[2] === 0xFF;
           const isPng = photoBuffer[0] === 0x89 && photoBuffer[1] === 0x50 && photoBuffer[2] === 0x4E && photoBuffer[3] === 0x47;
           if (!isJpeg && !isPng) {
-            return c.json({ success: false, error: 'Invalid image file. JPEG or PNG only.' }, 400);
+            return fail(c, 400, 'Invalid image file. JPEG or PNG only.');
           }
           try {
             const meta = await sharp(photoBuffer).metadata();
             if (!meta.width || !meta.height || meta.width > 8000 || meta.height > 8000) {
-              return c.json({ success: false, error: 'Image too large. Max 8000x8000 pixels.' }, 400);
+              return fail(c, 400, 'Image too large. Max 8000x8000 pixels.');
             }
           } catch {
-            return c.json({ success: false, error: 'Invalid image file.' }, 400);
+            return fail(c, 400, 'Invalid image file.');
           }
         }
       }
@@ -481,7 +482,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       const flagged = [cleanName, cleanTitle, cleanDept, cleanSong, cleanAccess, cleanCaption].some(f => shouldFlag(f));
 
       if (isPresentationActive() && flagged) {
-        return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
+        return fail(c, 400, 'Badge content requires review. Try again after the show.');
       }
 
       const success = updateBadge(id, token, {
@@ -499,7 +500,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       });
 
       if (!success) {
-        return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
+        return fail(c, 403, 'Badge not found or invalid token.');
       }
 
       // Auth succeeded — refresh cookie Max-Age (extends session by 1 year)
@@ -538,7 +539,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       });
     } catch (err) {
       log('error', 'badge', `Update failed for ${id}: ${errorMessage(err)}`);
-      return c.json({ success: false, error: 'Badge update failed. Please try again.' }, 500);
+      return fail(c, 500, 'Badge update failed. Please try again.');
     }
   });
 
@@ -552,7 +553,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     // stayed public, and the SSE broadcast had already handed every viewer the
     // employee ID needed to fetch it.
     if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     // A private photo is never served from this public route, whatever the
@@ -566,7 +567,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
 
     if (!existsSync(imagePath)) {
-      return c.json({ success: false, error: 'Badge image not found.' }, 404);
+      return fail(c, 404, 'Badge image not found.');
     }
 
     const file = Bun.file(imagePath);
@@ -581,7 +582,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
@@ -590,7 +591,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
 
     if (!hasUsablePhoto) {
       if (!existsSync(placeholderPath)) {
-        return c.json({ success: false, error: 'Placeholder not found.' }, 404);
+        return fail(c, 404, 'Placeholder not found.');
       }
       const file = Bun.file(placeholderPath);
       return new Response(file, {
@@ -636,7 +637,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const id = c.req.param('id');
     const badge = getBadge(id);
     if (!badge || (!badge.is_visible && !hasAdminBearer(c))) {
-      return c.json({ success: false, error: 'Badge not found.' }, 404);
+      return fail(c, 404, 'Badge not found.');
     }
 
     let sourcePath: string;
@@ -648,7 +649,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     }
 
     if (!existsSync(sourcePath)) {
-      return c.json({ success: false, error: 'Badge image not found.' }, 404);
+      return fail(c, 404, 'Badge image not found.');
     }
 
     const thumbPath = join(THUMBS_DIR, `${id}.png`);
@@ -691,12 +692,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     // Auth: HttpOnly cookie only. Pre-cookie clients auto-promote on page load.
     const token = getBadgeToken(c);
     if (!token) {
-      return c.json({ success: false, error: 'Authentication required. Please refresh the page or recover your badge.' }, 401);
+      return fail(c, 401, 'Authentication required. Please refresh the page or recover your badge.');
     }
 
     const success = deleteOwnBadge(id, token);
     if (!success) {
-      return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
+      return fail(c, 403, 'Badge not found or invalid token.');
     }
 
     // Badge deleted — clear the auth cookie so the user is fully logged out
@@ -719,7 +720,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const rateCheck = checkRecoverRateLimit(ip);
     if (!rateCheck.allowed) {
       log('warn', 'rate-limit', `Recover blocked ${ip}: ${rateCheck.message}`);
-      return c.json({ success: false, error: rateCheck.message }, 429);
+      return fail(c, 429, rateCheck.message);
     }
 
     const id = c.req.param('id');
@@ -727,18 +728,18 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
 
     const token = body?.token;
     if (!token || typeof token !== 'string') {
-      return c.json({ success: false, error: 'Recovery token required.' }, 400);
+      return fail(c, 400, 'Recovery token required.');
     }
 
     if (!verifyBadgeToken(id, token)) {
       // Generic error — don't leak whether the badge exists
       log('warn', 'recover', `Failed recovery attempt for ${id} from ${ip}`);
-      return c.json({ success: false, error: 'Recovery link invalid or expired.' }, 403);
+      return fail(c, 403, 'Recovery link invalid or expired.');
     }
 
     // Token valid — issue HttpOnly cookie. User is now authenticated.
@@ -793,57 +794,57 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     const rateCheck = checkGameScoreRateLimit(ip);
     if (!rateCheck.allowed) {
       log('warn', 'rate-limit', `Blocked game score from ${ip}: ${rateCheck.message}`);
-      return c.json({ success: false, error: rateCheck.message }, 429);
+      return fail(c, 429, rateCheck.message);
     }
 
     let body: any;
     try {
       body = await c.req.json();
     } catch {
-      return c.json({ success: false, error: 'Invalid request body.' }, 400);
+      return fail(c, 400, 'Invalid request body.');
     }
 
     const { employeeId, profit, floor, perksUsed, cardsPlayed, win } = body;
 
     // Required field presence + type checks
     if (typeof employeeId !== 'string' || !employeeId) {
-      return c.json({ success: false, error: 'Missing or invalid employeeId.' }, 400);
+      return fail(c, 400, 'Missing or invalid employeeId.');
     }
     if (!Number.isFinite(profit) || !Number.isFinite(floor)) {
-      return c.json({ success: false, error: 'profit and floor must be numbers.' }, 400);
+      return fail(c, 400, 'profit and floor must be numbers.');
     }
     if (typeof win !== 'boolean') {
-      return c.json({ success: false, error: 'win must be a boolean.' }, 400);
+      return fail(c, 400, 'win must be a boolean.');
     }
 
     // Bounds checks — prevent garbage / injection of extreme values
     if (profit < -1_000_000 || profit > 1_000_000) {
-      return c.json({ success: false, error: 'profit out of range.' }, 400);
+      return fail(c, 400, 'profit out of range.');
     }
     if (floor < 0 || floor > 100) {
-      return c.json({ success: false, error: 'floor out of range.' }, 400);
+      return fail(c, 400, 'floor out of range.');
     }
 
     // Optional fields — default if missing, validate if present
     const cardsPlayedSafe = cardsPlayed === undefined ? 0 : cardsPlayed;
     if (!Number.isFinite(cardsPlayedSafe) || cardsPlayedSafe < 0 || cardsPlayedSafe > 10000) {
-      return c.json({ success: false, error: 'cardsPlayed out of range.' }, 400);
+      return fail(c, 400, 'cardsPlayed out of range.');
     }
 
     const perksUsedSafe = perksUsed === undefined ? [] : perksUsed;
     if (!Array.isArray(perksUsedSafe) || perksUsedSafe.length > 50) {
-      return c.json({ success: false, error: 'perksUsed must be an array with at most 50 items.' }, 400);
+      return fail(c, 400, 'perksUsed must be an array with at most 50 items.');
     }
     for (const perk of perksUsedSafe) {
       if (typeof perk !== 'string' || perk.length > 50) {
-        return c.json({ success: false, error: 'perksUsed items must be strings ≤ 50 chars.' }, 400);
+        return fail(c, 400, 'perksUsed items must be strings ≤ 50 chars.');
       }
     }
 
     // Verify badge exists — prevents telemetry for unknown IDs
     const badge = getBadge(employeeId);
     if (!badge) {
-      return c.json({ success: false, error: 'Invalid badge ID' }, 404);
+      return fail(c, 404, 'Invalid badge ID');
     }
 
     try {
@@ -858,7 +859,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: true });
     } catch (e) {
       log('error', 'game-score', 'Save failed');
-      return c.json({ success: false, error: 'Internal error' }, 500);
+      return fail(c, 500, 'Internal error');
     }
   });
 }
