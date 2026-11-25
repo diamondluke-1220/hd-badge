@@ -16,4 +16,5 @@ badge-test.js
 
 # Internal docs (not app documentation)
 docs/security-audit-*.md
+docs/archive/security-audit-*.md
 docs/docker-deploy-plan.md
