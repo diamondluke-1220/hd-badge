@@ -299,7 +299,7 @@ async function loadStats() {
   const deptFilter = document.getElementById('deptFilter');
   deptFilter.innerHTML = '<option value="">All Departments</option>';
   departments.forEach(d => {
-    deptFilter.innerHTML += `<option value="${d}">${d} (${data.byDepartment[d]})</option>`;
+    deptFilter.add(new Option(`${d} (${data.byDepartment[d]})`, d));
   });
 
   const statsBar = document.getElementById('statsBar');
@@ -397,13 +397,13 @@ function renderTable(badges) {
       <td>${statusDots}</td>
       <td>${date}</td>
       <td class="actions-cell">
-        <button class="btn-action" onclick="showPreview('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')" title="Preview badge">&#128065;</button>
+        <button class="btn-action" onclick="showPreview('${b.employeeId}', ${esc(JSON.stringify(b.name || ''))})" title="Preview badge">&#128065;</button>
         <button class="btn-action" onclick="uploadPhoto('${b.employeeId}')" title="Upload photo">&#128247;</button>
         <button class="btn-action${b.isPaid ? ' btn-paid' : ''}" onclick="togglePaid('${b.employeeId}')" title="${paidLabel}">${paidLabel}</button>
         <button class="btn-action${b.isPrinted ? ' btn-printed' : ''}" onclick="togglePrinted('${b.employeeId}')" title="${printedLabel}">${printedLabel}</button>
         <button class="btn-action${b.isFlagged ? ' btn-flagged' : ''}" onclick="toggleFlag('${b.employeeId}')" title="${flagLabel}">${flagLabel}</button>
         <button class="btn-action" onclick="toggleHide('${b.employeeId}')" title="${hideLabel}">${hideLabel}</button>
-        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', '${esc(b.name).replace(/'/g, "&#39;")}')" title="Delete">&times;</button>
+        <button class="btn-action btn-danger" onclick="confirmDelete('${b.employeeId}', ${esc(JSON.stringify(b.name || ''))})" title="Delete">&times;</button>
       </td>
     </tr>`;
   }).join('');
@@ -617,7 +617,7 @@ async function loadDivisions() {
   const sel = document.getElementById('divisionFilter');
   sel.innerHTML = '<option value="">All Divisions</option>';
   (data.divisions || []).forEach(d => {
-    sel.innerHTML += `<option value="${d}">${d}</option>`;
+    sel.add(new Option(d, d));
   });
 }
 
@@ -932,10 +932,16 @@ async function exportCSV() {
 }
 
 // ─── Helpers ────────────────────────────────────────────
+// HTML-escapes text for element content and quoted attributes. Values passed
+// into an inline handler are JSON-encoded first, so the JS literal stays intact
+// once the attribute is decoded.
 function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str || '';
-  return d.innerHTML;
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 // ─── Event Listeners ────────────────────────────────────
