@@ -276,7 +276,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         waveStyle: waveStyle || 'barcode',
         hasPhoto,
         photoPublic: photoPublic !== false,
-        source: body.source || 'web',
+        source: 'web',
         flagged,
       });
 

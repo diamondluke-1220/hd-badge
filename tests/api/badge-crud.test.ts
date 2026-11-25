@@ -244,4 +244,24 @@ describe('Badge CRUD', () => {
     const bandMembers = json.badges.filter((b: any) => b.isBandMember);
     expect(bandMembers.length).toBe(5);
   });
+
+  it('stores source as "web" whatever the client sends', async () => {
+    const { Database } = await import('bun:sqlite');
+    const attempts: unknown[] = ['x'.repeat(5000), { nested: true }, 'band'];
+    for (const [i, source] of attempts.entries()) {
+      const res = await publicRequest(
+        ctx.app,
+        'POST',
+        '/api/badge',
+        validBadgePayload({ source }),
+        { 'x-forwarded-for': `10.99.1.${i}` }
+      );
+      expect(res.status).toBe(200);
+      const { employeeId } = await res.json();
+      const db = new Database(ctx.dbPath, { readonly: true });
+      const row = db.query('SELECT source FROM badges WHERE employee_id = ?').get(employeeId) as { source: string };
+      db.close();
+      expect(row.source).toBe('web');
+    }
+  });
 });
