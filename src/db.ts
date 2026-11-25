@@ -111,6 +111,27 @@ let stmts: {
   toggleFlagged: ReturnType<Database['prepare']>;
   setHasPhoto: ReturnType<Database['prepare']>;
   insertGameScore: ReturnType<Database['prepare']>;
+  countAll: ReturnType<Database['prepare']>;
+  countVisibleByDept: ReturnType<Database['prepare']>;
+  reissueToken: ReturnType<Database['prepare']>;
+  countBandMembers: ReturnType<Database['prepare']>;
+  countFlagged: ReturnType<Database['prepare']>;
+  newestFanId: ReturnType<Database['prepare']>;
+  newestVisible: ReturnType<Database['prepare']>;
+  recentCreatedAt: ReturnType<Database['prepare']>;
+  countBySong: ReturnType<Database['prepare']>;
+  topSongs: ReturnType<Database['prepare']>;
+  topTitles: ReturnType<Database['prepare']>;
+  topDepartments: ReturnType<Database['prepare']>;
+  countPaidFans: ReturnType<Database['prepare']>;
+  countFans: ReturnType<Database['prepare']>;
+  countPhotoFans: ReturnType<Database['prepare']>;
+  countUniqueTitles: ReturnType<Database['prepare']>;
+  exportAll: ReturnType<Database['prepare']>;
+  printQueue: ReturnType<Database['prepare']>;
+  demoIds: ReturnType<Database['prepare']>;
+  deleteDemo: ReturnType<Database['prepare']>;
+  allIds: ReturnType<Database['prepare']>;
 };
 
 /** Run a migration only if its version hasn't been applied yet */
@@ -292,6 +313,27 @@ export function initDb(dbPath: string) {
       INSERT INTO game_scores (employee_id, profit, floor, perks_used, cards_played, win)
       VALUES ($employee_id, $profit, $floor, $perks_used, $cards_played, $win)
     `),
+    countAll: db.prepare('SELECT COUNT(*) as count FROM badges'),
+    countVisibleByDept: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_visible = 1 AND department = ?'),
+    reissueToken: db.prepare('UPDATE badges SET delete_token = $token WHERE employee_id = $id'),
+    countBandMembers: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 1'),
+    countFlagged: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1'),
+    newestFanId: db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 AND is_visible = 1 ORDER BY created_at DESC LIMIT 1'),
+    newestVisible: db.prepare('SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'),
+    recentCreatedAt: db.prepare("SELECT created_at FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-31 days')"),
+    countBySong: db.prepare('SELECT song, COUNT(*) as count FROM badges WHERE is_visible = 1 GROUP BY song ORDER BY count DESC'),
+    topSongs: db.prepare('SELECT song as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY song ORDER BY count DESC LIMIT 10'),
+    topTitles: db.prepare('SELECT title as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY title ORDER BY count DESC LIMIT 10'),
+    topDepartments: db.prepare('SELECT department as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY department ORDER BY count DESC LIMIT 10'),
+    countPaidFans: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_paid = 1 AND is_band_member = 0'),
+    countFans: db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 0'),
+    countPhotoFans: db.prepare('SELECT COUNT(*) as count FROM badges WHERE has_photo = 1 AND is_band_member = 0'),
+    countUniqueTitles: db.prepare('SELECT COUNT(*) as count FROM (SELECT title FROM badges WHERE is_band_member = 0 GROUP BY title HAVING COUNT(*) = 1)'),
+    exportAll: db.prepare('SELECT * FROM badges ORDER BY id ASC'),
+    printQueue: db.prepare('SELECT * FROM badges WHERE is_paid = 1 AND is_printed = 0 ORDER BY created_at ASC'),
+    demoIds: db.prepare('SELECT employee_id FROM badges WHERE is_demo = 1'),
+    deleteDemo: db.prepare('DELETE FROM badges WHERE is_demo = 1'),
+    allIds: db.prepare('SELECT employee_id FROM badges'),
   };
 
   // Migrate 4-digit band member IDs to 5-digit format (HD-0001 → HD-00001)
@@ -540,10 +582,10 @@ export function listBadges(options: {
 
   if (options.includeHidden) {
     badges = stmts.listAll.all({ $limit: limit, $offset: offset }) as BadgeRow[];
-    total = (db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number }).count;
+    total = (stmts.countAll.get() as { count: number }).count;
   } else if (options.department) {
     badges = stmts.listVisibleByDept.all({ $department: options.department, $limit: limit, $offset: offset }) as BadgeRow[];
-    total = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_visible = 1 AND department = ?').get(options.department) as { count: number }).count;
+    total = (stmts.countVisibleByDept.get(options.department) as { count: number }).count;
   } else {
     badges = stmts.listVisible.all({ $limit: limit, $offset: offset }) as BadgeRow[];
     total = (stmts.countVisible.get() as { count: number }).count;
@@ -601,7 +643,7 @@ export function reissueToken(employeeId: string): string | null {
   const badge = getBadge(employeeId);
   if (!badge) return null;
   const newToken = randomUUID();
-  db.prepare('UPDATE badges SET delete_token = $token WHERE employee_id = $id')
+  stmts.reissueToken
     .run({ $token: hashToken(newToken), $id: employeeId });
   return newToken;
 }
@@ -668,22 +710,18 @@ export function getStats(): {
 } {
   return db.transaction(() => {
     const visible = (stmts.countVisible.get() as { count: number }).count;
-    const total = (db.prepare('SELECT COUNT(*) as count FROM badges').get() as { count: number }).count;
-    const bandMembers = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 1').get() as { count: number }).count;
-    const flaggedCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_flagged = 1').get() as { count: number }).count;
+    const total = (stmts.countAll.get() as { count: number }).count;
+    const bandMembers = (stmts.countBandMembers.get() as { count: number }).count;
+    const flaggedCount = (stmts.countFlagged.get() as { count: number }).count;
     const byDeptRows = stmts.countByDept.all() as { department: string; count: number }[];
     // is_visible = 1 matters: this field ships on the PUBLIC, unauthenticated
     // /api/orgchart/stats, so without the filter it handed any caller the
     // employee ID of a badge an admin had just hidden.
-    const newest = db.prepare('SELECT employee_id FROM badges WHERE is_band_member = 0 AND is_visible = 1 ORDER BY created_at DESC LIMIT 1').get() as { employee_id: string } | null;
+    const newest = stmts.newestFanId.get() as { employee_id: string } | null;
 
-    const newestRow = db.prepare(
-      'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'
-    ).get() as { name: string; department: string; created_at: string } | null;
+    const newestRow = stmts.newestVisible.get() as { name: string; department: string; created_at: string } | null;
 
-    const recentRows = db.prepare(
-      "SELECT created_at FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-31 days')"
-    ).all() as { created_at: string }[];
+    const recentRows = stmts.recentCreatedAt.all() as { created_at: string }[];
     const sparklineRows = localDayCounts(recentRows.map(r => r.created_at));
 
     const byDepartment: Record<string, number> = {};
@@ -691,10 +729,7 @@ export function getStats(): {
       byDepartment[row.department] = row.count;
     }
 
-    const bySongRows = db.prepare(
-      `SELECT song, COUNT(*) as count FROM badges WHERE is_visible = 1
-       GROUP BY song ORDER BY count DESC`
-    ).all() as { song: string; count: number }[];
+    const bySongRows = stmts.countBySong.all() as { song: string; count: number }[];
 
     return {
       totalBadges: total,
@@ -724,28 +759,20 @@ export function getAnalytics(): {
   fanBadgeCount: number;
 } {
   return db.transaction(() => {
-    const topSongs = db.prepare(
-      'SELECT song as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY song ORDER BY count DESC LIMIT 10'
-    ).all() as { name: string; count: number }[];
+    const topSongs = stmts.topSongs.all() as { name: string; count: number }[];
 
-    const topTitles = db.prepare(
-      'SELECT title as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY title ORDER BY count DESC LIMIT 10'
-    ).all() as { name: string; count: number }[];
+    const topTitles = stmts.topTitles.all() as { name: string; count: number }[];
 
-    const topDepartments = db.prepare(
-      'SELECT department as name, COUNT(*) as count FROM badges WHERE is_band_member = 0 GROUP BY department ORDER BY count DESC LIMIT 10'
-    ).all() as { name: string; count: number }[];
+    const topDepartments = stmts.topDepartments.all() as { name: string; count: number }[];
 
-    const paidCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_paid = 1 AND is_band_member = 0').get() as { count: number }).count;
-    const fanBadgeCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE is_band_member = 0').get() as { count: number }).count;
+    const paidCount = (stmts.countPaidFans.get() as { count: number }).count;
+    const fanBadgeCount = (stmts.countFans.get() as { count: number }).count;
     const unpaidCount = fanBadgeCount - paidCount;
 
-    const photoCount = (db.prepare('SELECT COUNT(*) as count FROM badges WHERE has_photo = 1 AND is_band_member = 0').get() as { count: number }).count;
+    const photoCount = (stmts.countPhotoFans.get() as { count: number }).count;
     const noPhotoCount = fanBadgeCount - photoCount;
 
-    const customTitleCount = (db.prepare(
-      'SELECT COUNT(*) as count FROM (SELECT title FROM badges WHERE is_band_member = 0 GROUP BY title HAVING COUNT(*) = 1)'
-    ).get() as { count: number }).count;
+    const customTitleCount = (stmts.countUniqueTitles.get() as { count: number }).count;
 
     return { topSongs, topTitles, topDepartments, paidCount, unpaidCount, photoCount, noPhotoCount, customTitleCount, fanBadgeCount };
   })();
@@ -783,29 +810,29 @@ export function serializeBadge(b: BadgeRow, opts?: { admin?: boolean }) {
 
 /** Export all badges as an array (for CSV backup) */
 export function exportAllBadges(): BadgeRow[] {
-  return db.prepare('SELECT * FROM badges ORDER BY id ASC').all() as BadgeRow[];
+  return stmts.exportAll.all() as BadgeRow[];
 }
 
 /** Get paid but unprinted badges (print queue) */
 export function getPrintQueue(): BadgeRow[] {
-  return db.prepare('SELECT * FROM badges WHERE is_paid = 1 AND is_printed = 0 ORDER BY created_at ASC').all() as BadgeRow[];
+  return stmts.printQueue.all() as BadgeRow[];
 }
 
 /** Get all demo badge employee IDs (for file cleanup) */
 export function listDemoBadgeIds(): string[] {
-  const rows = db.prepare('SELECT employee_id FROM badges WHERE is_demo = 1').all() as { employee_id: string }[];
+  const rows = stmts.demoIds.all() as { employee_id: string }[];
   return rows.map(r => r.employee_id);
 }
 
 /** Delete all demo badges from DB, return count deleted */
 export function deleteDemoBadges(): number {
-  const result = db.prepare('DELETE FROM badges WHERE is_demo = 1').run();
+  const result = stmts.deleteDemo.run();
   return result.changes;
 }
 
 /** Get all badge employee IDs (for orphan file detection) */
 export function listAllBadgeIds(): Set<string> {
-  const rows = db.prepare('SELECT employee_id FROM badges').all() as { employee_id: string }[];
+  const rows = stmts.allIds.all() as { employee_id: string }[];
   return new Set(rows.map(r => r.employee_id));
 }
 
