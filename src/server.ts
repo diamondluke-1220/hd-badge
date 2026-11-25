@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { HTTPException } from 'hono/http-exception';
+import { bodyLimit } from 'hono/body-limit';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
 import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
@@ -180,16 +181,12 @@ app.use('*', async (c, next) => {
   ].join('; '));
 });
 
-// Body size limit on POST requests
-app.use('*', async (c, next) => {
-  if (c.req.method === 'POST' || c.req.method === 'PUT') {
-    const contentLength = parseInt(c.req.header('content-length') || '0', 10);
-    if (contentLength > MAX_BODY_SIZE) {
-      return c.json({ success: false, error: 'Request too large. Maximum 10 MB.' }, 413);
-    }
-  }
-  await next();
-});
+// Body size limit. Counts the bytes actually read, so a chunked upload with no
+// Content-Length is capped the same as one that declares its size.
+app.use('*', bodyLimit({
+  maxSize: MAX_BODY_SIZE,
+  onError: (c) => c.json({ success: false, error: 'Request too large. Maximum 10 MB.' }, 413),
+}));
 
 // ─── Helpers ─────────────────────────────────────────────
 
@@ -232,11 +229,19 @@ function isTrustedProxy(peer: string): boolean {
  * badge creation limits were unbounded, and the per-IP SSE cap was bypassed.
  */
 function getClientIp(c: any): string {
-  const peer = getPeerIp(c);
+  return resolveClientIp(getPeerIp(c), (name) => c.req.header(name));
+}
+
+/**
+ * The one client-IP rule, shared by Hono routes and the live stream. Returns
+ * the forwarded address only when the socket peer is a trusted proxy;
+ * otherwise the peer itself.
+ */
+function resolveClientIp(peer: string, header: (name: string) => string | null | undefined): string {
   if (process.env.TRUST_PROXY === '1' && isTrustedProxy(peer)) {
-    return c.req.header('cf-connecting-ip')
-      || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-      || c.req.header('x-real-ip')
+    return header('cf-connecting-ip')
+      || header('x-forwarded-for')?.split(',')[0]?.trim()
+      || header('x-real-ip')
       || peer;
   }
   return peer;
@@ -732,11 +737,9 @@ export default {
     const url = new URL(req.url);
 
     if (url.pathname === '/api/badges/stream') {
-      // Extract client IP for per-IP SSE limiting
-      const ip = (process.env.TRUST_PROXY === '1'
-        ? req.headers.get('cf-connecting-ip')
-          || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-        : server?.requestIP?.(req)?.address) || 'unknown';
+      // Per-IP SSE limiting uses the same client-IP rule as every other route.
+      const peer = server?.requestIP?.(req)?.address || 'unknown';
+      const ip = resolveClientIp(peer, (name) => req.headers.get(name));
       return handleSSEDirect(ip);
     }
     return app.fetch(req, server);
