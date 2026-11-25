@@ -101,6 +101,7 @@ let stmts: {
   listAll: ReturnType<Database['prepare']>;
   countVisible: ReturnType<Database['prepare']>;
   countByDept: ReturnType<Database['prepare']>;
+  updateBadge: ReturnType<Database['prepare']>;
   deleteOwn: ReturnType<Database['prepare']>;
   hardDelete: ReturnType<Database['prepare']>;
   toggleVisibility: ReturnType<Database['prepare']>;
@@ -229,7 +230,7 @@ export function initDb(dbPath: string) {
         $dept: m.dept,
         $title: m.title,
         $caption: m.caption,
-        $wave_style: 'waveStyle' in m ? m.waveStyle : 'barcode',
+        $wave_style: m.waveStyle ?? 'barcode',
       });
     }
   });
@@ -247,7 +248,7 @@ export function initDb(dbPath: string) {
         $dept: m.dept,
         $title: m.title,
         $caption: m.caption,
-        $wave_style: 'waveStyle' in m ? m.waveStyle : 'barcode',
+        $wave_style: m.waveStyle ?? 'barcode',
       });
     }
   });
@@ -346,7 +347,7 @@ function seedBandMembers() {
       $is_flagged: 0,
       $is_demo: 0,
       $caption: m.caption,
-      $wave_style: 'waveStyle' in m ? m.waveStyle : 'barcode',
+      $wave_style: m.waveStyle ?? 'barcode',
     });
   }
 }

@@ -125,7 +125,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
     }
 
     const printBuffer = await renderBadgePlaywright(badge, { print: true });
-    return new Response(printBuffer, {
+    return new Response(new Uint8Array(printBuffer), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${id}-print.png"`,
@@ -175,7 +175,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
     const buf = await renderBadgePlaywright(badge, { colorlayer: true });
-    return new Response(buf, {
+    return new Response(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="${id}-colorlayer.png"`,
@@ -187,7 +187,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   // ─── K-Calibration Test Card (dev-only) ───
   app.get('/api/admin/print-calibration', async (c) => {
     const buf = await renderPageScreenshot('/k-calibration.html', '#card');
-    return new Response(buf, {
+    return new Response(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': 'attachment; filename="k-calibration.png"',

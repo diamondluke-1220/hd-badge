@@ -707,11 +707,8 @@ if (isShowMode()) {
   try {
     const klayerPath = join(PRINTS_DIR, 'klayer-front.png');
     const backPath = join(PRINTS_DIR, 'badge-back.png');
-    // Use a placeholder badge for K-layer (all variable content is hidden)
-    // K-layer hides all variable content, so any badge works as template
-    const allIds = listAllBadgeIds();
-    const templateId = allIds[0] || 'HD-00001';
-    const placeholderBadge = { employee_id: templateId, name: 'Template', department: '', title: '' };
+    // The K-layer hides all variable content, so the first band badge serves as the template.
+    const placeholderBadge = { employee_id: 'HD-00001', name: 'Template', department: '', title: '' };
     const klayerBuf = await renderBadgePlaywright(placeholderBadge, { klayer: true });
     writeFileSync(klayerPath, klayerBuf);
     log('info', 'server', `Pre-rendered K-layer front → ${klayerPath}`);
