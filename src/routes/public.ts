@@ -7,7 +7,7 @@ import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import sharp from 'sharp';
-import { createBadge, getBadge, updateBadge, listBadges, softDeleteBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore, verifyBadgeToken } from '../db';
+import { createBadge, getBadge, updateBadge, listBadges, deleteOwnBadge, hardDeleteBadge, setHasPhoto, getStats, serializeBadge, saveGameScore, verifyBadgeToken } from '../db';
 
 // ─── Auth Cookie Helpers ─────────────────────────────────
 // hd_token cookie holds the plaintext delete_token (HttpOnly, server only).
@@ -124,7 +124,21 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     ADMIN_TOKEN, THUMB_WIDTH, HEADSHOT_WIDTH,
   } = deps;
 
-  /**
+    /** Removes every file stored for a badge: renders, photo, thumbnail and headshot. Missing files are skipped. */
+  function removeBadgeFiles(id: string) {
+    const files = [
+      join(BADGES_DIR, `${id}.png`),
+      join(BADGES_DIR, `${id}-nophoto.png`),
+      join(PHOTOS_DIR, `${id}.jpg`),
+      join(THUMBS_DIR, `${id}.png`),
+      join(HEADSHOTS_DIR, `${id}.jpg`),
+    ];
+    for (const f of files) {
+      try { unlinkSync(f); } catch { /* file may not exist */ }
+    }
+  }
+
+/**
    * Constant-time Bearer check used by the image endpoints.
    *
    * These routes live outside /api/admin/*, so this is deliberately ONLY a read
@@ -241,28 +255,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         return c.json({ success: false, error: 'Badge content requires review. Try again after the show.' }, 400);
       }
 
-      // Clean up previous badge from same device (hard-delete only if cookie auth is valid).
-      // Pre-cookie clients auto-promote on page load before reaching this path.
+      // A badge from the same device is replaced only once the new one is fully
+      // made, so a failed render leaves the fan with their old badge.
       const previousToken = getCookie(c, TOKEN_COOKIE);
-      if (body.previousBadgeId && previousToken) {
-        // softDeleteBadge verifies the hashed token — use it as auth check
-        const tokenValid = softDeleteBadge(body.previousBadgeId, previousToken);
-        if (tokenValid) {
-          // Token matched — now fully remove the soft-deleted badge
-          hardDeleteBadge(body.previousBadgeId);
-          const prevFiles = [
-            join(BADGES_DIR, `${body.previousBadgeId}.png`),
-            join(BADGES_DIR, `${body.previousBadgeId}-nophoto.png`),
-            join(PHOTOS_DIR, `${body.previousBadgeId}.jpg`),
-            join(THUMBS_DIR, `${body.previousBadgeId}.png`),
-            join(HEADSHOTS_DIR, `${body.previousBadgeId}.jpg`),
-          ];
-          for (const f of prevFiles) {
-            try { unlinkSync(f); } catch { /* ignore */ }
-          }
-          log('info', 'badge', `Cleaned up previous badge ${body.previousBadgeId} on recreate`);
-        }
-      }
+      const replacesBadgeId = body.previousBadgeId && previousToken && verifyBadgeToken(body.previousBadgeId, previousToken)
+        ? body.previousBadgeId as string
+        : null;
 
       const cleanCss = clampField(accessCss.trim(), 'accessCss');
       const result = createBadge({
@@ -280,12 +278,11 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         flagged,
       });
 
-      if (photoBuffer) {
-        await Bun.write(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
-      }
-
       let badge, badgeBuffer;
       try {
+        if (photoBuffer) {
+          await Bun.write(join(PHOTOS_DIR, `${result.employeeId}.jpg`), photoBuffer);
+        }
         badge = getBadge(result.employeeId);
         badgeBuffer = await renderBadgePlaywright(badge);
         await Bun.write(join(BADGES_DIR, `${result.employeeId}.png`), badgeBuffer);
@@ -301,6 +298,11 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
         try { unlinkSync(join(BADGES_DIR, `${result.employeeId}.png`)); } catch { /* ignore */ }
         try { unlinkSync(join(BADGES_DIR, `${result.employeeId}-nophoto.png`)); } catch { /* ignore */ }
         throw renderErr;
+      }
+
+      if (replacesBadgeId && deleteOwnBadge(replacesBadgeId, previousToken!)) {
+        removeBadgeFiles(replacesBadgeId);
+        log('info', 'badge', `Replaced previous badge ${replacesBadgeId}`);
       }
 
       broadcastNewBadge({
@@ -705,7 +707,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Authentication required. Please refresh the page or recover your badge.' }, 401);
     }
 
-    const success = softDeleteBadge(id, token);
+    const success = deleteOwnBadge(id, token);
     if (!success) {
       return c.json({ success: false, error: 'Badge not found or invalid token.' }, 403);
     }
@@ -713,17 +715,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     // Badge deleted — clear the auth cookie so the user is fully logged out
     clearBadgeCookie(c);
 
-    // Clean up all associated files — user asked for deletion
-    const files = [
-      join(BADGES_DIR, `${id}.png`),
-      join(BADGES_DIR, `${id}-nophoto.png`),
-      join(PHOTOS_DIR, `${id}.jpg`),
-      join(THUMBS_DIR, `${id}.png`),
-      join(HEADSHOTS_DIR, `${id}.jpg`),
-    ];
-    for (const f of files) {
-      try { unlinkSync(f); } catch { /* ignore — file may not exist */ }
-    }
+    removeBadgeFiles(id);
 
     return c.json({ success: true, message: 'Your badge has been shredded.' });
   });

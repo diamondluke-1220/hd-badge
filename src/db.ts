@@ -102,7 +102,7 @@ let stmts: {
   listAll: ReturnType<Database['prepare']>;
   countVisible: ReturnType<Database['prepare']>;
   countByDept: ReturnType<Database['prepare']>;
-  softDelete: ReturnType<Database['prepare']>;
+  deleteOwn: ReturnType<Database['prepare']>;
   hardDelete: ReturnType<Database['prepare']>;
   toggleVisibility: ReturnType<Database['prepare']>;
   checkEmployeeId: ReturnType<Database['prepare']>;
@@ -275,10 +275,10 @@ export function initDb(dbPath: string) {
     updateBadge: db.prepare(`
       UPDATE badges SET name = $name, department = $department, title = $title, song = $song,
         access_level = $access_level, access_css = $access_css, caption = $caption, wave_style = $wave_style,
-        has_photo = $has_photo, photo_public = $photo_public, is_flagged = $is_flagged
+        has_photo = $has_photo, photo_public = $photo_public, is_flagged = MAX(is_flagged, $is_flagged)
       WHERE employee_id = $id AND delete_token = $token
     `),
-    softDelete: db.prepare('UPDATE badges SET is_visible = 0 WHERE employee_id = $id AND delete_token = $token'),
+    deleteOwn: db.prepare('DELETE FROM badges WHERE employee_id = $id AND delete_token = $token AND is_band_member = 0'),
     hardDelete: db.prepare('DELETE FROM badges WHERE employee_id = $id'),
     toggleVisibility: db.prepare('UPDATE badges SET is_visible = CASE WHEN is_visible = 1 THEN 0 ELSE 1 END WHERE employee_id = $id'),
     checkEmployeeId: db.prepare('SELECT 1 FROM badges WHERE employee_id = $id'),
@@ -587,8 +587,9 @@ export function verifyBadgeToken(employeeId: string, token: string): boolean {
   return badge.delete_token === hashToken(token);
 }
 
-export function softDeleteBadge(employeeId: string, token: string): boolean {
-  const result = stmts.softDelete.run({ $id: employeeId, $token: hashToken(token) });
+/** Deletes a fan's own badge row when the token matches. Returns false on a wrong token or a band badge. */
+export function deleteOwnBadge(employeeId: string, token: string): boolean {
+  const result = stmts.deleteOwn.run({ $id: employeeId, $token: hashToken(token) });
   return result.changes > 0;
 }
 

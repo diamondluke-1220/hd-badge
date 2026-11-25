@@ -26,7 +26,7 @@ let currentTmpDir: string | null = null;
  * Create a fresh test app with temp DB and mocked dependencies.
  * Call cleanup() when done.
  */
-export function createTestApp(): TestContext {
+export function createTestApp(overrides: Record<string, any> = {}): TestContext {
   // Create temp directory for DB and files
   const tmpDir = mkdtempSync(join(tmpdir(), 'hdbadge-test-'));
   currentTmpDir = tmpDir;
@@ -103,6 +103,7 @@ export function createTestApp(): TestContext {
     HEADSHOT_WIDTH: 200,
   };
 
+  Object.assign(sharedDeps, overrides);
   registerPublicRoutes(app, sharedDeps);
   registerAdminRoutes(app, sharedDeps);
 

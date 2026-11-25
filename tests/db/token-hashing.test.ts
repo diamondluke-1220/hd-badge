@@ -3,7 +3,7 @@ import { Database } from 'bun:sqlite';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { initDb, closeDb, createBadge, getBadge, softDeleteBadge } from '../../src/db';
+import { initDb, closeDb, createBadge, getBadge, deleteOwnBadge } from '../../src/db';
 
 let tmpDir: string;
 let dbPath: string;
@@ -56,7 +56,7 @@ describe('Token Hashing', () => {
     expect(row.delete_token).not.toBe(result.deleteToken);
   });
 
-  it('softDeleteBadge succeeds with correct raw token', () => {
+  it('deleteOwnBadge succeeds with correct raw token', () => {
     const result = createBadge({
       name: 'SOFT DEL OK',
       department: 'TEST',
@@ -68,11 +68,11 @@ describe('Token Hashing', () => {
       photoPublic: true,
     });
 
-    const success = softDeleteBadge(result.employeeId, result.deleteToken);
+    const success = deleteOwnBadge(result.employeeId, result.deleteToken);
     expect(success).toBe(true);
   });
 
-  it('softDeleteBadge fails with wrong token', () => {
+  it('deleteOwnBadge fails with wrong token', () => {
     const result = createBadge({
       name: 'SOFT DEL FAIL',
       department: 'TEST',
@@ -84,11 +84,11 @@ describe('Token Hashing', () => {
       photoPublic: true,
     });
 
-    const success = softDeleteBadge(result.employeeId, 'wrong-token-value');
+    const success = deleteOwnBadge(result.employeeId, 'wrong-token-value');
     expect(success).toBe(false);
   });
 
-  it('soft-deleted badge has is_visible=0', () => {
+  it('a fan-deleted badge row is gone', () => {
     const result = createBadge({
       name: 'VIS CHECK',
       department: 'TEST',
@@ -100,9 +100,8 @@ describe('Token Hashing', () => {
       photoPublic: true,
     });
 
-    softDeleteBadge(result.employeeId, result.deleteToken);
+    deleteOwnBadge(result.employeeId, result.deleteToken);
     const badge = getBadge(result.employeeId);
-    expect(badge).toBeTruthy();
-    expect(badge!.is_visible).toBe(0);
+    expect(badge).toBeNull();
   });
 });
