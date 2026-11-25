@@ -5,6 +5,9 @@
 //
 // Generated IDs, tokens and timestamps are replaced with stable placeholders
 // before comparing, so only real differences show.
+//
+// Demo, presentation and show-mode status are left out: they report in-memory
+// module state that other test files change, not anything stored.
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { createTestApp, cleanup, publicRequest, adminRequest, validBadgePayload, extractTokenCookie } from '../helpers/setup';
@@ -81,8 +84,7 @@ describe('API snapshot', () => {
       '/api/admin/badges', '/api/admin/badges?status=flagged', '/api/admin/badges?search=SNAP',
       '/api/admin/stats', '/api/admin/analytics', '/api/admin/divisions',
       '/api/admin/badges/print-queue', '/api/admin/export/csv',
-      '/api/admin/demo/status', '/api/admin/presentation/status', '/api/admin/show-mode/status',
-      '/api/presentation/status', `/api/admin/badge/${fanId}/print`,
+      `/api/admin/badge/${fanId}/print`,
     ]) {
       await adm(`admin GET ${path}`, 'GET', path);
     }

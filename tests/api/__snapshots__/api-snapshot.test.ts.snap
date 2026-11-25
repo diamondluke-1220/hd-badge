@@ -740,47 +740,6 @@ exports[`API snapshot every read route and the badge lifecycle respond as record
     "type": "text/csv",
   },
   {
-    "body": {
-      "created": 0,
-      "running": false,
-      "total": 0,
-    },
-    "label": "admin GET /api/admin/demo/status",
-    "status": 200,
-    "type": "application/json",
-  },
-  {
-    "body": {
-      "active": false,
-      "bandIntroIndex": -1,
-      "chyronMessages": [],
-      "currentView": "grid",
-      "phase": "inactive",
-    },
-    "label": "admin GET /api/admin/presentation/status",
-    "status": 200,
-    "type": "application/json",
-  },
-  {
-    "body": {
-      "showMode": false,
-    },
-    "label": "admin GET /api/admin/show-mode/status",
-    "status": 200,
-    "type": "application/json",
-  },
-  {
-    "body": {
-      "active": false,
-      "bandIntroIndex": -1,
-      "currentView": "grid",
-      "phase": "inactive",
-    },
-    "label": "admin GET /api/presentation/status",
-    "status": 200,
-    "type": "application/json",
-  },
-  {
     "body": "<binary 70 bytes>",
     "label": "admin GET /api/admin/badge/HD-FAN1/print",
     "status": 200,
