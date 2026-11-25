@@ -36,7 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_badges_visible ON badges(is_visible);
 CREATE INDEX IF NOT EXISTS idx_badges_employee_id ON badges(employee_id);
 CREATE INDEX IF NOT EXISTS idx_badges_band_member ON badges(is_band_member);
 CREATE INDEX IF NOT EXISTS idx_badges_created_at ON badges(created_at);
-CREATE INDEX IF NOT EXISTS idx_badges_flagged ON badges(is_flagged);
 `;
 
 // Band member seed data — HD-00001 through HD-00005
@@ -159,6 +158,8 @@ export function initDb(dbPath: string) {
   });
 
   // v3: Demo badge column
+  db.exec('CREATE INDEX IF NOT EXISTS idx_badges_flagged ON badges(is_flagged)');
+
   runMigration(3, 'Add is_demo column', () => {
     const cols = db.prepare("PRAGMA table_info(badges)").all() as { name: string }[];
     const colNames = new Set(cols.map(c => c.name));
@@ -454,9 +455,9 @@ export function listBadges(options: {
   recentFirst?: boolean;
   status?: string;
 }): { badges: BadgeRow[]; total: number; page: number; pages: number } {
-  const page = options.page || 1;
+  const page = Math.max(1, Math.floor(options.page || 1));
   const cap = options.maxLimit || 100;
-  const limit = Math.min(options.limit || 50, cap);
+  const limit = Math.min(Math.max(1, Math.floor(options.limit || 50)), cap);
   const offset = (page - 1) * limit;
 
   // Build dynamic WHERE clause for advanced filters
@@ -486,6 +487,8 @@ export function listBadges(options: {
         const placeholders = knownDepts.map((_, i) => `$known_dept_${i}`);
         conditions.push(`department NOT IN (${placeholders.join(',')})`);
         knownDepts.forEach((d, i) => { params[`$known_dept_${i}`] = d; });
+      } else {
+        conditions.push('1 = 0');
       }
     }
 
@@ -515,7 +518,7 @@ export function listBadges(options: {
 
     if (options.search) {
       // Escape SQL LIKE wildcards in user input
-      const escaped = options.search.replace(/[%_]/g, ch => '\\' + ch);
+      const escaped = options.search.replace(/[\\%_]/g, ch => '\\' + ch);
       const pattern = `%${escaped}%`;
       conditions.push('(UPPER(name) LIKE UPPER($search) ESCAPE \'\\\' OR UPPER(employee_id) LIKE UPPER($search) ESCAPE \'\\\' OR UPPER(department) LIKE UPPER($search) ESCAPE \'\\\')');
       params.$search = pattern;
@@ -637,6 +640,19 @@ export function setHasPhoto(employeeId: string, hasPhoto: boolean): boolean {
   return true;
 }
 
+const STATS_TIME_ZONE = process.env.BADGE_TZ || 'America/Chicago';
+const localDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: STATS_TIME_ZONE });
+
+/** Counts SQLite UTC timestamps per calendar day in STATS_TIME_ZONE, oldest day first. */
+function localDayCounts(utcTimestamps: string[]): { date: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const ts of utcTimestamps) {
+    const day = localDayFormat.format(new Date(ts.replace(' ', 'T') + 'Z'));
+    counts.set(day, (counts.get(day) || 0) + 1);
+  }
+  return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }));
+}
+
 export function getStats(): {
   totalBadges: number;
   visible: number;
@@ -664,11 +680,10 @@ export function getStats(): {
       'SELECT name, department, created_at FROM badges WHERE is_visible = 1 ORDER BY created_at DESC LIMIT 1'
     ).get() as { name: string; department: string; created_at: string } | null;
 
-    const sparklineRows = db.prepare(
-      `SELECT date(created_at) as date, COUNT(*) as count
-       FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-30 days')
-       GROUP BY date(created_at) ORDER BY date ASC`
-    ).all() as { date: string; count: number }[];
+    const recentRows = db.prepare(
+      "SELECT created_at FROM badges WHERE is_visible = 1 AND created_at >= date('now', '-31 days')"
+    ).all() as { created_at: string }[];
+    const sparklineRows = localDayCounts(recentRows.map(r => r.created_at));
 
     const byDepartment: Record<string, number> = {};
     for (const row of byDeptRows) {
