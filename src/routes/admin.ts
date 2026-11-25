@@ -10,6 +10,7 @@ import { getBadge, listBadges, hardDeleteBadge, toggleVisibility, togglePaid, to
 import { log, getLog, errorMessage } from '../logger';
 import type { RenderBadge, BroadcastSSE } from '../types';
 import type { BadgeRow } from '../db';
+import { removeBadgeFiles } from '../badge-files';
 import { startDemo, stopDemo, getDemoStatus, cleanupDemo } from '../demo';
 import { startPresentation, stopPresentation, getPresentationState, getPublicState, updateChyron, skipBandIntro } from '../presentation';
 import { setShowMode, isShowMode, resetRateLimits } from '../rate-limit';
@@ -72,16 +73,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
-    const files = [
-      join(BADGES_DIR, `${id}.png`),
-      join(BADGES_DIR, `${id}-nophoto.png`),
-      join(PHOTOS_DIR, `${id}.jpg`),
-      join(THUMBS_DIR, `${id}.png`),
-      join(HEADSHOTS_DIR, `${id}.jpg`),
-    ];
-    for (const f of files) {
-      try { unlinkSync(f); } catch { /* ignore — file may not exist */ }
-    }
+    removeBadgeFiles(deps, id);
 
     return c.json({ success: true, message: 'Badge permanently deleted.' });
   });
@@ -514,7 +506,7 @@ export function registerAdminRoutes(app: Hono, deps: AdminDeps) {
   });
 
   app.post('/api/admin/demo/cleanup', (c) => {
-    const result = cleanupDemo(BADGES_DIR, THUMBS_DIR, HEADSHOTS_DIR);
+    const result = cleanupDemo(deps);
     return c.json({ success: true, ...result });
   });
 

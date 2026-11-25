@@ -3,6 +3,7 @@
 
 import type { Hono, Context } from 'hono';
 import type { RenderBadge, BroadcastSSE } from '../types';
+import { removeBadgeFiles } from '../badge-files';
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 import { join } from 'path';
 import { existsSync, unlinkSync } from 'fs';
@@ -125,21 +126,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     ADMIN_TOKEN, THUMB_WIDTH, HEADSHOT_WIDTH,
   } = deps;
 
-    /** Removes every file stored for a badge: renders, photo, thumbnail and headshot. Missing files are skipped. */
-  function removeBadgeFiles(id: string) {
-    const files = [
-      join(BADGES_DIR, `${id}.png`),
-      join(BADGES_DIR, `${id}-nophoto.png`),
-      join(PHOTOS_DIR, `${id}.jpg`),
-      join(THUMBS_DIR, `${id}.png`),
-      join(HEADSHOTS_DIR, `${id}.jpg`),
-    ];
-    for (const f of files) {
-      try { unlinkSync(f); } catch { /* file may not exist */ }
-    }
-  }
-
-/**
+  /**
    * Constant-time Bearer check used by the image endpoints.
    *
    * These routes live outside /api/admin/*, so this is deliberately ONLY a read
@@ -302,7 +289,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       }
 
       if (replacesBadgeId && deleteOwnBadge(replacesBadgeId, previousToken!)) {
-        removeBadgeFiles(replacesBadgeId);
+        removeBadgeFiles(deps, replacesBadgeId);
         log('info', 'badge', `Replaced previous badge ${replacesBadgeId}`);
       }
 
@@ -715,7 +702,7 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
     // Badge deleted — clear the auth cookie so the user is fully logged out
     clearBadgeCookie(c);
 
-    removeBadgeFiles(id);
+    removeBadgeFiles(deps, id);
 
     return c.json({ success: true, message: 'Your badge has been shredded.' });
   });

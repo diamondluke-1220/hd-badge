@@ -5,13 +5,14 @@
 import { Hono, type Context, type Next } from 'hono';
 import type { Server } from 'bun';
 import type { RenderableBadge, RenderOptions } from './types';
+import { sweepOrphanFiles } from './badge-files';
 import { serveStatic } from 'hono/bun';
 import { bearerAuth } from 'hono/bearer-auth';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
 import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync } from 'fs';
+import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'fs';
 import sharp from 'sharp';
 import { initDb, closeDb, listAllBadgeIds } from './db';
 import { log, errorMessage } from './logger';
@@ -120,24 +121,7 @@ initDb(join(DATA_DIR, 'badges.db'));
 
 // Sweep orphaned files on startup (badges deleted but files left behind)
 {
-  const knownIds = listAllBadgeIds();
-  const dirs = [
-    { path: BADGES_DIR, ext: '.png' },
-    { path: PHOTOS_DIR, ext: '.jpg' },
-    { path: THUMBS_DIR, ext: '.png' },
-    { path: HEADSHOTS_DIR, ext: '.jpg' },
-  ];
-  let orphanCount = 0;
-  for (const { path: dir, ext } of dirs) {
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(ext)) continue;
-      // Extract ID: "HD-12345.png" or "HD-12345-nophoto.png" → "HD-12345"
-      const id = file.replace(/-nophoto/, '').replace(ext, '');
-      if (!knownIds.has(id)) {
-        try { unlinkSync(join(dir, file)); orphanCount++; } catch { /* ignore */ }
-      }
-    }
-  }
+  const orphanCount = sweepOrphanFiles({ BADGES_DIR, PHOTOS_DIR, THUMBS_DIR, HEADSHOTS_DIR }, listAllBadgeIds());
   if (orphanCount > 0) {
     console.log(`🧹 Cleaned ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''} from data directories`);
   }

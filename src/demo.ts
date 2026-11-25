@@ -3,8 +3,9 @@
 
 import { createBadge, listDemoBadgeIds, deleteDemoBadges } from './db';
 import { log, errorMessage } from './logger';
+import { removeBadgeFiles, type BadgeDirs } from './badge-files';
 import { join } from 'path';
-import { existsSync, unlinkSync, readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
 // ─── Badge Data (mirrors badge-render.js constants) ──────
 
@@ -306,7 +307,7 @@ export function getDemoStatus() {
   };
 }
 
-export function cleanupDemo(badgesDir: string, thumbsDir: string, headshotsDir?: string): { deleted: number } {
+export function cleanupDemo(dirs: BadgeDirs): { deleted: number } {
   // Stop any running demo first
   if (state.running) {
     for (const t of state.timers) clearTimeout(t);
@@ -319,30 +320,7 @@ export function cleanupDemo(badgesDir: string, thumbsDir: string, headshotsDir?:
 
   // Delete files
   let filesDeleted = 0;
-  for (const id of ids) {
-    const dirs = headshotsDir ? [badgesDir, thumbsDir, headshotsDir] : [badgesDir, thumbsDir];
-    for (const dir of dirs) {
-      const path = join(dir, `${id}.png`);
-      try {
-        if (existsSync(path)) {
-          unlinkSync(path);
-          filesDeleted++;
-        }
-      } catch { /* ignore */ }
-    }
-    // Also try -nophoto variant
-    try {
-      const np = join(badgesDir, `${id}-nophoto.png`);
-      if (existsSync(np)) unlinkSync(np);
-    } catch { /* ignore */ }
-    // Clean up headshot JPEG cache
-    if (headshotsDir) {
-      try {
-        const hs = join(headshotsDir, `${id}.jpg`);
-        if (existsSync(hs)) unlinkSync(hs);
-      } catch { /* ignore */ }
-    }
-  }
+  for (const id of ids) filesDeleted += removeBadgeFiles(dirs, id);
 
   // Delete from DB
   const deleted = deleteDemoBadges();
