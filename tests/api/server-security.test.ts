@@ -133,3 +133,17 @@ describe('live stream per-IP cap (real server)', () => {
     }
   });
 });
+
+describe('IPv4 peers reported in IPv6 form (real server)', () => {
+  it('trusts a proxy whose address arrives as ::ffff:172.20.0.x', async () => {
+    const streams: Awaited<ReturnType<typeof openStream>>[] = [];
+    try {
+      for (let i = 0; i < 51; i++) {
+        streams.push(await openStream(`::ffff:${PROXY_PEER}`, `198.51.100.${100 + i}`));
+      }
+      expect(streams.every(s => s.status === 200)).toBe(true);
+    } finally {
+      streams.forEach(s => s.close());
+    }
+  });
+});

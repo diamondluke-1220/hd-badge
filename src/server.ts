@@ -211,6 +211,11 @@ const TRUSTED_PROXY_IPS = (process.env.TRUSTED_PROXY_IPS || '')
   .map(s => s.trim())
   .filter(Boolean);
 
+/** Bun reports IPv4 peers on a dual-stack socket as ::ffff:a.b.c.d; returns plain a.b.c.d for those, anything else unchanged. */
+function unmapIPv4(ip: string): string {
+  return ip.replace(/^::ffff:(?=\d{1,3}(\.\d{1,3}){3}$)/i, '');
+}
+
 function isTrustedProxy(peer: string): boolean {
   if (isLocalhost(peer)) return true;
   return TRUSTED_PROXY_IPS.some(entry =>
@@ -235,7 +240,8 @@ function getClientIp(c: any): string {
  * the forwarded address only when the socket peer is a trusted proxy;
  * otherwise the peer itself.
  */
-function resolveClientIp(peer: string, header: (name: string) => string | null | undefined): string {
+function resolveClientIp(rawPeer: string, header: (name: string) => string | null | undefined): string {
+  const peer = unmapIPv4(rawPeer);
   if (process.env.TRUST_PROXY === '1' && isTrustedProxy(peer)) {
     return header('cf-connecting-ip')
       || header('x-forwarded-for')?.split(',')[0]?.trim()
