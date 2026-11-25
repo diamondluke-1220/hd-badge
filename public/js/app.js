@@ -1734,9 +1734,9 @@ let _switchViewChain = Promise.resolve();
 //                             clear innerHTML, null all refs
 async function switchView(mode) {
   // Serialize view switches. This is async and bound straight to the 1-4 keys,
-  // so two quick presses used to interleave: both destroy, both init, and the
-  // renderer that lost the race stayed fully initialized with no reference left
-  // to destroy it — leaving zombie timers running for the life of the page.
+  // so two quick presses could interleave: both destroy, both init, and the
+  // renderer that lost the race would stay initialized with no reference left
+  // to destroy it, its timers running for the life of the page.
   // Queue behind whatever switch is in flight instead of racing it.
   const prior = _switchViewChain;
   let release;
@@ -1964,11 +1964,9 @@ function showBadgeDetail(employeeId, name) {
     requestAnimationFrame(() => modal.classList.add('active'));
   });
 
-  // One close path for all three dismissals. Previously only the Escape branch
-  // detached its own document-level keydown listener, so closing via the button
-  // or the backdrop left the listener attached with a closure pinning the
-  // detached modal — which holds a full-size badge <img>. Browsing 50 badges at
-  // a show meant 50 permanent listeners each retaining an image.
+  // One close path for all three dismissals (Escape, button, backdrop), so the
+  // document-level keydown listener is always detached. A listener left behind
+  // would pin the detached modal and its full-size badge <img>.
   const onKeydown = (e) => { if (e.key === 'Escape') closeDetail(); };
   const closeDetail = () => {
     document.removeEventListener('keydown', onKeydown);

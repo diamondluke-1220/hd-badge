@@ -1,5 +1,5 @@
 // Help Desk Badge Generator — SQLite Persistence Layer
-// Uses bun:sqlite in WAL mode following Bagel Commander patterns
+// Schema, versioned migrations and every query, on bun:sqlite in WAL mode
 
 import { Database } from 'bun:sqlite';
 import { randomUUID, createHash } from 'crypto';

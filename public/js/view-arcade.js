@@ -166,9 +166,9 @@ window.ArcadeRenderer = {
     this._rosterPool = [];
     this._selectedBadge = null;
     this._locked = false;
-    // Cancel before discarding. Reassigning the arrays without clearing them
-    // made every previously scheduled timer permanently uncancellable — an
-    // init() without a preceding destroy() orphaned the whole VS beat chain.
+    // Cancel before discarding: reassigning the arrays without clearing them
+    // would leave every scheduled timer uncancellable, so an init() without a
+    // destroy() first would orphan the whole VS beat chain.
     this._intervals.forEach(clearInterval);
     this._timeouts.forEach(clearTimeout);
     this._runQteCleanups();
@@ -360,9 +360,8 @@ window.ArcadeRenderer = {
 
     // Available space — measure the GRID's content width directly so we
     // include the grid's own horizontal padding (.arcade-grid has padding:
-    // 0 8px). Previously this was derived from `roster.clientWidth - 32`
-    // which subtracted the roster's padding but missed the grid's, leaving
-    // ~16px of phantom width that pushed 14 columns into 13.
+    // 0 8px). The roster's own width would miss that padding and add ~16px of
+    // phantom width, pushing 14 columns into 13.
     const gridStyle = getComputedStyle(grid);
     const gridPadX = parseFloat(gridStyle.paddingLeft) + parseFloat(gridStyle.paddingRight);
     const rosterWidth = grid.clientWidth - gridPadX - 1; // -1 for sub-pixel safety
@@ -375,8 +374,8 @@ window.ArcadeRenderer = {
     // measured rosterHeight, which is unreliable during initial layout
     // (the flex parent hasn't resolved its size yet, so `roster.getBoundingClientRect().top`
     // is near the bottom of the viewport and rosterHeight comes out as
-    // ~66px on first paint). The previous height-search loop would then
-    // collapse the layout into 1 row of tiny 46px slots.
+    // ~66px on first paint). Sizing from height would collapse the layout
+    // into 1 row of tiny 46px slots.
     const minW = 44;
     const maxW = 140;
     const aspect = 146 / 120;
@@ -1203,8 +1202,8 @@ window.ArcadeRenderer = {
     this._timeouts = [];
 
     // Must come after the _timeouts sweep: the QTE miss timer lives in that
-    // array, and cancelling it is what used to strand these listeners attached
-    // (killing arrow-key scrolling site-wide via their preventDefault).
+    // array, and cancelling it first would strand these listeners attached,
+    // killing arrow-key scrolling site-wide through their preventDefault.
     this._runQteCleanups();
 
     if (this._resizeHandler) {

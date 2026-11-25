@@ -144,10 +144,9 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
    * These routes live outside /api/admin/*, so this is deliberately ONLY a read
    * gate for hidden-badge images — never a grant of admin capability.
    *
-   * Compares BYTE lengths. The previous inline check compared UTF-16 string
-   * length against a byte buffer, so a header with non-ASCII characters passed
-   * the length guard and then crashed timingSafeEqual with a RangeError,
-   * turning an unauthenticated request into a 500 and leaking the token length.
+   * Compares BYTE lengths, so a header with non-ASCII characters fails the
+   * length check instead of reaching timingSafeEqual with mismatched buffers
+   * (which throws).
    */
   function hasAdminBearer(c: Context): boolean {
     if (!ADMIN_TOKEN) return false;
@@ -567,9 +566,8 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
       return c.json({ success: false, error: 'Badge not found.' }, 404);
     }
 
-    // The ?full=1 private-photo unlock was removed: nothing in the app ever
-    // sent it, and it was an unlimited, unlogged oracle sitting outside the
-    // admin lockout (right token → full photo, wrong token → -nophoto).
+    // A private photo is never served from this public route, whatever the
+    // caller sends; the admin sees it through /api/admin/badge/:id/photo-source.
     let imagePath: string;
     if (!badge.photo_public && badge.has_photo) {
       const noPhotoPath = join(BADGES_DIR, `${id}-nophoto.png`);
@@ -723,13 +721,12 @@ export function registerPublicRoutes(app: Hono, deps: PublicDeps) {
   // ─── Recovery: Token → Cookie ─────────────────────────────
   // Admin-issued recovery URLs land on /recover?id=...&token=..., the page
   // POSTs here to actually validate the token against the DB hash and set
-  // an HttpOnly cookie. Replaces the old "trust the URL, hope for the best"
-  // localStorage-write approach. Rate-limited to prevent UUID brute force.
+  // an HttpOnly cookie. Rate-limited to prevent UUID brute force.
 
   app.post('/api/badge/:id/recover', async (c) => {
     const ip = getClientIp(c);
-    // Own bucket. Sharing the creation bucket meant ten recovery attempts burned
-    // the room's entire badge-creation quota behind a venue NAT.
+    // Own bucket, so recovery attempts behind a venue NAT don't use up the
+    // room's badge-creation quota.
     const rateCheck = checkRecoverRateLimit(ip);
     if (!rateCheck.allowed) {
       log('warn', 'rate-limit', `Recover blocked ${ip}: ${rateCheck.message}`);

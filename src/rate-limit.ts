@@ -1,5 +1,5 @@
 // Help Desk Badge Generator — In-Memory Rate Limiter
-// Tracks badge creation and game score submissions per IP address
+// Per-IP limits for badge creation, edits, recovery attempts and game scores
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -138,10 +138,9 @@ export function checkGameScoreRateLimit(ip: string): { allowed: boolean; message
 /**
  * Rate limiter for badge EDITS (PUT /api/badge/:id).
  *
- * Its own bucket, for the same reason game scores got one: editing your badge
- * must not consume the badge-creation quota. Edits were previously unlimited
- * while costing 1-2 headless-Chrome renders each on a globally serialized
- * pipeline.
+ * Its own bucket, like game scores: editing your badge must not use up the
+ * badge-creation quota. Each edit costs one or two headless-Chrome renders on
+ * a single shared render queue, so edits are capped too.
  */
 export function checkEditRateLimit(ip: string): { allowed: boolean; message?: string } {
   const limits = showModeActive
@@ -156,9 +155,9 @@ export function checkEditRateLimit(ip: string): { allowed: boolean; message?: st
 /**
  * Rate limiter for badge recovery attempts.
  *
- * Previously shared the badge-creation bucket, so ten recovery attempts burned
- * the entire creation quota for that key. At a show, where a venue NAT collapses
- * the whole audience onto one IP, that locked the room out of making badges.
+ * Its own bucket, separate from badge creation: at a show a venue NAT puts the
+ * whole audience behind one IP, and recovery attempts must not use up the
+ * room's creation quota.
  */
 export function checkRecoverRateLimit(ip: string): { allowed: boolean; message?: string } {
   return checkBucket(recoverStore, ip, RECOVER_HOURLY, RECOVER_DAILY, {

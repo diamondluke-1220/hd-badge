@@ -1576,7 +1576,7 @@ window.RackRenderer = {
 
   // Virtual edges: no physical cable, animated as short drops or invisible paths
   _VIRTUAL_EDGES: [
-    // Cloud→FW and cloud→WiFi are now real cables (indices 14-16), no longer virtual
+    // Cloud→FW and cloud→WiFi are real cables (indices 14-16), not virtual edges.
     { from: 'sw-IT', to: 'patch-IT', type: 'switch-drop' },
     { from: 'sw-Punk', to: 'patch-Punk', type: 'switch-drop' },
     { from: 'sw-Office', to: 'patch-Office', type: 'switch-drop' },
@@ -2537,7 +2537,7 @@ window.RackRenderer = {
     // 2. Switch port LED → amber → red
     if (portEl) {
       // Global index across the whole patch panel (both rows), matching
-      // switch port numbering. Previously row-relative → wrong port on row 2.
+      // switch port numbering; a row-relative index would pick the wrong port on row 2.
       const panelEl = portEl.closest('.rack-device-patch');
       const allPorts = panelEl
         ? Array.from(panelEl.querySelectorAll('.rack-port, .rack-port-empty'))
@@ -2784,9 +2784,8 @@ window.RackRenderer = {
   //     the character + x + color (cheap text/attribute updates, no class
   //     swap, no reflow). The visual gives random-rain variety without
   //     any setInterval, no per-recycle reflow, no animation restart cost.
-  // This replaces the previous setInterval+classList swap+forced reflow
-  // pattern, which was a measurable contributor to the rack view CPU
-  // burn even with object pooling already in place.
+  // A setInterval + classList swap + forced reflow costs noticeably more CPU
+  // in the rack view, even with object pooling.
   _startCloudRain() {
     if (this._cloudRainPool.length) return;
     if (!this._cableSvg) return;
@@ -3307,8 +3306,8 @@ window.RackRenderer = {
         this._deviceLedCache[dg]?.forEach(p => p.classList.toggle('rack-device-led-dim', !dDim));
       }
 
-      // Fan rotation: now CSS-driven (.rack-fw-fan-1/2 use rack-fan-spin
-      // keyframe). JS tick no longer touches fan transforms.
+      // Fan rotation is CSS-driven (.rack-fw-fan-1/2 use the rack-fan-spin
+      // keyframe); the JS tick doesn't touch fan transforms.
 
       // UPS LCD page: cycle every 3 ticks (6s)
       if (this._deviceEffectsTick % 3 === 0) {

@@ -1,5 +1,6 @@
 // Help Desk Badge Generator — Server
-// Hono + bun:sqlite + static file serving
+// Hono app, security middleware, the Playwright render pool, live updates (SSE)
+// and static files; starts the database and pre-renders print assets
 
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/bun';
@@ -221,12 +222,9 @@ function isTrustedProxy(peer: string): boolean {
  * Resolve the client IP used for rate limiting and the admin lockout.
  *
  * Forwarding headers are honored ONLY when the socket peer is a trusted proxy.
- * Previously cf-connecting-ip was read first and unconditionally whenever
- * TRUST_PROXY=1 — which the Docker image sets by default — while the container
- * also listens on :3030 on the host, reachable directly from the LAN. Any such
- * client could rotate that header per request for a fresh rate-limit key and a
- * fresh admin-lockout key: the 5-strike brute-force lockout never tripped,
- * badge creation limits were unbounded, and the per-IP SSE cap was bypassed.
+ * The container's port is also reachable directly from the LAN, and a direct
+ * client can set any header it likes; trusting it would give that client a
+ * fresh rate-limit and admin-lockout key on every request.
  */
 function getClientIp(c: any): string {
   return resolveClientIp(getPeerIp(c), (name) => c.req.header(name));
@@ -271,9 +269,8 @@ function isLocalhost(ip: string): boolean {
 // Restrict the /admin HTML page to localhost in local mode.
 // Checks the SOCKET PEER, not the forwarded client IP: a proxy-forwarded
 // "cf-connecting-ip: 127.0.0.1" must never satisfy a localhost-only gate.
-// Registered on both '/admin' and '/admin.html' — the guard used to match only
-// the exact path '/admin', while the static catch-all happily served
-// public/admin.html to anyone.
+// Registered on both '/admin' and '/admin.html', because the static catch-all
+// would otherwise serve public/admin.html under its file name.
 const adminPageGuard = async (c: any, next: any) => {
   if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
     return c.text('Not found', 404);
