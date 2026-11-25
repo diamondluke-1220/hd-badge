@@ -18,3 +18,6 @@ badge-test.js
 docs/security-audit-*.md
 docs/archive/security-audit-*.md
 docs/docker-deploy-plan.md
+
+# Local maintainer plans (not published)
+PLAN-*.md
