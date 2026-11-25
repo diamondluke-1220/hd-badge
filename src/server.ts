@@ -1,637 +1,87 @@
-// Help Desk Badge Generator — Server
-// Hono app, security middleware, the Playwright render pool, live updates (SSE)
-// and static files; starts the database and pre-renders print assets
+// Help Desk Badge Generator — server entry point.
+// Reads settings from the environment, prepares ./data and the database,
+// starts the render pool and the live stream, builds the app (src/app.ts),
+// pre-renders the print assets and serves on PORT.
 
-import { Hono, type Context, type Next } from 'hono';
 import type { Server } from 'bun';
-import type { RenderableBadge, RenderOptions } from './types';
-import { sweepOrphanFiles } from './badge-files';
-import { fail } from './http';
-import { resolveClientIp, isLocalhost, parseTrustedProxies, type ProxyTrust } from './client-ip';
-import { serveStatic } from 'hono/bun';
-import { bearerAuth } from 'hono/bearer-auth';
-import { HTTPException } from 'hono/http-exception';
-import { bodyLimit } from 'hono/body-limit';
-import { getConnInfo } from 'hono/bun';
 import { join } from 'path';
-import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'fs';
-import sharp from 'sharp';
+import { mkdirSync, writeFileSync } from 'fs';
 import { initDb, closeDb, listAllBadgeIds } from './db';
 import { log, errorMessage } from './logger';
 import { initDemo } from './demo';
 import { initPresentation } from './presentation';
-import { registerPublicRoutes } from './routes/public';
-import { registerAdminRoutes } from './routes/admin';
+import { isShowMode } from './rate-limit';
+import { sweepOrphanFiles } from './badge-files';
+import { parseTrustedProxies, type ProxyTrust } from './client-ip';
+import { createRenderPool } from './render-pool';
+import { createLiveStream } from './live-stream';
+import { createApp } from './app';
 
-// ─── Playwright Browser Pool ─────────────────────────────
+// ─── Settings ───────────────────────────────────────────
 
-let _browser: import('playwright').Browser | null = null;
-let _browserLaunching: Promise<import('playwright').Browser> | null = null;
-let _warmPage: import('playwright').Page | null = null;
-let _warmPageReady = false;
-// Serializes badge renders — the shared warm page can only render one badge at a
-// time. Concurrent renders would interleave on the same DOM and screenshot the
-// wrong badge, so every render queues behind this promise chain.
-let _renderLock: Promise<unknown> = Promise.resolve();
-
-async function getBrowser() {
-  if (_browser?.isConnected()) return _browser;
-  if (_browserLaunching) return _browserLaunching;
-  _browser = null;
-  _warmPage = null;
-  _warmPageReady = false;
-  _browserLaunching = (async () => {
-    try {
-      const { chromium } = await import('playwright');
-      const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-      _browser = browser;
-      return browser;
-    } finally {
-      // Must clear on the failure path too. Without the finally, one rejected
-      // launch leaves a permanently rejected promise here that every later
-      // caller awaits, and badge rendering never recovers for the life of the
-      // process — _browser stays null, so the isConnected() retry above can
-      // never re-engage either.
-      _browserLaunching = null;
-    }
-  })();
-  return _browserLaunching;
-}
-
-/** Get a warm page with the badge template already loaded */
-async function getWarmPage(): Promise<import('playwright').Page> {
-  const serverPort = Number(process.env.PORT) || 3000;
-
-  if (_warmPage && !_warmPage.isClosed()) {
-    return _warmPage;
-  }
-
-  const browser = await getBrowser();
-  _warmPage = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
-  await _warmPage.goto(`http://localhost:${serverPort}/`, { waitUntil: 'domcontentloaded' });
-  await _warmPage.waitForSelector('#badge', { timeout: 5000 });
-
-  // Hide all page UI so only the badge element is captured
-  await _warmPage.evaluate(() => {
-    document.querySelectorAll('body > *:not(#badgeCapture)').forEach((el) => {
-      (el as HTMLElement).style.display = 'none';
-    });
-    const capture = document.getElementById('badgeCapture');
-    if (capture) {
-      capture.style.position = 'static';
-      capture.style.left = '0';
-    }
-  });
-
-  _warmPageReady = true;
-  return _warmPage;
-}
-
-async function closeBrowser() {
-  if (_warmPage && !_warmPage.isClosed()) {
-    await _warmPage.close().catch(() => {});
-    _warmPage = null;
-    _warmPageReady = false;
-  }
-  if (_browser) {
-    await _browser.close().catch(() => {});
-    _browser = null;
-  }
-}
-
-// ─── Config ──────────────────────────────────────────────
-
+const port = Number(process.env.PORT) || 3000;
 const DATA_DIR = './data';
-const PHOTOS_DIR = join(DATA_DIR, 'photos');
-const BADGES_DIR = join(DATA_DIR, 'badges');
-const THUMBS_DIR = join(DATA_DIR, 'thumbs');
-const HEADSHOTS_DIR = join(DATA_DIR, 'headshots');
-const PRINTS_DIR = join(DATA_DIR, 'prints');
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-const THUMB_WIDTH = 320;
-const HEADSHOT_WIDTH = 200;
-
-// Ensure data directories exist
-mkdirSync(PHOTOS_DIR, { recursive: true });
-mkdirSync(BADGES_DIR, { recursive: true });
-mkdirSync(THUMBS_DIR, { recursive: true });
-mkdirSync(HEADSHOTS_DIR, { recursive: true });
-mkdirSync(PRINTS_DIR, { recursive: true });
-
-// Initialize database
-initDb(join(DATA_DIR, 'badges.db'));
-
-// Sweep orphaned files on startup (badges deleted but files left behind)
-{
-  const orphanCount = sweepOrphanFiles({ BADGES_DIR, PHOTOS_DIR, THUMBS_DIR, HEADSHOTS_DIR }, listAllBadgeIds());
-  if (orphanCount > 0) {
-    console.log(`🧹 Cleaned ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''} from data directories`);
-  }
-}
-
-// Initialize demo engine (broadcast function set after SSE setup below)
-let _broadcastFn: typeof broadcastNewBadge;
-
-const app = new Hono();
-
-// ─── Security ───────────────────────────────────────────
-
-const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_FIELD_LENGTH = 200;
-const FIELD_LIMITS: Record<string, number> = {
-  name: 18,
-  department: 31,
-  title: 30,
-  song: 25,
-  accessLevel: 28,
-  accessCss: 30,
-  caption: 45,
+const dirs = {
+  PHOTOS_DIR: join(DATA_DIR, 'photos'),
+  BADGES_DIR: join(DATA_DIR, 'badges'),
+  THUMBS_DIR: join(DATA_DIR, 'thumbs'),
+  HEADSHOTS_DIR: join(DATA_DIR, 'headshots'),
+  PRINTS_DIR: join(DATA_DIR, 'prints'),
 };
-
-// Security headers on all responses
-app.use('*', async (c, next) => {
-  await next();
-  c.header('X-Content-Type-Options', 'nosniff');
-  c.header('X-Frame-Options', 'DENY');
-  c.header('X-XSS-Protection', '1; mode=block');
-  c.header('Referrer-Policy', 'no-referrer');
-  c.header('Content-Security-Policy', [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' data: blob:",
-    "connect-src 'self'",
-    "font-src 'self' https://fonts.gstatic.com",
-    "media-src 'self'",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join('; '));
-});
-
-// Body size limit. Counts the bytes actually read, so a chunked upload with no
-// Content-Length is capped the same as one that declares its size.
-app.use('*', bodyLimit({
-  maxSize: MAX_BODY_SIZE,
-  onError: (c) => fail(c, 413, 'Request too large. Maximum 10 MB.'),
-}));
-
-// ─── Helpers ─────────────────────────────────────────────
-
-/** Socket peer address — who actually opened the connection. Unspoofable. */
-function getPeerIp(c: Context): string {
-  try {
-    return getConnInfo(c).remote.address || 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 
 /**
- * Peers whose forwarding headers we honor. Set TRUSTED_PROXY_IPS to the
- * address(es) the reverse proxy connects from — comma-separated exact IPs, or
+ * Peers whose forwarding headers count. TRUSTED_PROXY_IPS lists the
+ * address(es) the reverse proxy connects from: comma-separated exact IPs, or
  * a prefix ending in '.' or ':' such as "172.17." for a Docker bridge subnet.
  * When TRUST_PROXY=1 and this is unset, only loopback peers are trusted.
  */
 const TRUSTED_PROXY_IPS = parseTrustedProxies(process.env.TRUSTED_PROXY_IPS || '');
 
-/** The proxy-trust settings: TRUST_PROXY is read on every request, TRUSTED_PROXY_IPS once at startup. */
+/** TRUST_PROXY is read on every request, TRUSTED_PROXY_IPS once at startup. */
 function proxyTrust(): ProxyTrust {
   return { trustProxy: process.env.TRUST_PROXY === '1', trustedProxies: TRUSTED_PROXY_IPS };
 }
 
-/** The client address for rate limiting and the admin lockout (src/client-ip.ts). */
-function getClientIp(c: Context): string {
-  return resolveClientIp(getPeerIp(c), (name) => c.req.header(name), proxyTrust());
-}
+// ─── Data ───────────────────────────────────────────────
 
-function clampField(val: string, field?: string): string {
-  const limit = (field && FIELD_LIMITS[field]) || MAX_FIELD_LENGTH;
-  return val.slice(0, limit);
-}
+for (const dir of Object.values(dirs)) mkdirSync(dir, { recursive: true });
+initDb(join(DATA_DIR, 'badges.db'));
 
-/** Strip data URL prefix and decode base64 to Buffer */
-function decodeBase64Image(dataUrl: string): Buffer | null {
-  const match = dataUrl.match(/^data:image\/\w+;base64,(.+)$/);
-  if (!match) return null;
-  return Buffer.from(match[1], 'base64');
-}
-
-// ─── Admin Auth ─────────────────────────────────────────
-
-const adminFailures = new Map<string, { count: number; firstAttempt: number; lastAttempt: number }>();
-
-// Restrict the /admin HTML page to localhost in local mode.
-// Checks the SOCKET PEER, not the forwarded client IP: a proxy-forwarded
-// "cf-connecting-ip: 127.0.0.1" must never satisfy a localhost-only gate.
-// Registered on both '/admin' and '/admin.html', because the static catch-all
-// would otherwise serve public/admin.html under its file name.
-const adminPageGuard = async (c: Context, next: Next) => {
-  if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
-    return c.text('Not found', 404);
-  }
-  await next();
-};
-app.use('/admin', adminPageGuard);
-app.use('/admin.html', adminPageGuard);
-
-app.use('/api/admin/*', async (c, next) => {
-  if (!ADMIN_TOKEN) {
-    return fail(c, 401, 'Admin panel disabled. Set ADMIN_TOKEN env var.');
-  }
-
-  // Socket peer, not the forwarded client IP — same reasoning as the /admin
-  // page guard. A localhost-only gate must never be satisfiable by a header a
-  // trusted proxy forwarded, or "ADMIN_LOCAL_ONLY=1" would be one spoofed
-  // cf-connecting-ip away from meaning nothing.
-  if (process.env.ADMIN_LOCAL_ONLY === '1' && !isLocalhost(getPeerIp(c))) {
-    return fail(c, 403, 'Admin access restricted to localhost.');
-  }
-
-  const ip = getClientIp(c);
-  const record = adminFailures.get(ip);
-  if (record && record.count >= 5) {
-    // Locked out for 15 min from the LAST failure (not first)
-    if (Date.now() - record.lastAttempt < 15 * 60 * 1000) {
-      return fail(c, 429, 'Too many failed attempts. Try again in 15 minutes.');
-    }
-    // Lockout expired — reset
-    adminFailures.delete(ip);
-  }
-
-  await next();
-});
-
-// Bearer auth middleware (timing-safe token comparison)
-app.use('/api/admin/*', async (c, next) => {
-  if (!ADMIN_TOKEN) return next();
-  try {
-    await bearerAuth({ token: ADMIN_TOKEN })(c, next);
-    // Successful auth — clear failure record
-    const ip = getClientIp(c);
-    if (adminFailures.has(ip)) adminFailures.delete(ip);
-  } catch (e) {
-    // bearerAuth runs the downstream handler inside this try (it awaits next()).
-    // Only a genuine bad/missing token throws HTTPException 401 — let any other
-    // error (e.g. a render failure in a print route) propagate so it isn't
-    // miscounted as a failed login and trip the 5-strike admin lockout.
-    if (!(e instanceof HTTPException) || e.status !== 401) {
-      throw e;
-    }
-    const ip = getClientIp(c);
-    const now = Date.now();
-    const record = adminFailures.get(ip) || { count: 0, firstAttempt: now, lastAttempt: 0 };
-    record.count++;
-    record.lastAttempt = now;
-    if (!record.firstAttempt) record.firstAttempt = now;
-    adminFailures.set(ip, record);
-    log('warn', 'auth', `Failed admin auth from ${ip} (attempt ${record.count})`);
-    return fail(c, 401, 'Unauthorized. Invalid or missing admin token.');
-  }
-});
-
-// Clean up stale admin failure records every 30 minutes
-setInterval(() => {
-  const cutoff = Date.now() - 15 * 60 * 1000;
-  for (const [key, record] of adminFailures) {
-    if (record.lastAttempt < cutoff) adminFailures.delete(key);
-  }
-}, 30 * 60 * 1000);
-
-// ─── Playwright Badge Render ─────────────────────────────
-
-// Cache placeholder photo as data URL at startup (never changes)
-let _placeholderDataUrl: string | null = null;
+// Files left behind by badges that no longer exist
 {
-  const placeholderPath = join('public', 'placeholder-photo.png');
-  if (existsSync(placeholderPath)) {
-    const buf = readFileSync(placeholderPath);
-    _placeholderDataUrl = `data:image/png;base64,${buf.toString('base64')}`;
+  const orphanCount = sweepOrphanFiles(dirs, listAllBadgeIds());
+  if (orphanCount > 0) {
+    console.log(`🧹 Cleaned ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''} from data directories`);
   }
 }
 
-/** Server-side badge render via Playwright + Sharp corner clipping.
- *  Options:
- *   - withPhoto: include photo (default true)
- *   - print: flat 600 DPI print export (no corner rounding, white bg)
- *   - klayer: K-layer pre-print for two-pass printing (body.k-layer CSS)
- *   - colorlayer: color pass for two-pass printing (body.color-layer CSS)
- *   - calibration: drift measurement grid (body.k-calibration CSS, standalone)
- */
-async function renderBadgePlaywright(badge: RenderableBadge, options?: RenderOptions): Promise<Buffer> {
-  // One render attempt; on failure, drop the (possibly dirty) shared warm page so
-  // the next attempt rebuilds a clean one instead of inheriting the corruption.
-  const attempt = () => renderBadgeInner(badge, options).catch(async (err) => {
-    try { await _warmPage?.close(); } catch { /* already gone */ }
-    _warmPage = null;
-    _warmPageReady = false;
-    throw err;
-  });
-  // Queue behind any in-flight render (the shared page renders one badge at a time),
-  // and retry once on a freshly rebuilt page — transient Playwright hiccups usually
-  // clear on a clean page, which keeps a single failure from leaving a stale image.
-  const run = _renderLock.then(() => attempt().catch(() => attempt()));
-  // Keep the chain alive even if both attempts reject — the caller still gets the error.
-  _renderLock = run.then(() => undefined, () => undefined);
-  return run;
-}
+// ─── Services and app ───────────────────────────────────
 
-async function renderBadgeInner(badge: RenderableBadge, options?: RenderOptions): Promise<Buffer> {
-  const page = await getWarmPage();
+const renderPool = createRenderPool({ photosDir: dirs.PHOTOS_DIR, port });
+const liveStream = createLiveStream();
 
-  const id = badge.employee_id;
-  const photoPath = join(PHOTOS_DIR, `${id}.jpg`);
-  const includePhoto = (options?.withPhoto !== false) && badge.has_photo && existsSync(photoPath);
-  let photoDataUrl: string | null = null;
-  if (includePhoto) {
-    const photoBuffer = await Bun.file(photoPath).arrayBuffer();
-    photoDataUrl = `data:image/jpeg;base64,${Buffer.from(photoBuffer).toString('base64')}`;
-  } else {
-    photoDataUrl = _placeholderDataUrl;
-  }
+initDemo({ broadcast: liveStream.broadcastNewBadge, writeFile: writeFileSync, badgesDir: dirs.BADGES_DIR });
+initPresentation({ broadcast: liveStream.broadcastSSE });
 
-  await page.evaluate(({ badge, photoDataUrl, isPrint, isKLayer, isColorLayer, isCalibration }) => {
-    // Toggle layer body classes — must reset every render since warm page is reused
-    document.body.classList.remove('k-layer', 'color-layer', 'k-calibration');
-    if (isKLayer) document.body.classList.add('k-layer');
-    if (isColorLayer) document.body.classList.add('color-layer');
-    if (isCalibration) document.body.classList.add('k-calibration');
-
-    const previewArea = document.getElementById('badgePreviewArea');
-    if (previewArea) previewArea.innerHTML = '';
-
-    const idEl = document.getElementById('idField');
-    if (idEl) { idEl.textContent = badge.employee_id; idEl.dataset.set = '1'; }
-    const issuedEl = document.getElementById('issuedField');
-    if (issuedEl) {
-      const d = new Date(badge.created_at as string);
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const dd = String(d.getDate()).padStart(2, '0');
-      const yy = String(d.getFullYear()).slice(2);
-      issuedEl.textContent = `ISSUED ${mm}.${dd}.${yy}`;
-      issuedEl.dataset.set = '1';
-    }
-
-    const frame = document.querySelector('#badge .photo-frame') as HTMLElement;
-    if (frame) {
-      const staleImg = frame.querySelector('img');
-      if (staleImg) staleImg.remove();
-      frame.classList.remove('has-photo');
-      const placeholder = frame.querySelector('.photo-placeholder-text') as HTMLElement;
-      if (placeholder) placeholder.style.display = '';
-    }
-
-    // Reset print-mode overrides from previous render
-    const el = document.getElementById('badge');
-    if (el) {
-      el.style.borderRadius = '';
-      el.style.boxShadow = '';
-    }
-    document.body.style.background = '';
-
-    if (isPrint && el) {
-      el.style.borderRadius = '0';
-      el.style.boxShadow = 'none';
-      document.body.style.background = 'white';
-    }
-
-    (window as any).updateBadge({
-      name: badge.name,
-      department: badge.department,
-      title: badge.title,
-      song: badge.song,
-      accessLevel: badge.access_level,
-      accessCss: badge.access_css,
-      photoUrl: photoDataUrl,
-      waveStyle: badge.wave_style || 'barcode',
-      caption: badge.caption || 'SCAN TO FILE COMPLAINT',
-    });
-  }, { badge, photoDataUrl, isPrint: !!options?.print, isKLayer: !!options?.klayer, isColorLayer: !!options?.colorlayer, isCalibration: !!options?.calibration });
-
-  if (includePhoto) {
-    await page.waitForFunction(() => {
-      const img = document.querySelector('.photo-frame img') as HTMLImageElement;
-      return img && img.complete && img.naturalWidth > 0;
-    }, { timeout: 5000 }).catch(() => {
-      // Photo may not have loaded — continue with placeholder
-    });
-  }
-
-  const badgeEl = await page.$('#badge');
-  if (!badgeEl) throw new Error('Badge element not found');
-
-  // Flat print modes (print/klayer/calibration) all want solid white bg and no corner rounding
-  const isFlatPrint = !!(options?.print || options?.klayer || options?.colorlayer || options?.calibration);
-  const pngBuf = await badgeEl.screenshot({ type: 'png', omitBackground: !isFlatPrint });
-
-  if (isFlatPrint) {
-    // Set DPI metadata so the image maps correctly to CR80 card size
-    return await sharp(Buffer.from(pngBuf))
-      .withMetadata({ density: 600 })
-      .png()
-      .toBuffer();
-  }
-
-  // Round corners with SVG mask (single pipeline)
-  const meta = await sharp(Buffer.from(pngBuf)).metadata();
-  const W = meta.width || 700;
-  const H = meta.height || 1100;
-  const R = Math.round(W * 0.0588);
-  const roundedMask = Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><rect x="0" y="0" width="${W}" height="${H}" rx="${R}" ry="${R}" fill="white"/></svg>`
-  );
-  return await sharp(Buffer.from(pngBuf))
-    .ensureAlpha()
-    .composite([{ input: roundedMask, blend: 'dest-in' }])
-    .png()
-    .toBuffer();
-}
-
-// ─── SSE (Server-Sent Events) for Live Org Chart ─────────
-
-interface SSEClient {
-  controller: ReadableStreamDefaultController;
-  encoder: TextEncoder;
-  keepalive: ReturnType<typeof setInterval>;
-  ip: string;
-}
-
-const sseClients = new Set<SSEClient>();
-const MAX_SSE_CLIENTS = 500;
-const MAX_SSE_PER_IP = 50;
-const sseByIp = new Map<string, number>();
-
-function sseWrite(client: SSEClient, event: string, data: string) {
-  client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
-}
-
-function broadcastNewBadge(badge: { employeeId: string; name: string; department: string; title: string; accessLevel: string; accessCss: string; isBandMember: boolean }) {
-  const data = JSON.stringify(badge);
-  for (const client of sseClients) {
-    try {
-      sseWrite(client, 'new-badge', data);
-    } catch {
-      clearInterval(client.keepalive);
-      sseClients.delete(client);
-    }
-  }
-}
-
-function broadcastSSE(event: string, data: unknown) {
-  const json = JSON.stringify(data);
-  for (const client of sseClients) {
-    try {
-      sseWrite(client, event, json);
-    } catch {
-      clearInterval(client.keepalive);
-      sseClients.delete(client);
-    }
-  }
-}
-
-// Wire up demo and presentation engines
-initDemo({
-  broadcast: broadcastNewBadge,
-  writeFile: writeFileSync,
-  badgesDir: BADGES_DIR,
-});
-initPresentation({ broadcast: broadcastSSE });
-
-function handleSSEDirect(clientIp: string): Response {
-  if (sseClients.size >= MAX_SSE_CLIENTS) {
-    return new Response(JSON.stringify({ success: false, error: 'Too many live connections. Try again later.' }), {
-      status: 503,
-      headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
-    });
-  }
-
-  // Per-IP connection limit
-  const ipCount = sseByIp.get(clientIp) || 0;
-  if (ipCount >= MAX_SSE_PER_IP) {
-    return new Response(JSON.stringify({ success: false, error: 'Too many connections from this address.' }), {
-      status: 429,
-      headers: { 'Content-Type': 'application/json', 'Retry-After': '10' },
-    });
-  }
-  sseByIp.set(clientIp, ipCount + 1);
-
-  const encoder = new TextEncoder();
-  let clientRef: SSEClient | null = null;
-
-  const stream = new ReadableStream({
-    start(controller) {
-      controller.enqueue(encoder.encode(': ok\n\nevent: connected\ndata: connected\n\n'));
-
-      const keepalive = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': keepalive\n\n'));
-        } catch {
-          clearInterval(keepalive);
-        }
-      }, 5_000);
-
-      clientRef = { controller, encoder, keepalive, ip: clientIp };
-      sseClients.add(clientRef);
-      log('info', 'sse', `Client connected (${sseClients.size} total)`);
-    },
-    cancel() {
-      if (clientRef) {
-        clearInterval(clientRef.keepalive);
-        sseClients.delete(clientRef);
-        // Decrement per-IP counter
-        const remaining = (sseByIp.get(clientRef.ip) || 1) - 1;
-        if (remaining <= 0) sseByIp.delete(clientRef.ip);
-        else sseByIp.set(clientRef.ip, remaining);
-        clientRef = null;
-        log('info', 'sse', `Client disconnected (${sseClients.size} total)`);
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Referrer-Policy': 'no-referrer',
-    },
-  });
-}
-
-/** Render any local HTML page as a 600 DPI CR80 PNG (standalone, no warm page) */
-async function renderPageScreenshot(path: string, selector: string): Promise<Buffer> {
-  const serverPort = Number(process.env.PORT) || 3000;
-  const browser = await getBrowser();
-  const page = await browser.newPage({ viewport: { width: 1400, height: 2200 } });
-  try {
-    await page.goto(`http://localhost:${serverPort}${path}`, { waitUntil: 'networkidle' });
-    const el = await page.$(selector);
-    if (!el) throw new Error(`Element ${selector} not found on ${path}`);
-    const pngBuf = await el.screenshot({ type: 'png', omitBackground: false });
-    return await sharp(Buffer.from(pngBuf))
-      .withMetadata({ density: 600 })
-      .png()
-      .toBuffer();
-  } finally {
-    await page.close();
-  }
-}
-
-// ─── Route Modules ───────────────────────────────────────
-
-const sharedDeps = {
-  getClientIp,
-  broadcastNewBadge,
-  broadcastSSE,
-  decodeBase64Image,
-  renderBadgePlaywright,
-  renderPageScreenshot,
-  clampField,
-  PHOTOS_DIR,
-  BADGES_DIR,
-  THUMBS_DIR,
-  HEADSHOTS_DIR,
-  PRINTS_DIR,
-  ADMIN_TOKEN,
-  THUMB_WIDTH,
-  HEADSHOT_WIDTH,
-};
-
-registerPublicRoutes(app, sharedDeps);
-registerAdminRoutes(app, sharedDeps);
-
-// ─── HTML Page Routes ────────────────────────────────────
-
-app.get('/orgchart', serveStatic({ path: './public/index.html' }));
-app.get('/presentation', serveStatic({ path: './public/presentation.html' }));
-app.get('/admin', serveStatic({ path: './public/admin.html' }));
-app.get('/recover', serveStatic({ path: './public/recover.html' }));
-app.get('/game', (c) => c.redirect('https://game.helpdesk.band', 301));
-
-// ─── Static Files (must be LAST) ─────────────────────────
-
-app.use('/*', serveStatic({ root: './public' }));
-app.get('/', serveStatic({ path: './public/index.html' }));
-
-// ─── 404 Catch-All (themed incident report page) ────────
-// Only serves the HTML error page for navigation requests (not API/assets).
-app.notFound((c) => {
-  const accept = c.req.header('accept') || '';
-  // API requests and non-HTML requests get JSON
-  if (c.req.path.startsWith('/api/') || !accept.includes('text/html')) {
-    return fail(c, 404, 'Not found.');
-  }
-  // Browser navigation gets the themed 404 page
-  return c.html(readFileSync(join('public', '404.html'), 'utf-8'), 404);
+const badgeApp = createApp({
+  ...dirs,
+  THUMB_WIDTH: 320,
+  HEADSHOT_WIDTH: 200,
+  adminToken: ADMIN_TOKEN,
+  adminLocalOnly: () => process.env.ADMIN_LOCAL_ONLY === '1',
+  proxyTrust,
+  renderBadgePlaywright: renderPool.renderBadge,
+  renderPageScreenshot: renderPool.renderPageScreenshot,
+  broadcastNewBadge: liveStream.broadcastNewBadge,
+  broadcastSSE: liveStream.broadcastSSE,
+  connectLiveStream: liveStream.connect,
 });
 
-// ─── Server ──────────────────────────────────────────────
+// Stale admin-auth failures are forgotten every 30 minutes
+setInterval(badgeApp.pruneAdminFailures, 30 * 60 * 1000);
 
-const port = Number(process.env.PORT) || 3000;
+// ─── Startup messages ───────────────────────────────────
 
 log('info', 'server', `Started on port ${port} (admin=${ADMIN_TOKEN ? 'enabled' : 'disabled'}, local_only=${process.env.ADMIN_LOCAL_ONLY || '0'}, show_mode=${process.env.SHOW_MODE || '0'})`);
 console.log(`🎫 Help Desk Badge Generator running at http://localhost:${port}`);
@@ -649,49 +99,42 @@ if (ADMIN_TOKEN) {
 } else {
   console.log(`⚠️  No ADMIN_TOKEN set — admin panel disabled`);
 }
-import { isShowMode } from './rate-limit';
 if (isShowMode()) {
   console.log(`🎸 SHOW MODE active — relaxed rate limits (300/hr, 800/day)`);
 }
 
-// ─── Pre-render static print assets (K-layer front + badge back) ───
-// These are identical for all badges — render once at startup.
+// ─── Print assets ───────────────────────────────────────
+// The K-layer front and the badge back are the same for every badge, so they
+// are rendered once at startup.
 (async () => {
   try {
-    const klayerPath = join(PRINTS_DIR, 'klayer-front.png');
-    const backPath = join(PRINTS_DIR, 'badge-back.png');
+    const klayerPath = join(dirs.PRINTS_DIR, 'klayer-front.png');
+    const backPath = join(dirs.PRINTS_DIR, 'badge-back.png');
     // The K-layer hides all variable content, so the first band badge serves as the template.
     const placeholderBadge = { employee_id: 'HD-00001', name: 'Template', department: '', title: '' };
-    const klayerBuf = await renderBadgePlaywright(placeholderBadge, { klayer: true });
+    const klayerBuf = await renderPool.renderBadge(placeholderBadge, { klayer: true });
     writeFileSync(klayerPath, klayerBuf);
     log('info', 'server', `Pre-rendered K-layer front → ${klayerPath}`);
 
-    const backBuf = await renderPageScreenshot('/badge-back.html', '#card');
+    const backBuf = await renderPool.renderPageScreenshot('/badge-back.html', '#card');
     writeFileSync(backPath, backBuf);
     log('info', 'server', `Pre-rendered badge back → ${backPath}`);
 
-    console.log(`🖨️  Print assets ready in ${PRINTS_DIR}`);
+    console.log(`🖨️  Print assets ready in ${dirs.PRINTS_DIR}`);
   } catch (e) {
     log('error', 'server', `Failed to pre-render print assets: ${errorMessage(e)}`);
   }
 })();
 
-// Graceful shutdown
-process.on('SIGTERM', async () => { await closeBrowser(); closeDb(); process.exit(0); });
-process.on('SIGINT', async () => { await closeBrowser(); closeDb(); process.exit(0); });
+// ─── Shutdown ───────────────────────────────────────────
+
+process.on('SIGTERM', async () => { await renderPool.close(); closeDb(); process.exit(0); });
+process.on('SIGINT', async () => { await renderPool.close(); closeDb(); process.exit(0); });
 
 export default {
   port,
   idleTimeout: 120,
   fetch(req: Request, server: Server<unknown>): Response | Promise<Response> {
-    const url = new URL(req.url);
-
-    if (url.pathname === '/api/badges/stream') {
-      // Per-IP SSE limiting uses the same client-IP rule as every other route.
-      const peer = server?.requestIP?.(req)?.address || 'unknown';
-      const ip = resolveClientIp(peer, (name) => req.headers.get(name), proxyTrust());
-      return handleSSEDirect(ip);
-    }
-    return app.fetch(req, server);
+    return badgeApp.fetch(req, server);
   },
 };

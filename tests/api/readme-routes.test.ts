@@ -4,7 +4,7 @@ import { describe, it, expect } from 'bun:test';
 import { resolve } from 'path';
 
 const REPO = resolve(import.meta.dir, '../..');
-const SOURCES = ['src/server.ts', 'src/routes/public.ts', 'src/routes/admin.ts'];
+const SOURCES = ['src/app.ts', 'src/routes/public.ts', 'src/routes/admin.ts'];
 
 async function codeRoutes(): Promise<string[]> {
   const routes = new Set<string>();
