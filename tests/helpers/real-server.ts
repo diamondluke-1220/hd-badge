@@ -1,6 +1,5 @@
-// Boots the real src/server.ts app for tests that must exercise its own
-// middleware (body limit, client-IP rules, SSE limits) instead of the mirror
-// in setup.ts.
+// Boots the real src/server.ts, for tests of the live stream path and the
+// full startup, which only the running server has.
 //
 // Run as a child process with its working directory set to a temp folder that
 // holds a `public` symlink; server.ts creates ./data there. Each request's

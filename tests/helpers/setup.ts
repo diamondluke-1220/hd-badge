@@ -19,8 +19,10 @@ const STUB_PNG = Buffer.from(
   'base64'
 );
 
-/** The socket the requests appear to come from. */
-const LOOPBACK_SERVER = { requestIP: () => ({ address: '127.0.0.1', family: 'IPv4', port: 40000 }) };
+/** A stand-in for Bun's server that reports every request as coming from `address`. */
+function serverWithPeer(address: string) {
+  return { requestIP: () => ({ address, family: address.includes(':') ? 'IPv6' : 'IPv4', port: 40000 }) };
+}
 
 export interface TestApp {
   request(path: string, init?: RequestInit): Promise<Response>;
@@ -34,9 +36,10 @@ interface TestContext {
 
 /**
  * Builds the real app on a fresh temp DB and data folders. `overrides`
- * replaces any service (e.g. a renderer that fails). Call cleanup() when done.
+ * replaces any service or setting (e.g. a renderer that fails); `opts.peer`
+ * sets the socket address requests come from. Call cleanup() when done.
  */
-export function createTestApp(overrides: Partial<AppDeps> = {}): TestContext {
+export function createTestApp(overrides: Partial<AppDeps> = {}, opts: { peer?: string } = {}): TestContext {
   const tmpDir = mkdtempSync(join(tmpdir(), 'hdbadge-test-'));
   const dirs = {
     PHOTOS_DIR: join(tmpDir, 'photos'),
@@ -66,7 +69,7 @@ export function createTestApp(overrides: Partial<AppDeps> = {}): TestContext {
   });
 
   const app: TestApp = {
-    request: async (path, init) => honoApp.request(path, init, LOOPBACK_SERVER),
+    request: async (path, init) => honoApp.request(path, init, serverWithPeer(opts.peer ?? '127.0.0.1')),
   };
   return { app, tmpDir, dbPath };
 }
