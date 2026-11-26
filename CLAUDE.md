@@ -7,11 +7,16 @@
 **Domain:** `helpdesk.band` — badge app at `badge.`, game at `game.`, root reserved for band site
 
 **Entry Points:**
-- `src/server.ts` — Main server (Hono app, SSE, Playwright pool, middleware)
+- `src/server.ts` — Entry point: reads the environment, prepares `./data` and the DB, wires the services into the app, pre-renders print assets
+- `src/app.ts` — `createApp(deps)`: the Hono app (security headers, body cap, admin gate and lockout, routes, static files, 404). Starts nothing, so tests build the same app
+- `src/render-pool.ts` — Playwright browser and warm page for badge renders
+- `src/live-stream.ts` — SSE clients, connection caps, broadcasts
+- `src/client-ip.ts` — the client-IP and trusted-proxy rule
+- `src/badge-files.ts` — the files stored per badge, removal and the orphan sweep
+- `src/http.ts` — `fail()`, the one error-response shape
 - `src/db.ts` — SQLite persistence layer (schema, migrations, CRUD)
 - `src/routes/public.ts` — Badge creation, retrieval, org chart API + CORS for game.helpdesk.band
 - `src/routes/admin.ts` — HR dashboard, analytics, demo/presentation modes
-- `src/routes/portal.ts` — Captive portal detection endpoints
 
 **Ports:**
 - Development: `3000` (default)
@@ -116,7 +121,8 @@ bun run scripts/rack-sim.ts [count]   # Rack packet stress test (default: 50/100
 
 Test harness uses temp SQLite DBs and mocked Playwright — no browser needed for API/DB tests.
 
-- `tests/helpers/setup.ts` builds an app from the route modules with mocked render and IP functions; `createTestApp(overrides)` replaces any of them (e.g. a failing renderer).
-- `tests/helpers/real-server.ts` boots the real `src/server.ts` in a child process, for its own middleware (body cap, client IP, SSE limits). The request header `x-test-peer` sets the socket address.
+- `tests/helpers/setup.ts` builds the real app with `createApp()` on a temp DB, with the renderer and live stream stubbed; `createTestApp(overrides)` replaces any service (e.g. a failing renderer). Requests come from a loopback peer with proxy trust on, so `X-Forwarded-For` sets a test's client address.
+- `tests/helpers/spawn-real-server.ts` starts `tests/helpers/real-server.ts`, which boots the real `src/server.ts` in a child process for the SSE path and the full startup. The request header `x-test-peer` sets the socket address.
+- `tests/api/real-server-snapshot.test.ts` records the real server's responses and security headers.
 - `tests/api/api-snapshot.test.ts` records every read route and the badge lifecycle. An intended response change is accepted with `bun test tests/api/api-snapshot.test.ts --update-snapshots`.
 - `tests/api/readme-routes.test.ts` fails when a route is missing from, or stale in, the README.

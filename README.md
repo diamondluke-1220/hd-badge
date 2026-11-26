@@ -125,11 +125,17 @@ docker pull ghcr.io/diamondluke-1220/hd-badge:latest
 
 ```
 src/
-  server.ts          # Hono server, middleware, SSE, Playwright render, route wiring
-  routes/portal.ts   # Captive portal detection + clearance routes
+  server.ts          # Entry point: environment, data folders, DB, wiring, print assets
+  app.ts             # createApp(): middleware, admin gate, routes, static files, 404
+  render-pool.ts     # Playwright browser + warm page for badge renders
+  live-stream.ts     # SSE clients, connection caps, broadcasts
+  client-ip.ts       # Client-IP and trusted-proxy rule
+  badge-files.ts     # Files stored per badge, removal, orphan sweep
+  http.ts            # fail(): the error-response shape
+  types.ts           # Types shared by server, routes and tests
   routes/public.ts   # Public API (badge CRUD, edit, org chart, images)
   routes/admin.ts    # Admin API (management, demo, presentation, export)
-  db.ts              # SQLite schema, queries, migrations (v1-v5), band member seeding
+  db.ts              # SQLite schema, queries, migrations (v1-v9), band member seeding
   demo.ts            # Demo mode (test badge generation, cleanup)
   logger.ts          # Ring buffer logger (200 entries, categories)
   presentation.ts    # Presentation mode state machine + endpoints

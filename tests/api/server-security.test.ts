@@ -3,36 +3,13 @@
 // mirror cannot see: the request body cap and the live-stream (SSE) per-IP cap.
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { mkdtempSync, rmSync, symlinkSync } from 'fs';
-import { join, resolve } from 'path';
-import { tmpdir } from 'os';
-import type { Subprocess } from 'bun';
+import { spawnRealServer } from '../helpers/spawn-real-server';
 
-const REPO = resolve(import.meta.dir, '../..');
 const PROXY_PEER = '172.20.0.5';
 const DIRECT_PEER = '192.168.1.5';
 
-let child: Subprocess<'ignore', 'pipe', 'pipe'>;
-let workDir: string;
+let server: Awaited<ReturnType<typeof spawnRealServer>>;
 let baseUrl: string;
-
-async function waitForReady(proc: typeof child): Promise<number> {
-  const reader = proc.stdout.getReader();
-  const decoder = new TextDecoder();
-  let seen = '';
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    seen += decoder.decode(value);
-    const match = seen.match(/READY (\d+)/);
-    if (match) {
-      reader.releaseLock();
-      return Number(match[1]);
-    }
-  }
-  throw new Error(`real server did not start:\n${seen}`);
-}
 
 /** Open an SSE stream and return its status plus a way to close it. */
 async function openStream(peer: string, clientIp: string) {
@@ -45,29 +22,11 @@ async function openStream(peer: string, clientIp: string) {
 }
 
 beforeAll(async () => {
-  workDir = mkdtempSync(join(tmpdir(), 'hdbadge-real-'));
-  symlinkSync(join(REPO, 'public'), join(workDir, 'public'));
-  child = Bun.spawn(['bun', join(REPO, 'tests/helpers/real-server.ts')], {
-    cwd: workDir,
-    env: {
-      ...process.env,
-      HDBADGE_REPO: REPO,
-      TRUST_PROXY: '1',
-      TRUSTED_PROXY_IPS: '172.20.0.',
-      ADMIN_TOKEN: 'real-server-test-token',
-    },
-    stdin: 'ignore',
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const port = await waitForReady(child);
-  baseUrl = `http://127.0.0.1:${port}`;
+  server = await spawnRealServer({ TRUST_PROXY: '1', TRUSTED_PROXY_IPS: '172.20.0.', ADMIN_TOKEN: 'real-server-test-token' });
+  baseUrl = server.baseUrl;
 }, 30_000);
 
-afterAll(() => {
-  child?.kill();
-  if (workDir) rmSync(workDir, { recursive: true, force: true });
-});
+afterAll(() => server?.stop());
 
 describe('request body cap (real server)', () => {
   it('refuses a body over 10 MB sent with Content-Length', async () => {
